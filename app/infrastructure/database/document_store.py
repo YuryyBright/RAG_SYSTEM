@@ -1,6 +1,6 @@
 from typing import Dict, List, Optional
 import uuid
-from api.core.entities.document import Document
+from core.entities.document import Document
 
 class DocumentStore:
     """

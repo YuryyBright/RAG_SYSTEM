@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from typing import List
-from api.core.entities.document import Document
+from core.entities.document import Document
 
 
 class EmbeddingInterface(ABC):

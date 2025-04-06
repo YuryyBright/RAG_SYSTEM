@@ -2,8 +2,8 @@ import os
 import numpy as np
 import faiss
 from typing import List, Dict, Any
-from api.core.entities.document import Document
-from api.core.interfaces.indexing import IndexInterface
+from core.entities.document import Document
+from core.interfaces.indexing import IndexInterface
 from app.infrastructure.database.document_store import DocumentStore
 
 class FaissHNSWIndex(IndexInterface):

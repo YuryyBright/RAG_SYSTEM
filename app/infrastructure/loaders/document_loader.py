@@ -3,7 +3,7 @@ from pathlib import Path
 import uuid
 import json
 from datetime import datetime
-from api.core.entities.document import Document
+from core.entities.document import Document
 
 class DocumentLoader:
     """

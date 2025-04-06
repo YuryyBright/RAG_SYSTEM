@@ -4,12 +4,12 @@ from typing import List, Dict, Optional
 import os
 import tempfile
 import shutil
-from app.schemas.document import DocumentCreate, DocumentResponse
-from api.core.entities.document import Document
+from api.schemas.document import DocumentCreate, DocumentResponse
+from core.entities.document import Document
 from app.infrastructure.database.document_store import DocumentStore
 from app.infrastructure.loaders.document_loader import DocumentLoader
-from api.core.interfaces.embedding import EmbeddingInterface
-from api.core.interfaces.indexing import IndexInterface
+from core.interfaces.embedding import EmbeddingInterface
+from core.interfaces.indexing import IndexInterface
 from app.api.dependencies import (
     get_document_store,
     get_document_loader,

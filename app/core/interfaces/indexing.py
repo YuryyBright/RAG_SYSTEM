@@ -1,7 +1,7 @@
 # app/core/interfaces/indexing.py
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any
-from api.core.entities.document import Document
+from core.entities.document import Document
 
 class IndexInterface(ABC):
     """

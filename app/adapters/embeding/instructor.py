@@ -1,7 +1,7 @@
 from typing import List
 import httpx
-from api.core.entities.document import Document
-from api.core.interfaces.embedding import EmbeddingInterface
+from core.entities.document import Document
+from core.interfaces.embedding import EmbeddingInterface
 from app.config import settings
 
 

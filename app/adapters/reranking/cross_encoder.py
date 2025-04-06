@@ -1,6 +1,6 @@
 import httpx
 from typing import List, Dict, Any
-from api.core.interfaces.reranking import RerankerInterface
+from core.interfaces.reranking import RerankerInterface
 from app.config import settings
 
 class CrossEncoderReranker(RerankerInterface):

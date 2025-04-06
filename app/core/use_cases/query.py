@@ -1,8 +1,8 @@
 from typing import List, Dict, Any
-from api.core.interfaces.embedding import EmbeddingInterface
-from api.core.interfaces.indexing import IndexInterface
-from api.core.interfaces.llm import LLMInterface
-from api.core.interfaces.reranking import RerankerInterface
+from core.interfaces.embedding import EmbeddingInterface
+from core.interfaces.indexing import IndexInterface
+from core.interfaces.llm import LLMInterface
+from core.interfaces.reranking import RerankerInterface
 
 class QueryProcessor:
     """

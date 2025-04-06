@@ -21,6 +21,8 @@ app.mount("/static", StaticFiles(directory="app/static"), name="static")
 # Jinja2 templates
 templates = Jinja2Templates(directory="app/templates")
 
+app.mount("/", StaticFiles(directory="frontend", html=True), name="frontend")
+
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,

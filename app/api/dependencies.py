@@ -23,11 +23,11 @@ Functions:
 from fastapi import Depends
 
 from app.adapters.llm.mistral import MistralLLM
-from api.core.interfaces.embedding import EmbeddingInterface
-from api.core.interfaces.indexing import IndexInterface
-from api.core.interfaces.llm import LLMInterface
-from api.core.interfaces.reranking import RerankerInterface
-from api.core.use_cases.query import QueryProcessor
+from core.interfaces.embedding import EmbeddingInterface
+from core.interfaces.indexing import IndexInterface
+from core.interfaces.llm import LLMInterface
+from core.interfaces.reranking import RerankerInterface
+from core.use_cases.query import QueryProcessor
 
 from app.adapters.indexing.faiss_hnsw import FaissHNSWIndex
 from app.adapters.embeding.instructor import InstructorEmbedding

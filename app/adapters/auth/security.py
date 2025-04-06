@@ -1,15 +1,15 @@
 # app/auth/security.py
 from datetime import datetime, timedelta
-from typing import Optional, Union
+from typing import Optional
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
-from app.models.db_models import User, Token
-from app.database import get_db
+from infrastructure.database.db_models import User, Token
+from infrastructure.database.repository import get_db
 from app.config import settings
-from schemas.users.login import TokenData
+from api.schemas.users.auth import TokenData
 
 # Password context for hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")

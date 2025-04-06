@@ -4,10 +4,10 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from typing import List
 import os
-from app.database import get_db
-from app.models.db_models import User, File as FileModel
-from api.auth.security import get_current_active_user
-from app.files.file_manager import FileManager
+from infrastructure.database.repository import get_db
+from infrastructure.database.db_models import User, File as FileModel
+from adapters.auth.security import get_current_active_user
+from adapters.storage.file_manager import FileManager
 
 router = APIRouter()
 file_manager = FileManager()

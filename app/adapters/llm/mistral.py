@@ -1,7 +1,7 @@
 # app/adapters/llm/mistral.py
 import httpx
 from typing import List, Dict, Any, Optional
-from api.core.interfaces.llm import LLMInterface
+from core.interfaces.llm import LLMInterface
 from app.config import settings
 
 

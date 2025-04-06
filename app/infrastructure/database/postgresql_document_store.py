@@ -1,12 +1,11 @@
-from typing import List, Optional, Dict, Any
-import numpy as np
+from typing import List, Optional
 import pickle
 
 from fastapi import Depends
 from sqlalchemy.orm import Session
-from api.core.entities.document import Document as DocumentEntity
-from app.models.db_models import Document as DocumentModel, DocumentMetadata
-from app.database import get_db
+from core.entities.document import Document as DocumentEntity
+from infrastructure.database.db_models import Document as DocumentModel, DocumentMetadata
+from infrastructure.database.repository import get_db
 
 
 class PostgresDocumentStore:

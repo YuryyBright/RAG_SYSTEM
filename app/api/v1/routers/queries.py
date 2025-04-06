@@ -1,7 +1,7 @@
 # app/api/routes/queries.py
 from fastapi import APIRouter, Depends
-from app.schemas.query import QueryRequest, QueryResponse
-from api.core.use_cases.query import QueryProcessor
+from api.schemas.query import QueryRequest, QueryResponse
+from core.use_cases.query import QueryProcessor
 from app.api.dependencies import get_query_processor
 
 router = APIRouter()

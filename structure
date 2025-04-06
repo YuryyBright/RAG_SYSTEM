@@ -1,60 +1,130 @@
-Project Structure:
-```
-rag_api/
+rag_system/
 ├── app/
 │   ├── __init__.py
-│   ├── main.py                 # FastAPI application entry point
-│   ├── config.py               # Configuration settings
-│   ├── core/                   # Core business logic
+│   ├── main.py                      # FastAPI application entry point
+│   ├── config.py                    # Configuration settings
+│   │
+│   ├── core/                        # Core business logic (domain layer)
 │   │   ├── __init__.py
-│   │   ├── entities/           # Business entities
+│   │   ├── entities/                # Business entities
 │   │   │   ├── __init__.py
-│   │   │   └── document.py
-│   │   ├── interfaces/         # Interfaces/abstractions
+│   │   │   ├── document.py
+│   │   │   ├── embedding.py
+│   │   │   ├── query.py
+│   │   │   └── user.py
+│   │   ├── interfaces/              # Interfaces/abstractions
 │   │   │   ├── __init__.py
+│   │   │   ├── auth.py
+│   │   │   ├── document_store.py
 │   │   │   ├── embedding.py
 │   │   │   ├── indexing.py
 │   │   │   ├── llm.py
 │   │   │   └── reranking.py
-│   │   └── use_cases/          # Application use cases
+│   │   └── use_cases/               # Application use cases
 │   │       ├── __init__.py
+│   │       ├── auth.py
+│   │       ├── document.py
 │   │       └── query.py
-│   ├── adapters/               # Implementation of interfaces
+│   │
+│   ├── adapters/                    # Implementation of interfaces
 │   │   ├── __init__.py
+│   │   ├── auth/
+│   │   │   ├── __init__.py
+│   │   │   └── security.py
 │   │   ├── embedding/
 │   │   │   ├── __init__.py
-│   │   │   └── instructor.py
+│   │   │   ├── instructor.py
+│   │   │   └── open_ai.py
 │   │   ├── indexing/
 │   │   │   ├── __init__.py
-│   │   │   └── faiss_hnsw.py
+│   │   │   ├── faiss_hnsw.py
+│   │   │   └── milvus.py
 │   │   ├── llm/
 │   │   │   ├── __init__.py
-│   │   │   └── mistral.py
-│   │   └── reranking/
+│   │   │   ├── mistral.py
+│   │   │   └── open_ai.py
+│   │   ├── reranking/
+│   │   │   ├── __init__.py
+│   │   │   └── cross_encoder.py
+│   │   └── storage/
 │   │       ├── __init__.py
-│   │       └── cross_encoder.py
-│   ├── infrastructure/         # External frameworks and tools
+│   │       └── document_store.py
+│   │
+│   ├── infrastructure/              # External frameworks and tools
 │   │   ├── __init__.py
 │   │   ├── database/
 │   │   │   ├── __init__.py
-│   │   │   └── document_store.py
-│   │   └── loaders/
+│   │   │   ├── models.py            # SQLAlchemy/ORM models
+│   │   │   └── repository.py        # Database access
+│   │   ├── loaders/
+│   │   │   ├── __init__.py
+│   │   │   ├── pdf_loader.py
+│   │   │   ├── html_loader.py
+│   │   │   └── text_loader.py
+│   │   └── cache/
 │   │       ├── __init__.py
-│   │       └── document_loader.py
-│   ├── api/                    # API endpoints
+│   │       └── redis_cache.py
+│   │
+│   ├── api/                         # API layer
 │   │   ├── __init__.py
-│   │   ├── dependencies.py
+│   │   ├── dependencies.py          # FastAPI dependencies
+│   │   ├── middlewares.py           # Custom middlewares
+│   │   ├── schemas/                 # API schemas (Pydantic models)
+│   │   │   ├── __init__.py
+│   │   │   ├── auth.py
+│   │   │   ├── document.py
+│   │   │   └── query.py
 │   │   └── routes/
 │   │       ├── __init__.py
+│   │       ├── auth.py
 │   │       ├── documents.py
 │   │       └── queries.py
-│   └── schemas/                # API schemas (request/response models)
-│       ├── __init__.py
-│       ├── document.py
-│       └── query.py
-├── tests/                      # Tests
-├── pyproject.toml              # Project metadata and dependencies
-└── requirements.txt            # Dependencies list
-```
-
-Now let's implement the key components:
+│   │
+│   ├── static/                      # Static assets for web UI
+│   │   ├── css/
+│   │   ├── js/
+│   │   └── images/
+│   │
+│   └── templates/                   # Jinja templates for web UI
+│       ├── base.html
+│       ├── components/
+│       └── pages/
+│
+├── utils/                           # Utility functions
+│   ├── __init__.py
+│   ├── security.py
+│   ├── file_handlers.py
+│   ├── text_processors.py
+│   └── validators.py
+│
+├── data/                            # Data storage
+│   ├── uploads/                     # User uploaded files
+│   ├── processed/                   # Processed documents
+│   └── embeddings/                  # Stored embeddings (if file-based)
+│
+├── scripts/                         # Utility scripts
+│   ├── setup_db.py                  # Database setup
+│   └── generate_embeddings.py       # Batch embedding generation
+│
+├── tests/                           # Tests
+│   ├── __init__.py
+│   ├── conftest.py
+│   ├── unit/
+│   │   ├── core/
+│   │   ├── adapters/
+│   │   └── api/
+│   └── integration/
+│
+├── alembic/                         # Database migrations (if using SQLAlchemy)
+│   ├── versions/
+│   └── env.py
+│
+├── docker/                          # Docker configuration
+│   ├── Dockerfile
+│   └── docker-compose.yml
+│
+├── .env.example                     # Example environment variables
+├── .gitignore
+├── pyproject.toml                   # Modern Python project configuration
+├── requirements.txt                 # For compatibility
+└── README.md
