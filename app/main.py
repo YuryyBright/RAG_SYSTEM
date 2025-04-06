@@ -4,7 +4,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import os
 
-from api.routers import documents, queries, files, auth
+from starlette.templating import Jinja2Templates
+
+from api.v1.routers import documents
+from api.v1.routers import auth, files, queries
 from app.config import settings
 
 # Create FastAPI app
@@ -12,6 +15,11 @@ app = FastAPI(
     title=settings.PROJECT_NAME,
     openapi_url=f"{settings.API_V1_STR}/openapi.json"
 )
+# Static files (CSS, JS, images)
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
+
+# Jinja2 templates
+templates = Jinja2Templates(directory="app/templates")
 
 # Configure CORS
 app.add_middleware(
