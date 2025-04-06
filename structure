@@ -1,0 +1,60 @@
+Project Structure:
+```
+rag_api/
+├── app/
+│   ├── __init__.py
+│   ├── main.py                 # FastAPI application entry point
+│   ├── config.py               # Configuration settings
+│   ├── core/                   # Core business logic
+│   │   ├── __init__.py
+│   │   ├── entities/           # Business entities
+│   │   │   ├── __init__.py
+│   │   │   └── document.py
+│   │   ├── interfaces/         # Interfaces/abstractions
+│   │   │   ├── __init__.py
+│   │   │   ├── embedding.py
+│   │   │   ├── indexing.py
+│   │   │   ├── llm.py
+│   │   │   └── reranking.py
+│   │   └── use_cases/          # Application use cases
+│   │       ├── __init__.py
+│   │       └── query.py
+│   ├── adapters/               # Implementation of interfaces
+│   │   ├── __init__.py
+│   │   ├── embedding/
+│   │   │   ├── __init__.py
+│   │   │   └── instructor.py
+│   │   ├── indexing/
+│   │   │   ├── __init__.py
+│   │   │   └── faiss_hnsw.py
+│   │   ├── llm/
+│   │   │   ├── __init__.py
+│   │   │   └── mistral.py
+│   │   └── reranking/
+│   │       ├── __init__.py
+│   │       └── cross_encoder.py
+│   ├── infrastructure/         # External frameworks and tools
+│   │   ├── __init__.py
+│   │   ├── database/
+│   │   │   ├── __init__.py
+│   │   │   └── document_store.py
+│   │   └── loaders/
+│   │       ├── __init__.py
+│   │       └── document_loader.py
+│   ├── api/                    # API endpoints
+│   │   ├── __init__.py
+│   │   ├── dependencies.py
+│   │   └── routes/
+│   │       ├── __init__.py
+│   │       ├── documents.py
+│   │       └── queries.py
+│   └── schemas/                # API schemas (request/response models)
+│       ├── __init__.py
+│       ├── document.py
+│       └── query.py
+├── tests/                      # Tests
+├── pyproject.toml              # Project metadata and dependencies
+└── requirements.txt            # Dependencies list
+```
+
+Now let's implement the key components:
