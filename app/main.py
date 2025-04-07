@@ -5,9 +5,10 @@ This module initializes the FastAPI application, sets up routes,
 middlewares, and other components necessary for the application.
 """
 
-from fastapi import FastAPI, APIRouter
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from fastapi import FastAPI, APIRouter, Request, HTTPException
+from fastapi.responses import HTMLResponse
 import os
 
 from api.v1.routers import auth, documents, queries, files
@@ -60,3 +61,19 @@ async def health_check():
     Health check endpoint.
     """
     return {"status": "healthy", "version": settings.APP_VERSION}
+
+# Custom error handlers
+
+@app.exception_handler(403)
+async def forbidden_exception_handler(request: Request, exc: HTTPException):
+    return templates.TemplateResponse("403.html", {"request": request}, status_code=403)
+
+
+@app.exception_handler(404)
+async def not_found_exception_handler(request: Request, exc: HTTPException):
+    return templates.TemplateResponse("404.html", {"request": request}, status_code=404)
+
+
+@app.exception_handler(500)
+async def internal_server_error_handler(request: Request, exc: HTTPException):
+    return templates.TemplateResponse("500.html", {"request": request}, status_code=500)

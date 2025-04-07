@@ -14,10 +14,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from typing import Callable
 import time
 import uuid
-import logging
 from app.config import settings
+from utils.logger_util import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger("app.api.middleware")
 
 
 def setup_middlewares(app: FastAPI) -> None:
@@ -43,6 +43,7 @@ def setup_middlewares(app: FastAPI) -> None:
     app.middleware("http")(error_handling_middleware)
 
 
+
 async def logging_middleware(request: Request, call_next: Callable) -> JSONResponse:
     """
     Middleware for logging request and response information.
@@ -65,24 +66,28 @@ async def logging_middleware(request: Request, call_next: Callable) -> JSONRespo
     start_time = time.time()
 
     # Log request
-    logger.info(f"Request {request_id} started: {request.method} {request.url}")
+    logger.info(f"Request started | ID: {request_id} | Method: {request.method} | Path: {request.url.path}")
 
+    # Process request
     try:
         response = await call_next(request)
+        process_time = time.time() - start_time
 
         # Log response
-        process_time = time.time() - start_time
-        logger.info(f"Request {request_id} completed: {response.status_code} ({process_time:.3f}s)")
-
-        # Add custom headers
-        response.headers["X-Request-ID"] = request_id
-        response.headers["X-Process-Time"] = str(process_time)
+        logger.info(
+            f"Request completed | ID: {request_id} | Method: {request.method} | "
+            f"Path: {request.url.path} | Status: {response.status_code} | "
+            f"Duration: {process_time:.3f}s"
+        )
 
         return response
     except Exception as e:
-        # Log exception
         process_time = time.time() - start_time
-        logger.error(f"Request {request_id} failed: {str(e)} ({process_time:.3f}s)")
+        logger.error(
+            f"Request failed | ID: {request_id} | Method: {request.method} | "
+            f"Path: {request.url.path} | Duration: {process_time:.3f}s | Error: {str(e)}",
+            exc_info=True
+        )
         raise
 
 

@@ -2,7 +2,7 @@ rag_system/
 ├── app/
 │   ├── __init__.py
 │   ├── main.py                      # FastAPI application entry point
-│   ├── config.py                    # Configuration settings
+│   ├── config.py                    # Configuration settings including logging config
 │   │
 │   ├── core/                        # Core business logic (domain layer)
 │   │   ├── __init__.py
@@ -56,14 +56,18 @@ rag_system/
 │   │   │   ├── pdf_loader.py
 │   │   │   ├── html_loader.py
 │   │   │   └── text_loader.py
-│   │   └── cache/
+│   │   ├── cache/
+│   │   │   ├── __init__.py
+│   │   │   └── redis_cache.py
+│   │   └── logging/                 # New logging infrastructure
 │   │       ├── __init__.py
-│   │       └── redis_cache.py
+│   │       ├── logger.py            # Core logging functionality
+│   │       └── formatters.py        # Custom formatters if needed
 │   │
 │   ├── api/                         # API layer
 │   │   ├── __init__.py
 │   │   ├── dependencies.py          # FastAPI dependencies
-│   │   ├── middlewares.py           # Custom middlewares
+│   │   ├── middlewares.py           # Custom middlewares including RequestLoggingMiddleware
 │   │   ├── schemas/                 # API schemas (Pydantic models)
 │   │   │   ├── __init__.py
 │   │   │   ├── auth.py
@@ -90,16 +94,21 @@ rag_system/
 │   ├── security.py
 │   ├── file_handlers.py
 │   ├── text_processors.py
-│   └── validators.py
+│   ├── validators.py
+│   └── logger_util.py               # Helper for accessing loggers
 │
 ├── data/                            # Data storage
 │   ├── uploads/                     # User uploaded files
 │   ├── processed/                   # Processed documents
 │   └── embeddings/                  # Stored embeddings (if file-based)
 │
+├── logs/                            # Log files directory
+│   └── .gitkeep                     # To keep directory in git but ignore log files
+│
 ├── scripts/                         # Utility scripts
 │   ├── setup_db.py                  # Database setup
-│   └── generate_embeddings.py       # Batch embedding generation
+│   ├── generate_embeddings.py       # Batch embedding generation
+│   └── run_admin.py                 # CLI entrypoint script
 │
 ├── tests/                           # Tests
 │   ├── __init__.py
@@ -118,8 +127,9 @@ rag_system/
 │   ├── Dockerfile
 │   └── docker-compose.yml
 │
+├── logging_config.json              # External logging configuration file
 ├── .env.example                     # Example environment variables
-├── .gitignore
+├── .gitignore                       # Including entries for log files
 ├── pyproject.toml                   # Modern Python project configuration
-├── requirements.txt                 # For compatibility
+├── requirements.txt                 # Updated with logging packages
 └── README.md

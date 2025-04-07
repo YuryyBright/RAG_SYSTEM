@@ -116,7 +116,7 @@ class Document(Base):
 
     # Relationships
     owner = relationship("User", back_populates="documents")
-    metadata = relationship("DocumentMetadata", back_populates="document", cascade="all, delete-orphan")
+    document_metadata = relationship("DocumentMetadata", back_populates="document", cascade="all, delete-orphan")
 
 class DocumentMetadata(Base):
     """Metadata for Document.
@@ -140,7 +140,7 @@ class DocumentMetadata(Base):
     value = Column(String, nullable=False)
 
     # Relationships
-    document = relationship("Document", back_populates="metadata")
+    document = relationship("Document", back_populates="document_metadata")
 
 class Token(Base):
     """Token model for authentication.
