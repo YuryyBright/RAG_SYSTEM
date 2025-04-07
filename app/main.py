@@ -1,74 +1,62 @@
-# app/main.py
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
+"""
+Main module for the FastAPI application.
+
+This module initializes the FastAPI application, sets up routes,
+middlewares, and other components necessary for the application.
+"""
+
+from fastapi import FastAPI, APIRouter
 from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 import os
 
-from starlette.templating import Jinja2Templates
-
-from api.v1.routers import documents
-from api.v1.routers import auth, files, queries
+from api.v1.routers import auth, documents, queries, files
 from app.config import settings
+from app.api.middlewares import setup_middlewares
 
-# Create FastAPI app
+
+# Initialize the FastAPI application
 app = FastAPI(
-    title=settings.PROJECT_NAME,
-    openapi_url=f"{settings.API_V1_STR}/openapi.json"
-)
-# Static files (CSS, JS, images)
-app.mount("/static", StaticFiles(directory="app/static"), name="static")
-
-# Jinja2 templates
-templates = Jinja2Templates(directory="app/templates")
-
-app.mount("/", StaticFiles(directory="frontend", html=True), name="frontend")
-
-# Configure CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    title=settings.APP_NAME,
+    description=settings.APP_DESCRIPTION,
+    version=settings.APP_VERSION,
+    docs_url="/api/docs" if settings.ENVIRONMENT != "production" else None,
+    redoc_url="/api/redoc" if settings.ENVIRONMENT != "production" else None,
 )
 
-# Include routers
-app.include_router(
-    documents.router,
-    prefix=f"{settings.API_V1_STR}/documents",
-    tags=["documents"]
-)
+# Setup middlewares
+setup_middlewares(app)
 
-app.include_router(
-    queries.router,
-    prefix=f"{settings.API_V1_STR}/queries",
-    tags=["queries"]
-)
+# Create API router
+api_router = APIRouter(prefix="/api")
 
-app.include_router(
-    auth.router,
-    prefix=f"{settings.API_V1_STR}/auth",
-    tags=["authentication"]
-)
+# Include routes
+api_router.include_router(auth.router, prefix="/auth", tags=["Authentication"])
+api_router.include_router(documents.router, prefix="/documents", tags=["Documents"])
+api_router.include_router(queries.router, prefix="/queries", tags=["Queries"])
+api_router.include_router(files.router, prefix="/files", tags=["Files"])
 
-app.include_router(
-    files.router,
-    prefix=f"{settings.API_V1_STR}/files",
-    tags=["files"]
-)
+# Include the API router in the app
+app.include_router(api_router)
 
-# Mount static files
-os.makedirs("static", exist_ok=True)
-app.mount("/static", StaticFiles(directory="static"), name="static")
+# Mount static files if they exist
+static_dir = os.path.join(os.path.dirname(__file__), "static")
+if os.path.exists(static_dir):
+    app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
-# Mount frontend
-app.mount("/", StaticFiles(directory="frontend", html=True), name="frontend")
+# Setup templates
+templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "templates"))
 
-@app.get("/api/health")
-async def health():
-    return {"status": "healthy"}
+@app.get("/", include_in_schema=False)
+async def root():
+    """
+    Root endpoint redirecting to the API documentation.
+    """
+    return {"message": f"Welcome to {settings.APP_NAME}. Visit /api/docs for the API documentation."}
 
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
+@app.get("/health", include_in_schema=False)
+async def health_check():
+    """
+    Health check endpoint.
+    """
+    return {"status": "healthy", "version": settings.APP_VERSION}

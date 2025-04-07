@@ -1,138 +1,199 @@
+# app/adapters/indexing/faiss_hnsw.py
 import os
+import pickle
 import numpy as np
 import faiss
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from core.entities.document import Document
 from core.interfaces.indexing import IndexInterface
-from app.infrastructure.database.document_store import DocumentStore
+
 
 class FaissHNSWIndex(IndexInterface):
     """
-    FAISS implementation of the IndexInterface using HNSW indexing.
+    Implementation of FAISS HNSW index for efficient similarity search.
 
-    This class provides methods to add, search, delete, save, and load documents in a FAISS HNSW index.
+    This class implements the IndexInterface using FAISS HNSW (Hierarchical Navigable
+    Small World) algorithm for fast approximate nearest neighbor search.
 
-    Attributes
-    ----------
-    document_store : DocumentStore
-        The document store for saving and retrieving documents.
-    dimension : int
-        The dimensionality of the document embeddings.
-    index : faiss.IndexHNSWFlat
-        The FAISS HNSW index.
+    Attributes:
+        dimension (int): The dimension of the vectors to be indexed.
+        ef_construction (int): The size of the dynamic list for HNSW graph construction.
+        ef_search (int): The size of the dynamic list for HNSW graph search.
+        m (int): The number of bi-directional links created for each new element.
+        documents (Dict[str, Document]): A mapping of document IDs to Document objects.
+        index (faiss.Index): The FAISS index object.
+        id_to_index (Dict[str, int]): A mapping of document IDs to their indices in the index.
+        index_to_id (Dict[int, str]): A mapping of indices in the index to document IDs.
     """
 
-    def __init__(self, document_store: DocumentStore, dimension: int = 768):
-        self.document_store = document_store
+    def __init__(
+            self,
+            dimension: int = 1536,  # Default for OpenAI ada-002
+            ef_construction: int = 200,
+            ef_search: int = 128,
+            m: int = 16
+    ):
+        """
+        Initialize the FAISS HNSW index.
+
+        Args:
+            dimension (int): The dimension of the vectors to be indexed.
+            ef_construction (int): The size of the dynamic list for HNSW graph construction.
+            ef_search (int): The size of the dynamic list for HNSW graph search.
+            m (int): The number of bi-directional links created for each new element.
+        """
         self.dimension = dimension
-        # HNSW index with L2 distance
-        self.index = faiss.IndexHNSWFlat(dimension, 32)  # 32 neighbors per node
+        self.ef_construction = ef_construction
+        self.ef_search = ef_search
+        self.m = m
+
+        # Initialize the index
+        self.documents = {}
+        self.index = self._create_index()
+        self.id_to_index = {}
+        self.index_to_id = {}
+        self.current_index = 0
+
+    def _create_index(self) -> faiss.Index:
+        """
+        Create a new FAISS HNSW index.
+
+        Returns:
+            faiss.Index: A newly created FAISS HNSW index.
+        """
+        # Create the HNSW index
+        index = faiss.IndexHNSWFlat(self.dimension, self.m)
+        index.hnsw.efConstruction = self.ef_construction
+        index.hnsw.efSearch = self.ef_search
+
+        return index
 
     async def add_documents(self, documents: List[Document]) -> None:
         """
-        Add documents to the index and store.
+        Add documents to the index.
 
-        Parameters
-        ----------
-        documents : List[Document]
-            A list of Document objects to be added to the index.
+        Args:
+            documents (List[Document]): A list of Document objects to be added to the index.
         """
-        if not documents:
+        # Filter out documents without embeddings
+        docs_with_embeddings = [doc for doc in documents if doc.embedding is not None]
+
+        if not docs_with_embeddings:
             return
 
-        embeddings = []
-        ids = []
+        # Prepare embeddings for indexing
+        embeddings = np.array([doc.embedding for doc in docs_with_embeddings], dtype=np.float32)
 
-        for doc in documents:
-            if not doc.embedding:
-                raise ValueError(f"Document {doc.id} does not have an embedding")
+        # Add embeddings to the index
+        self.index.add(embeddings)
 
-            # Store document in the document store
-            await self.document_store.save(doc)
-
-            # Collect embedding and ID for FAISS index
-            embeddings.append(doc.embedding)
-            ids.append(doc.id)
-
-        # Convert embeddings to numpy array
-        embeddings_array = np.array(embeddings, dtype=np.float32)
-
-        # Add embeddings to FAISS index
-        self.index.add(embeddings_array)
+        # Update mappings
+        for doc in docs_with_embeddings:
+            self.documents[doc.id] = doc
+            self.id_to_index[doc.id] = self.current_index
+            self.index_to_id[self.current_index] = doc.id
+            self.current_index += 1
 
     async def search(self, query_embedding: List[float], k: int = 5) -> List[Dict[str, Any]]:
         """
-        Search the index for similar documents.
+        Search the index for similar documents to the query embedding.
 
-        Parameters
-        ----------
-        query_embedding : List[float]
-            A list of floats representing the embedding of the query.
-        k : int, optional
-            The number of top similar documents to return (default is 5).
+        Args:
+            query_embedding (List[float]): A list of floats representing the embedding of the query.
+            k (int): The number of top similar documents to return.
 
-        Returns
-        -------
-        List[Dict[str, Any]]
-            A list of dictionaries containing the IDs, content, metadata, and similarity scores of the top similar documents.
+        Returns:
+            List[Dict[str, Any]]: A list of dictionaries containing the IDs, content, metadata,
+                                 and similarity scores of the top similar documents.
         """
-        query_array = np.array([query_embedding], dtype=np.float32)
+        if self.index.ntotal == 0:
+            return []
 
-        # Perform the search
-        distances, indices = self.index.search(query_array, k)
+        # Convert query embedding to numpy array
+        query_embedding_np = np.array([query_embedding], dtype=np.float32)
 
-        # Get document IDs for the results
+        # Search the index
+        distances, indices = self.index.search(query_embedding_np, min(k, self.index.ntotal))
+
+        # Map indices to document IDs and prepare results
         results = []
-        for i, idx in enumerate(indices[0]):
-            if idx == -1:  # FAISS returns -1 for not enough results
-                continue
+        for i, (distance, idx) in enumerate(zip(distances[0], indices[0])):
+            # Convert distance to similarity score (1 - normalized distance)
+            score = 1.0 - float(distance) / 2.0  # Assuming L2 distance
 
-            # Get the document from the store
-            doc = await self.document_store.get_by_faiss_id(idx)
-            if doc:
+            # Get document ID from index
+            doc_id = self.index_to_id.get(int(idx))
+
+            if doc_id and doc_id in self.documents:
+                doc = self.documents[doc_id]
                 results.append({
-                    "id": doc.id,
+                    "id": doc_id,
                     "content": doc.content,
                     "metadata": doc.metadata,
-                    "score": float(1.0 / (1.0 + distances[0][i]))  # Convert distance to similarity score
+                    "score": score
                 })
 
         return results
 
     async def delete_document(self, doc_id: str) -> None:
         """
-        Delete a document from the index and store.
+        Delete a document from the index.
 
-        Parameters
-        ----------
-        doc_id : str
-            The unique identifier of the document to be deleted.
+        Note: FAISS HNSW does not support direct removal of vectors.
+        This implementation removes the document from the mapping dictionaries
+        but the vector remains in the index. A full rebuild would be needed
+        to completely remove the vector.
+
+        Args:
+            doc_id (str): The unique identifier of the document to be deleted.
         """
-        # Note: FAISS doesn't support direct deletion
-        # To implement deletion, we would need to recreate the index
-        # This is a simplified version - in production you'd need a proper deletion strategy
-        await self.document_store.delete(doc_id)
+        if doc_id in self.documents:
+            # Remove from documents dictionary
+            del self.documents[doc_id]
+
+            # Remove from mappings
+            if doc_id in self.id_to_index:
+                idx = self.id_to_index[doc_id]
+                del self.id_to_index[doc_id]
+                if idx in self.index_to_id:
+                    del self.index_to_id[idx]
 
     async def save_index(self, path: str) -> None:
         """
-        Save the FAISS index to disk.
+        Save the index to disk.
 
-        Parameters
-        ----------
-        path : str
-            The file path where the index should be saved.
+        Args:
+            path (str): The file path where the index should be saved.
         """
+        # Create directory if it doesn't exist
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        faiss.write_index(self.index, path)
+
+        # Save the index
+        faiss.write_index(self.index, f"{path}.index")
+
+        # Save the mappings and documents
+        with open(f"{path}.mappings", "wb") as f:
+            pickle.dump({
+                "documents": self.documents,
+                "id_to_index": self.id_to_index,
+                "index_to_id": self.index_to_id,
+                "current_index": self.current_index
+            }, f)
 
     async def load_index(self, path: str) -> None:
         """
-        Load the FAISS index from disk.
+        Load the index from disk.
 
-        Parameters
-        ----------
-        path : str
-            The file path from where the index should be loaded.
+        Args:
+            path (str): The file path from where the index should be loaded.
         """
-        if os.path.exists(path):
-            self.index = faiss.read_index(path)
+        # Load the index
+        self.index = faiss.read_index(f"{path}.index")
+
+        # Load the mappings and documents
+        with open(f"{path}.mappings", "rb") as f:
+            data = pickle.load(f)
+            self.documents = data["documents"]
+            self.id_to_index = data["id_to_index"]
+            self.index_to_id = data["index_to_id"]
+            self.current_index = data["current_index"]

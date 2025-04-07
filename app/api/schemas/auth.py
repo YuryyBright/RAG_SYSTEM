@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field, EmailStr
 class LoginRequest(BaseModel):
     """
     Schema for user login request.
+    Schema for user login request.
 
     Attributes
     ----------

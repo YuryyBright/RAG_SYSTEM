@@ -1,51 +1,85 @@
-# app/config.py
-from pydantic import BaseSettings
+"""
+Configuration module for the application.
+
+This module loads environment variables and defines settings for the application.
+"""
+
 import os
-from typing import Optional
+from pydantic import BaseSettings, Field, EmailStr
+from typing import List, Optional
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 
 class Settings(BaseSettings):
-    """Application settings."""
+    """Application settings loaded from environment variables."""
 
-    # API Settings
-    API_V1_STR: str = "/api/v1"
-    PROJECT_NAME: str = "RAG API"
+    # Application settings
+    APP_NAME: str = Field("RAG System", description="Application name")
+    APP_DESCRIPTION: str = Field("Retrieval-Augmented Generation System", description="Application description")
+    APP_VERSION: str = Field("0.1.0", description="Application version")
+    ENVIRONMENT: str = Field("development", description="Application environment")
+    DEBUG: bool = Field(False, description="Debug mode")
 
-    # Security settings
-    SECRET_KEY: str = os.getenv("SECRET_KEY", "supersecretkey")
-    ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_DAYS: int = 30
+    # Server settings
+    HOST: str = Field("0.0.0.0", description="Server host")
+    PORT: int = Field(8000, description="Server port")
+    CORS_ORIGINS: List[str] = Field(
+        ["http://localhost", "http://localhost:3000", "http://localhost:8000"],
+        description="CORS allowed origins"
+    )
 
-    # PostgreSQL settings
-    POSTGRES_USER: str = os.getenv("POSTGRES_USER", "postgres")
-    POSTGRES_PASSWORD: str = os.getenv("POSTGRES_PASSWORD", "postgres")
-    POSTGRES_HOST: str = os.getenv("POSTGRES_HOST", "localhost")
-    POSTGRES_PORT: str = os.getenv("POSTGRES_PORT", "5432")
-    POSTGRES_DB: str = os.getenv("POSTGRES_DB", "ragapi")
+    # Database settings
+    DATABASE_URL: str = Field(
+        "postgresql+psycopg2://user:password@localhost:5432/dbname",
+        description="Database URL"
+    )
 
-    # File storage
-    FILE_STORAGE_PATH: str = os.getenv("FILE_STORAGE_PATH", "./storage/files")
+    # Authentication settings
+    SECRET_KEY: str = Field(
+        "your-secret-key-placeholder",
+        description="Secret key for JWT token"
+    )
+    ALGORITHM: str = Field("HS256", description="Algorithm for JWT token")
+    ACCESS_TOKEN_EXPIRE_DAYS: int = Field(30, description="Access token expiration time in days")
 
-    # Service URLs
-    EMBEDDING_API_URL: str = os.getenv("EMBEDDING_API_URL", "http://localhost:8001")
-    OLLAMA_API_URL: str = os.getenv("OLLAMA_API_URL", "http://localhost:11434/api")
-    RERANKER_API_URL: str = os.getenv("RERANKER_API_URL", "http://localhost:8002")
+    # AI Model settings
+    EMBEDDING_MODEL: str = Field(
+        "instructor-xl",
+        description="Model name for embedding"
+    )
+    EMBEDDING_DIMENSION: int = Field(768, description="Dimension of embeddings")
+    LLM_MODEL: str = Field(
+        "mistral-7b-instruct",
+        description="Model name for LLM"
+    )
+    RERANKER_MODEL: str = Field(
+        "cross-encoder/ms-marco-MiniLM-L-6-v2",
+        description="Model name for reranker"
+    )
+    SCORE_THRESHOLD: float = Field(0.7, description="Threshold for document relevance score")
 
-    # RAG Settings
-    SCORE_THRESHOLD: float = float(os.getenv("SCORE_THRESHOLD", "0.35"))
-    EMBEDDING_DIMENSION: int = int(os.getenv("EMBEDDING_DIMENSION", "768"))
+    # File storage settings
+    UPLOAD_DIR: str = Field("./data/uploads", description="Directory for file uploads")
+    MAX_FILE_SIZE: int = Field(10_000_000, description="Maximum file size in bytes")
+    ALLOWED_EXTENSIONS: List[str] = Field(
+        ["pdf", "txt", "docx", "md", "html", "csv", "json"],
+        description="Allowed file extensions"
+    )
 
-    # Model Settings
-    EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "hkunlp/instructor-xl")
-    LLM_MODEL: str = os.getenv("LLM_MODEL", "mistral")
-    RERANKER_MODEL: str = os.getenv("RERANKER_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2")
-
-    # Storage
-    INDEX_PATH: str = os.getenv("INDEX_PATH", "./data/index")
+    # Email settings (optional)
+    SMTP_SERVER: Optional[str] = Field(None, description="SMTP server")
+    SMTP_PORT: Optional[int] = Field(None, description="SMTP port")
+    SMTP_USERNAME: Optional[str] = Field(None, description="SMTP username")
+    SMTP_PASSWORD: Optional[str] = Field(None, description="SMTP password")
+    EMAIL_FROM: Optional[EmailStr] = Field(None, description="Email sender")
 
     class Config:
+        env_file = ".env"
         case_sensitive = True
 
 
-# Create global settings object
+# Create settings instance
 settings = Settings()

@@ -1,20 +1,19 @@
-# app/auth/routes.py
+# app/api/routes/auth.py
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from datetime import timedelta
 import uuid
 
-from adapters.auth.security import get_password_hash, authenticate_user, create_access_token, get_current_active_user
-from infrastructure.database.repository import get_db
-from infrastructure.database.db_models import User, Token
+from app.adapters.auth.security import get_password_hash, authenticate_user, create_access_token, get_current_active_user
+from app.infrastructure.database.repository import get_db
+from app.infrastructure.database.db_models import User, Token
 from app.config import settings
 
-from api.schemas.users.auth import TokenResponse
-from api.schemas.users.user import UserResponse, UserCreate
+from app.api.schemas.auth import TokenResponse
+from app.api.schemas.user import UserResponse, UserCreate
 
 router = APIRouter()
-
 
 
 @router.post("/register", response_model=UserResponse)

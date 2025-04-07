@@ -1,19 +1,21 @@
-# app/files/routes.py
+# app/api/routes/files.py
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from typing import List
 import os
-from infrastructure.database.repository import get_db
-from infrastructure.database.db_models import User, File as FileModel
-from adapters.auth.security import get_current_active_user
-from adapters.storage.file_manager import FileManager
+
+from app.infrastructure.database.repository import get_db
+from app.infrastructure.database.db_models import User, File as FileModel
+from app.adapters.auth.security import get_current_active_user
+from app.adapters.storage.file_manager import FileManager
+from app.api.schemas.files import FileResponse as FileResponseSchema
 
 router = APIRouter()
 file_manager = FileManager()
 
 
-@router.post("/upload", response_model=FileResponse)
+@router.post("/upload", response_model=FileResponseSchema)
 async def upload_file(
         file: UploadFile = File(...),
         is_public: bool = False,
@@ -40,7 +42,7 @@ async def upload_file(
     return db_file
 
 
-@router.get("/files", response_model=List[FileResponse])
+@router.get("/", response_model=List[FileResponseSchema])
 async def list_files(
         current_user: User = Depends(get_current_active_user),
         db: Session = Depends(get_db)
@@ -50,7 +52,7 @@ async def list_files(
     return files
 
 
-@router.get("/files/{file_id}")
+@router.get("/{file_id}")
 async def get_file(
         file_id: str,
         current_user: User = Depends(get_current_active_user),
@@ -77,7 +79,7 @@ async def get_file(
     )
 
 
-@router.delete("/files/{file_id}")
+@router.delete("/{file_id}")
 async def delete_file(
         file_id: str,
         current_user: User = Depends(get_current_active_user),
