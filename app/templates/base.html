@@ -85,7 +85,9 @@
     <script src="{{ url_for('static', path='plugins/overlayScrollbars/js/jquery.overlayScrollbars.min.js') }}"></script>
     <script src="{{ url_for('static', path='dist/js/adminlte.js') }}"></script>
     <script src="{{ url_for('static', path='plugins/alertify.js/js/alertify.js') }}"></script>
-    {% block scripts %}
+    <!-- Authentication script -->
+    <script src="{{ url_for('static', path='/dist/js/pages/auth.js') }}"></script>
+    {{ super() }} {% block scripts %}
     <!-- Additional script content can be added here -->
     {% endblock %}
   </body>

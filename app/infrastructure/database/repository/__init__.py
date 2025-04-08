@@ -27,9 +27,12 @@ AsyncSessionLocal = async_sessionmaker(
 Base = declarative_base()
 
 # Dependency for FastAPI or other async-compatible frameworks
-async def get_db():
+async def get_async_db():
     """
     Async dependency to get a SQLAlchemy AsyncSession.
     """
     async with AsyncSessionLocal() as session:
-        yield session
+        try:
+            yield session
+        finally:
+            await session.close()

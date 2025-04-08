@@ -13,10 +13,14 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 import uvicorn
+from starlette.responses import RedirectResponse
+from starlette.status import HTTP_302_FOUND
 
-from api.v1.routers import auth, documents, queries, files, pages
+from api.v1.routers import auth, documents, queries, files, pages, auth_pages, dashboard_pages, admin_pages
+
 from app.config import settings
 from app.api.middlewares import setup_middlewares
+from infrastructure.database.repository import get_async_db
 from utils.logger_util import get_logger
 
 # Configure logging
@@ -46,6 +50,11 @@ api_router.include_router(files.router, prefix="/files", tags=["Files"])
 
 # Include page routers - note these are protected by auth
 app.include_router(pages.router, prefix="/pages", tags=["Pages"])
+
+# Include page routers for frontend pages
+app.include_router(auth_pages.router, prefix="/auth", tags=["Authentication Pages"])
+app.include_router(dashboard_pages.router, prefix="/dashboard", tags=["Dashboard Pages"])
+app.include_router(admin_pages.router, prefix="/admin", tags=["Admin Pages"])
 app.include_router(api_router)
 
 # Serve static files from ./static directory if it exists
@@ -55,14 +64,21 @@ if os.path.exists(static_dir):
     logger.info(f"Static files mounted from: {static_dir}")
 
 # Jinja2 template configuration
-templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "templates"))
+from app.core.templates.templates import templates
 
-@app.get("/", include_in_schema=False)
-async def root():
+# Root route - redirect to dashboard if logged in, otherwise to login page
+@app.get("/", response_class=HTMLResponse)
+async def root(request: Request):
     """
-    Root endpoint redirecting to API documentation message.
+    Root route redirects to dashboard if logged in, otherwise to login page
     """
-    return {"message": f"Welcome to {settings.APP_NAME}. Visit /api/docs for the API documentation."}
+    # Try to get user from token in cookie
+    try:
+        from api.v1.routers.auth import get_current_active_user
+        user = await get_current_active_user(db=next(get_async_db()), token=request.cookies.get("access_token"))
+        return RedirectResponse(url="/dashboard", status_code=HTTP_302_FOUND)
+    except:
+        return RedirectResponse(url="/auth/login", status_code=HTTP_302_FOUND)
 
 
 @app.get("/health", include_in_schema=False)

@@ -5,7 +5,7 @@ from fastapi.templating import Jinja2Templates
 import os
 from typing import Dict, Any
 
-from api.v1.routers.auth import get_current_active_user
+from api.middleware_auth import get_current_active_user
 from app.infrastructure.database.db_models import User
 
 
