@@ -1,3 +1,4 @@
+# utils/security.py
 """
 Security utilities for the RAG system including password hashing,
 token generation/validation, and other security-related functions.
@@ -9,15 +10,18 @@ import hashlib
 import hmac
 import time
 from typing import Optional, Dict, Tuple, Any, Union
-import logging
 from datetime import datetime, timedelta
 
 import jwt
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from passlib.context import CryptContext
 
-logger = logging.getLogger(__name__)
+from app.utils.logger_util import get_logger
+
+# Configure logger
+logger = get_logger(__name__)
 
 # Secret key for token generation (should be loaded from environment variables)
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", secrets.token_hex(32))
@@ -29,6 +33,36 @@ SALT_LENGTH = 16
 HASH_ITERATIONS = 390000  # Recommended by OWASP as of 2024
 HASH_ALGORITHM = 'sha256'
 
+# Use passlib for bcrypt
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+
+def get_password_hash(password: str) -> str:
+    """
+    Get the hash of a password using bcrypt.
+
+    Args:
+        password (str): The password in plain text.
+
+    Returns:
+        str: The hashed password.
+    """
+    return pwd_context.hash(password)
+
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """
+    Verify a password against a hash using bcrypt.
+
+    Args:
+        plain_password (str): The password in plain text.
+        hashed_password (str): The hashed password.
+
+    Returns:
+        bool: True if the password matches the hash, False otherwise.
+    """
+    return pwd_context.verify(plain_password, hashed_password)
+
 
 def generate_salt() -> bytes:
     """Generate a random salt for password hashing."""
@@ -38,6 +72,8 @@ def generate_salt() -> bytes:
 def hash_password(password: str, salt: Optional[bytes] = None) -> Tuple[bytes, bytes]:
     """
     Hash a password using PBKDF2 with a random salt.
+
+    Note: This is an alternative to bcrypt, use get_password_hash for most cases.
 
     Args:
         password: Plain text password
@@ -60,26 +96,10 @@ def hash_password(password: str, salt: Optional[bytes] = None) -> Tuple[bytes, b
     return hash_bytes, salt
 
 
-def verify_password(stored_password: bytes, stored_salt: bytes, provided_password: str) -> bool:
-    """
-    Verify if a provided password matches the stored hash.
-
-    Args:
-        stored_password: Previously hashed password
-        stored_salt: Salt used for hashing
-        provided_password: Plain text password to verify
-
-    Returns:
-        bool: True if passwords match, False otherwise
-    """
-    hash_to_verify, _ = hash_password(provided_password, stored_salt)
-    return hmac.compare_digest(stored_password, hash_to_verify)
-
-
 def create_access_token(
         data: Dict[str, Any],
         expires_delta: Optional[timedelta] = None
-) -> str:
+) -> Tuple[str, datetime]:
     """
     Create a JWT access token.
 
@@ -88,7 +108,7 @@ def create_access_token(
         expires_delta: Optional expiration time
 
     Returns:
-        str: JWT token
+        Tuple[str, datetime]: JWT token and expiration time
     """
     to_encode = data.copy()
 
@@ -96,7 +116,7 @@ def create_access_token(
     to_encode.update({"exp": expire})
 
     encoded_jwt = jwt.encode(to_encode, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
-    return encoded_jwt
+    return encoded_jwt, expire
 
 
 def verify_token(token: str) -> Optional[Dict[str, Any]]:
@@ -202,6 +222,26 @@ def secure_random_string(length: int = 16) -> str:
     return secrets.token_hex(length // 2)
 
 
+def generate_csrf_token(session_token: str) -> str:
+    """
+    Generate a CSRF token tied to the session token.
+
+    Args:
+        session_token: User's session token
+
+    Returns:
+        str: CSRF token
+    """
+    timestamp = int(time.time())
+    token_part = hmac.new(
+        session_token.encode(),
+        f"{timestamp}".encode(),
+        digestmod=hashlib.sha256
+    ).hexdigest()
+
+    return f"{timestamp}.{token_part}"
+
+
 def is_valid_csrf_token(token: str, session_token: str) -> bool:
     """
     Validate a CSRF token against the session token.
@@ -236,28 +276,9 @@ def is_valid_csrf_token(token: str, session_token: str) -> bool:
         ).hexdigest()
 
         return hmac.compare_digest(token_part, expected_token)
-    except Exception:
+    except Exception as e:
+        logger.warning(f"CSRF token validation failed: {e}")
         return False
-
-
-def generate_csrf_token(session_token: str) -> str:
-    """
-    Generate a CSRF token tied to the session token.
-
-    Args:
-        session_token: User's session token
-
-    Returns:
-        str: CSRF token
-    """
-    timestamp = int(time.time())
-    token_part = hmac.new(
-        session_token.encode(),
-        f"{timestamp}".encode(),
-        digestmod=hashlib.sha256
-    ).hexdigest()
-
-    return f"{timestamp}.{token_part}"
 
 
 def sanitize_input(input_string: str) -> str:

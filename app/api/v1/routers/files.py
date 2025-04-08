@@ -2,12 +2,12 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 import os
 
+from api.v1.routers.auth import get_current_active_user
 from app.infrastructure.database.repository import get_db
 from app.infrastructure.database.db_models import User, File as FileModel
-from app.adapters.auth.security import get_current_active_user
 from app.adapters.storage.file_manager import FileManager
 from app.api.schemas.files import FileResponse as FileResponseSchema
 

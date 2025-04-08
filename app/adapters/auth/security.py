@@ -1,18 +1,22 @@
 # app/adapters/auth/security.py
-import os
 from datetime import datetime, timedelta
-from typing import Optional, Dict, Any, Union
+from typing import Optional, Dict, Any, Callable
 
-import jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
-from passlib.context import CryptContext
 
-from core.interfaces.auth import AuthInterface
-from core.entities.user import User
+import jwt
+from app.core.interfaces.auth import AuthInterface
+from app.core.entities.user import User
+from app.utils.security import verify_password, get_password_hash
+from app.utils.logger_util import get_logger
+from app.config import settings
 
+# Configure logger
+logger = get_logger(__name__)
+
+# OAuth2 scheme for token authentication
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 class JWTAuth(AuthInterface):
@@ -42,40 +46,15 @@ class JWTAuth(AuthInterface):
             algorithm (str): The algorithm used for JWT encoding and decoding.
             access_token_expire_minutes (int): The expiration time for access tokens in minutes.
         """
-        self.secret_key = secret_key or os.getenv("JWT_SECRET_KEY", "supercecretkey123")
+        self.secret_key = secret_key or settings.JWT_SECRET_KEY
         self.algorithm = algorithm
         self.access_token_expire_minutes = access_token_expire_minutes
-
-    def verify_password(self, plain_password: str, hashed_password: str) -> bool:
-        """
-        Verify a password against a hash.
-
-        Args:
-            plain_password (str): The password in plain text.
-            hashed_password (str): The hashed password.
-
-        Returns:
-            bool: True if the password matches the hash, False otherwise.
-        """
-        return pwd_context.verify(plain_password, hashed_password)
-
-    def get_password_hash(self, password: str) -> str:
-        """
-        Get the hash of a password.
-
-        Args:
-            password (str): The password in plain text.
-
-        Returns:
-            str: The hashed password.
-        """
-        return pwd_context.hash(password)
 
     async def authenticate_user(
             self,
             username: str,
             password: str,
-            user_provider: Any
+            user_provider: Callable
     ) -> Optional[User]:
         """
         Authenticate a user by username and password.
@@ -83,23 +62,28 @@ class JWTAuth(AuthInterface):
         Args:
             username (str): The username of the user.
             password (str): The password of the user.
-            user_provider (Any): A provider function that returns a user by username.
+            user_provider (Callable): A provider function that returns a user by username.
 
         Returns:
             Optional[User]: The authenticated user, or None if authentication failed.
         """
         user = await user_provider(username)
         if not user:
+            logger.info(f"Authentication failed: User {username} not found")
             return None
-        if not self.verify_password(password, user.hashed_password):
+
+        if not verify_password(password, user.hashed_password):
+            logger.info(f"Authentication failed: Invalid password for user {username}")
             return None
+
+        logger.info(f"User {username} authenticated successfully")
         return user
 
     def create_access_token(
             self,
             data: Dict[str, Any],
             expires_delta: Optional[timedelta] = None
-    ) -> str:
+    ) -> tuple[str, datetime]:
         """
         Create an access token.
 
@@ -109,7 +93,7 @@ class JWTAuth(AuthInterface):
                                                 If None, the default expiration time is used.
 
         Returns:
-            str: The encoded JWT token.
+            tuple[str, datetime]: The encoded JWT token and expiration datetime.
         """
         to_encode = data.copy()
 
@@ -121,19 +105,52 @@ class JWTAuth(AuthInterface):
         to_encode.update({"exp": expire})
         encoded_jwt = jwt.encode(to_encode, self.secret_key, algorithm=self.algorithm)
 
-        return encoded_jwt
+        return encoded_jwt, expire
 
+    def get_password_hash(self, password: str) -> str:
+        """
+        Hash a password using bcrypt.
+
+        Parameters
+        ----------
+        password : str
+            The plaintext password to be hashed.
+
+        Returns
+        -------
+        str
+            The hashed password, which can be stored securely in a database.
+        """
+        return get_password_hash(password)
+
+    def verify_password(self, plain_password: str, hashed_password: str) -> bool:
+        """
+        Verify a password against its hashed value.
+
+        Parameters
+        ----------
+        plain_password : str
+            The plaintext password provided by the user.
+        hashed_password : str
+            The hashed password stored in the database.
+
+        Returns
+        -------
+        bool
+            True if the plaintext password matches the hashed password, False otherwise.
+        """
+        return verify_password(plain_password, hashed_password)
     async def get_current_user(
             self,
             token: str,
-            user_provider: Any
+            user_provider: Callable
     ) -> User:
         """
         Get the current user from a token.
 
         Args:
             token (str): The JWT token.
-            user_provider (Any): A provider function that returns a user by username.
+            user_provider (Callable): A provider function that returns a user by username.
 
         Returns:
             User: The current user.
@@ -150,7 +167,8 @@ class JWTAuth(AuthInterface):
                     detail="Could not validate credentials",
                     headers={"WWW-Authenticate": "Bearer"},
                 )
-        except jwt.PyJWTError:
+        except jwt.PyJWTError as e:
+            logger.warning(f"Token validation failed: {e}")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Could not validate credentials",
@@ -159,6 +177,7 @@ class JWTAuth(AuthInterface):
 
         user = await user_provider(username)
         if user is None:
+            logger.warning(f"User from token not found: {username}")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="User not found",
@@ -169,13 +188,15 @@ class JWTAuth(AuthInterface):
 
     async def get_current_active_user(
             self,
-            current_user: User = Depends(oauth2_scheme)
+            token: str = Depends(oauth2_scheme),
+            user_provider: Callable = None
     ) -> User:
         """
         Get the current active user.
 
         Args:
-            current_user (User): The current user, obtained from the token.
+            token (str): The JWT token.
+            user_provider (Callable): A provider function that returns a user by username.
 
         Returns:
             User: The current active user.
@@ -183,6 +204,10 @@ class JWTAuth(AuthInterface):
         Raises:
             HTTPException: If the user is inactive.
         """
+        current_user = await self.get_current_user(token, user_provider)
+
         if not current_user.is_active:
+            logger.warning(f"Inactive user attempt: {current_user.username}")
             raise HTTPException(status_code=400, detail="Inactive user")
+
         return current_user

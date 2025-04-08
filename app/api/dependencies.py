@@ -27,7 +27,7 @@ from core.interfaces.embedding import EmbeddingInterface
 from core.interfaces.indexing import IndexInterface
 from core.interfaces.llm import LLMInterface
 from core.interfaces.reranking import RerankerInterface
-from core.use_cases.query import QueryProcessor
+
 
 from app.adapters.indexing.faiss_hnsw import FaissHNSWIndex
 from app.adapters.embeding.instructor import InstructorEmbedding
@@ -35,6 +35,7 @@ from app.adapters.reranking.cross_encoder import CrossEncoderReranker
 from app.infrastructure.database.document_store import DocumentStore
 from app.infrastructure.loaders.document_loader import DocumentLoader
 from app.config import settings
+from core.use_cases.query import QueryProcessor
 
 # Singleton instances
 document_store = DocumentStore()
@@ -83,3 +84,4 @@ def get_query_processor(
         llm_service=llm_service,
         score_threshold=settings.SCORE_THRESHOLD
     )
+

@@ -138,6 +138,7 @@ class Settings(BaseSettings):
     # Auth
     SECRET_KEY: str = Field(..., description="JWT Secret")
     ALGORITHM: str = Field("HS256", description="JWT Algorithm")
+    JWT_SECRET_KEY: str = Field(..., description="JWT Secret Key")
     ACCESS_TOKEN_EXPIRE_DAYS: int = Field(30, description="Token TTL (days)")
 
     # AI models
