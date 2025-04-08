@@ -1,0 +1,194 @@
+{% extends "base.html" %} {% block title %}Home{% endblock %} {% block header %}
+<div class="row mb-2">
+  <div class="col-sm-6">
+    <h1>Dashboard</h1>
+  </div>
+  <div class="col-sm-6">
+    <ol class="breadcrumb float-sm-right">
+      <li class="breadcrumb-item"><a href="#">Home</a></li>
+      <li class="breadcrumb-item active">Blank Page</li>
+    </ol>
+  </div>
+</div>
+{% endblock %} {% block content %}
+<!-- Main content -->
+<section class="content">
+  <div class="container-fluid">
+    <div class="row">
+      <div class="col-12 col-sm-6 col-md-3">
+        <div class="info-box">
+          <span class="info-box-icon bg-info elevation-1"><i class="fas fa-cog"></i></span>
+          <div class="info-box-content">
+            <span class="info-box-text">CPU Traffic</span>
+            <span class="info-box-number">
+              {{ cpu_usage }}
+              <small>%</small>
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-12 col-sm-6 col-md-3">
+        <div class="info-box">
+          <span class="info-box-icon bg-danger elevation-1"><i class="fas fa-thumbs-up"></i></span>
+          <div class="info-box-content">
+            <span class="info-box-text">Total Files</span>
+            <span class="info-box-number">{{ total_files }}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-12 col-sm-6 col-md-3">
+        <div class="info-box">
+          <span class="info-box-icon bg-success elevation-1"><i class="fas fa-folder"></i></span>
+          <div class="info-box-content">
+            <span class="info-box-text">Total Folders</span>
+            <span class="info-box-number">{{ total_folders }}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-12 col-sm-6 col-md-3">
+        <div class="info-box">
+          <span class="info-box-icon bg-warning elevation-1"><i class="fas fa-hdd"></i></span>
+          <div class="info-box-content">
+            <span class="info-box-text">Total Size (MB)</span>
+            <span class="info-box-number">{{ total_size }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="col-md-12">
+        <div class="card">
+          <div class="card-header">
+            <h5 class="card-title">System Memory Usage</h5>
+          </div>
+          <div class="card-body">
+            <div class="row">
+              <div class="col-md-12">
+                <p class="text-center"><strong>Memory Usage</strong></p>
+                <div class="progress-group">
+                  Memory Usage
+                  <span class="float-right">
+                    <b>{{ used_memory }} Gb</b>
+                    / {{ total_memory }} Gb
+                  </span>
+                  <div class="progress progress-sm">
+                    <div class="progress-bar bg-info" style="width: {{ (used_memory / total_memory) * 100 }}%"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="row">
+      <div class="col-md-12">
+        <div class="card">
+          <div class="card-header">
+            <h5 class="card-title">Індексація файлів</h5>
+          </div>
+          <div class="card-body">
+            <p class="text-center"><strong>Статистика індексації</strong></p>
+            <div class="info-box">
+              <span class="info-box-icon bg-secondary elevation-1"><i class="fas fa-database"></i></span>
+              <div class="info-box-content">
+                <span class="info-box-text">Не проіндексовані файли</span>
+                <span class="info-box-number" id="unindexed-files"></span>
+                <span class="info-box-number" id="unindexed-files-list"></span>
+              </div>
+            </div>
+            <div class="text-center mt-3">
+              <button id="get-unindexed" class="btn btn-info">Отримати кількість</button>
+              <button id="index-all" class="btn btn-success">Проіндексувати</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!--/. container-fluid -->
+</section>
+<!-- /.content -->
+{% endblock %} {% block scripts %}
+<script>
+  $(document).ready(function () {
+    $("#get-unindexed").click(function () {
+      // Показати спінер перед запитом
+      $("#loading-spinner").removeClass("d-none");
+      $("#unindexed-files-list").empty(); // Очищаємо список файлів
+
+      $.ajax({
+        url: "/users/get_unindexed_files", // Замініть на правильний ендпоінт
+        type: "GET",
+        success: function (response) {
+          // Приховати спінер після отримання відповіді
+          $("#loading-spinner").addClass("d-none");
+
+          if (response.unindexed_files.length > 0) {
+            // Вивести кількість непроіндексованих файлів
+            $("#unindexed-files").text(response.unindexed_files.length);
+
+            // Додати кожен файл до списку
+            response.unindexed_files.forEach(function (file) {
+              $("#unindexed-files-list").append("<li>" + file + "</li>");
+            });
+
+            alertify.success("Знайдено " + response.unindexed_files.length + " непроіндексованих файлів.");
+          } else {
+            $("#unindexed-files").text("0");
+            alertify.warning("Всі файли проіндексовані.");
+          }
+        },
+        error: function (xhr) {
+          // Приховати спінер при помилці
+          $("#loading-spinner").addClass("d-none");
+          alertify.error("Помилка отримання даних: " + xhr.statusText);
+        },
+      });
+    });
+
+    // Додаємо функцію для індексації всіх непроіндексованих файлів
+    $("#index-all").click(function () {
+      // Показати спінер перед запитом
+      $("#loading-spinner").removeClass("d-none");
+      $("#unindexed-files-list").empty(); // Очищаємо список файлів
+      $("#index-all-status").empty(); // Очищаємо статус
+
+      $.ajax({
+        url: "/users/index_all_unindexed_files", // Замініть на правильний ендпоінт для індексації
+        type: "GET", // Використовуємо POST для індексації
+        success: function (response) {
+          // Приховати спінер після отримання відповіді
+          $("#loading-spinner").addClass("d-none");
+
+          if (response.unindexed_files.length > 0) {
+            // Вивести кількість непроіндексованих файлів
+            $("#unindexed-files").text(response.unindexed_files.length);
+
+            // Додати кожен файл до списку
+            response.unindexed_files.forEach(function (file) {
+              $("#unindexed-files-list").append("<li>" + file + "</li>");
+            });
+
+            alertify.success("Знайдено " + response.unindexed_files.length + " непроіндексованих файлів.");
+          } else {
+            $("#unindexed-files").text("0");
+            alertify.warning("Всі файли проіндексовані.");
+          }
+        },
+        error: function (xhr) {
+          // Приховати спінер при помилці
+          $("#loading-spinner").addClass("d-none");
+          $("#index-all-status").text("Сталася помилка при індексації.");
+          alertify.error("Помилка індексації: " + xhr.statusText);
+        },
+      });
+    });
+  });
+</script>
+
+{% endblock %}

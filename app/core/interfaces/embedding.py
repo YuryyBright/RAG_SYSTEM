@@ -1,3 +1,4 @@
+# core/interfaces/embedding.py
 from abc import ABC, abstractmethod
 from typing import List
 from core.entities.document import Document
@@ -5,11 +6,10 @@ from core.entities.document import Document
 
 class EmbeddingInterface(ABC):
     """
-    Interface for embedding models.
+    Interface for embedding services.
 
-    This interface defines the methods required for embedding models to process
-    documents and queries. Implementations of this interface should provide
-    functionality to generate embeddings for both documents and query strings.
+    This abstract class defines the methods that any embedding model
+    implementation must provide to work with the system.
     """
 
     @abstractmethod
@@ -17,16 +17,11 @@ class EmbeddingInterface(ABC):
         """
         Generate embeddings for a list of documents.
 
-        This method takes a list of `Document` objects, processes their content,
-        and generates embeddings for each document. The embeddings are then
-        added to the `embedding` attribute of the respective `Document` objects.
-
         Args:
-            documents (List[Document]): A list of `Document` objects to be embedded.
+            documents (List[Document]): A list of Document objects to be embedded.
 
         Returns:
-            List[Document]: The list of `Document` objects with their `embedding`
-            attributes populated.
+            List[Document]: The list of Document objects with their embedding attributes populated.
         """
         pass
 
@@ -34,10 +29,6 @@ class EmbeddingInterface(ABC):
     async def embed_query(self, query: str) -> List[float]:
         """
         Generate an embedding for a query string.
-
-        This method takes a query string as input and generates a vector
-        representation (embedding) for it. The embedding can be used for
-        similarity searches or other tasks.
 
         Args:
             query (str): The query string to be embedded.

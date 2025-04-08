@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>FILE MANAGER | 500 Error</title>
+
+    <!-- iCheck Bootstrap -->
+    <link rel="stylesheet" href="{{ url_for('static', path='plugins/icheck-bootstrap/icheck-bootstrap.min.css') }}" />
+    <link rel="stylesheet" href="{{ url_for('static', path='plugins/fontawesome-free/css/all.min.css') }}" />
+
+    <!-- Theme Style -->
+    <link rel="stylesheet" href="{{ url_for('static', path='dist/css/adminlte.min.css') }}" />
+  </head>
+  <body class="hold-transition sidebar-mini dark-mode">
+    <div class="wrapper">
+      <!-- Navbar -->
+
+      <!-- Main Sidebar Container -->
+
+      <!-- Content Wrapper. Contains page content -->
+      <div class="">
+        <!-- Content Header (Page header) -->
+        <section class="content-header">
+          <div class="container-fluid">
+            <div class="row mb-2">
+              <div class="col-sm-6">
+                <h1>401 Error Page</h1>
+              </div>
+              <div class="col-sm-6">
+                <ol class="breadcrumb float-sm-right">
+                  <li class="breadcrumb-item"><a href="/">Home</a></li>
+                  <li class="breadcrumb-item active">401 Error Page</li>
+                </ol>
+              </div>
+            </div>
+          </div>
+          <!-- /.container-fluid -->
+        </section>
+
+        <!-- Main content -->
+        <section class="content">
+          <div class="error-page">
+            <h2 class="headline text-danger">401</h2>
+
+            <div class="error-content">
+              <h3>
+                <i class="fas fa-exclamation-triangle text-danger"></i>
+                Oops! Something went wrong.
+              </h3>
+
+              <p>
+                We will work on fixing that right away. Meanwhile, you may
+                <a href="/">return to home</a>
+                or try using the search form.
+              </p>
+
+              <form class="search-form">
+                <div class="input-group">
+                  <input type="text" name="search" class="form-control" placeholder="Search" />
+
+                  <div class="input-group-append">
+                    <button type="submit" name="submit" class="btn btn-danger"><i class="fas fa-search"></i></button>
+                  </div>
+                </div>
+                <!-- /.input-group -->
+              </form>
+            </div>
+          </div>
+          <!-- /.error-page -->
+        </section>
+        <!-- /.content -->
+      </div>
+      <!-- /.content-wrapper -->
+
+      <!-- Control Sidebar -->
+      <aside class="control-sidebar control-sidebar-dark">
+        <!-- Control sidebar content goes here -->
+      </aside>
+      <!-- /.control-sidebar -->
+    </div>
+    <!-- ./wrapper -->
+
+    <!-- jQuery -->
+    <!-- jQuery -->
+    <script src="{{ url_for('static', path='plugins/jquery/jquery.min.js') }}"></script>
+    <!-- Bootstrap 4 -->
+    <script src="{{ url_for('static', path='plugins/bootstrap/js/bootstrap.bundle.min.js') }}"></script>
+    <!-- App -->
+    <script src="{{ url_for('static', path='dist/js/adminlte.min.js') }}"></script>
+  </body>
+</html>
