@@ -17,7 +17,7 @@ import uuid
 from app.config import settings
 from utils.logger_util import get_logger
 
-logger = get_logger("app.api.middleware")
+logger = get_logger(__name__)
 
 
 def setup_middlewares(app: FastAPI) -> None:
@@ -123,3 +123,28 @@ async def error_handling_middleware(request: Request, call_next: Callable) -> JS
                 "request_id": getattr(request.state, "request_id", None)
             }
         )
+
+# TODO
+# @app.middleware("http")
+# async def check_session(request: Request, call_next):
+#     session_id = request.cookies.get(COOKIE_NAME)
+#
+#     if session_id:
+#         # Check if session needs refreshing
+#         db = next(get_async_db())
+#         auth_service = AuthService(db)
+#         session = await auth_service.validate_session(session_id)
+#
+#         # If session valid but close to expiry, refresh it
+#         if session and (session.get("expires_at") - datetime.utcnow()).total_seconds() < 3600:  # Less than 1 hour
+#             user_id, username, new_session_id, csrf_token, expire = await auth_service.refresh_session(session_id)
+#
+#             response = await call_next(request)
+#
+#             if new_session_id:
+#                 create_session_cookie(response, new_session_id, expire, True, True)
+#                 set_csrf_cookie(response, csrf_token, False, True)
+#
+#             return response
+#
+#     return await call_next(request)

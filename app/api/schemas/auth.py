@@ -16,7 +16,7 @@ class LoginRequest(BaseModel):
     """
     email: EmailStr = Field(..., description="User email address")
     password: str = Field(..., description="User password")
-
+    remember: Optional[bool] = False
 
 class LoginResponse(BaseModel):
     """
@@ -65,3 +65,24 @@ class TokenResponse(BaseModel):
     expires_at: datetime
     user_id: str
     username: str
+
+
+class SessionResponse(BaseModel):
+    """Session response schema for cookie-based auth."""
+    csrf_token: str
+    expires_at: datetime
+    user_id: str
+    username: str
+
+
+
+
+class PasswordResetRequest(BaseModel):
+    """Password reset request schema."""
+    email: EmailStr
+
+
+class PasswordResetConfirm(BaseModel):
+    """Password reset confirmation schema."""
+    token: str
+    new_password: str = Field(..., min_length=8)

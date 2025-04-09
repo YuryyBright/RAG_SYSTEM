@@ -23,7 +23,9 @@
     <!-- Additional head content can be added here -->
     {% endblock %}
   </head>
-  <body class="hold-transition dark-mode sidebar-mini layout-fixed layout-navbar-fixed layout-footer-fixed">
+  <body
+    class="hold-transition dark-mode sidebar-mini layout-fixed layout-navbar-fixed layout-footer-fixed requires-auth"
+  >
     <div class="wrapper">
       <!-- Preloader -->
       <!-- <div class="preloader flex-column justify-content-center align-items-center">
@@ -85,9 +87,24 @@
     <script src="{{ url_for('static', path='plugins/overlayScrollbars/js/jquery.overlayScrollbars.min.js') }}"></script>
     <script src="{{ url_for('static', path='dist/js/adminlte.js') }}"></script>
     <script src="{{ url_for('static', path='plugins/alertify.js/js/alertify.js') }}"></script>
-    <!-- Authentication script -->
-    <script src="{{ url_for('static', path='/dist/js/pages/auth.js') }}"></script>
-    {{ super() }} {% block scripts %}
+    <!-- Authentication script - MUST load before other page scripts -->
+    <script src="{{ url_for('static', path='dist/js/pages/auth.js') }}"></script>
+    <!-- In your base template or protected pages -->
+    <script>
+      // Add CSRF token to all forms
+      $(document).ready(function () {
+        const csrfToken = AuthManager.getCsrfToken();
+        if (csrfToken) {
+          // Add hidden input to all forms
+          $("form").each(function () {
+            if (!$(this).find('input[name="csrf_token"]').length) {
+              $(this).append(`<input type="hidden" name="csrf_token" value="${csrfToken}">`);
+            }
+          });
+        }
+      });
+    </script>
+    {% block scripts %}
     <!-- Additional script content can be added here -->
     {% endblock %}
   </body>

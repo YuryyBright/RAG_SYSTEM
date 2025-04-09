@@ -7,15 +7,12 @@ from typing import Dict, Any
 
 from api.middleware_auth import get_current_active_user
 from app.infrastructure.database.db_models import User
-
-
-# Set up templates
-templates = Jinja2Templates(directory="app/templates")
+from core.templates.templates import templates
 
 router = APIRouter()
 
 
-@router.get("/", response_class=HTMLResponse)
+@router.get("/home", response_class=HTMLResponse)
 async def home_page(
         request: Request,
         current_user: User = Depends(get_current_active_user)
@@ -36,7 +33,7 @@ async def home_page(
         Rendered home page template
     """
     return templates.TemplateResponse(
-        "home.html",
+        "user/home.html",
         {
             "request": request,
             "username": current_user.username,

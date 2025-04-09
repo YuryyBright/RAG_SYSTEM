@@ -145,3 +145,35 @@ class UserRepository:
         await self.db.commit()
         await self.db.refresh(user)
         return user
+
+    # Add to UserRepository
+    async def update_password(self, user_id: str, hashed_password: str) -> bool:
+        """
+        Update a user's password.
+
+        Parameters
+        ----------
+        user_id : str
+            The ID of the user.
+        hashed_password : str
+            The new hashed password.
+
+        Returns
+        -------
+        bool
+            True if the password was updated, False otherwise.
+        """
+        try:
+            user = await self.get_by_id(user_id)
+            if not user:
+                logger.warning(f"User not found for password update: {user_id}")
+                return False
+
+            user.hashed_password = hashed_password
+            await self.db.commit()
+            logger.info(f"Password updated for user: {user_id}")
+            return True
+        except Exception as e:
+            logger.error(f"Error updating password: {e}")
+            await self.db.rollback()
+            return False

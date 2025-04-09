@@ -1,16 +1,23 @@
 # app/api/routes/auth_pages.py
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, RedirectResponse
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from starlette.status import HTTP_302_FOUND
 
+from adapters.auth.service import AuthService
 from api.v1.routers.auth import get_current_active_user
 from app.infrastructure.database.repository import get_async_db
+from utils.security import COOKIE_NAME
+
 router = APIRouter()
 
 from app.core.templates.templates import templates
+
+
 @router.get("/login", response_class=HTMLResponse)
-async def login_page(request: Request):
+async def login_page(request: Request,
+                     db: AsyncSession = Depends(get_async_db)):
     """
     Login page.
 
@@ -24,13 +31,24 @@ async def login_page(request: Request):
     HTMLResponse
         Rendered login template
     """
-    return templates.TemplateResponse(
-        "auth/login.html",
-        {
-            "request": request,
-            "page_title": "Login"
-        }
-    )
+
+    token = request.cookies.get(COOKIE_NAME)
+    if not token:
+        return templates.TemplateResponse(
+            "auth/login.html",
+            {
+                "request": request,
+                "page_title": "Login"
+            }
+        )
+    else:
+        # Use the AuthService directly instead of get_current_active_user
+        auth_service = AuthService(db)
+        user = await auth_service.verify_token(token)
+        print('user', user)
+        print('user.is_active', user.is_active)
+        if user and user.is_active:
+            return RedirectResponse(url="/dashboard", status_code=HTTP_302_FOUND)
 
 
 @router.get("/register", response_class=HTMLResponse)
@@ -150,7 +168,7 @@ async def check_auth(request: Request):
         Authentication status
     """
     try:
-        user = await get_current_active_user(db=next(get_async_db()), token=request.cookies.get("access_token"))
+        user = await get_current_active_user(db=next(get_async_db()), token=request.cookies.get(COOKIE_NAME))
         return {"authenticated": True, "username": user.username}
     except:
         return {"authenticated": False}

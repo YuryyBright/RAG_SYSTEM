@@ -2,15 +2,15 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.middleware_auth import get_current_active_user
 from app.infrastructure.database.db_models import User, File
 from app.infrastructure.database.repository import get_async_db
-
+from core.templates.templates import templates
+from infrastructure.database.repository.file_repository import FileRepository
 
 # Set up templates
-templates = Jinja2Templates(directory="app/templates")
 
 router = APIRouter()
 
@@ -19,7 +19,7 @@ router = APIRouter()
 async def dashboard_home(
         request: Request,
         current_user: User = Depends(get_current_active_user),
-        db: Session = Depends(get_async_db)
+        db: AsyncSession = Depends(get_async_db)
 ):
     """
     Main dashboard home page after login.
@@ -38,17 +38,19 @@ async def dashboard_home(
     HTMLResponse
         Rendered dashboard home template
     """
+
+    files_manager = FileRepository(db)
     # Get counts for dashboard statistics
-    file_count = db.query(File).filter(File.owner_id == current_user.id).count()
+    file_count = await files_manager.get_by_owner(current_user.id)
 
     # You can add more statistics here as needed
 
     return templates.TemplateResponse(
-        "dashboard/index.html",
+        "/dashboard/index.html",
         {
             "request": request,
             "user": current_user,
-            "file_count": file_count,
+            "file_count": len(file_count),
             "page_title": "Dashboard",
             "active_page": "dashboard"
         }
@@ -59,7 +61,7 @@ async def dashboard_home(
 async def files_page(
         request: Request,
         current_user: User = Depends(get_current_active_user),
-        db: Session = Depends(get_async_db)
+        db: AsyncSession = Depends(get_async_db)
 ):
     """
     Files management page.
@@ -221,7 +223,7 @@ async def upload_page(
 async def shared_files_page(
         request: Request,
         current_user: User = Depends(get_current_active_user),
-        db: Session = Depends(get_async_db)
+        db: AsyncSession = Depends(get_async_db)
 ):
     """
     Shared files page.

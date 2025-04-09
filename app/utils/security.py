@@ -23,11 +23,6 @@ from app.utils.logger_util import get_logger
 # Configure logger
 logger = get_logger(__name__)
 
-# Secret key for token generation (should be loaded from environment variables)
-JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", secrets.token_hex(32))
-JWT_ALGORITHM = "HS256"
-JWT_EXPIRATION_DELTA = timedelta(days=1)  # Default to 1 day
-
 # Password hashing parameters
 SALT_LENGTH = 16
 HASH_ITERATIONS = 390000  # Recommended by OWASP as of 2024
@@ -35,6 +30,11 @@ HASH_ALGORITHM = 'sha256'
 
 # Use passlib for bcrypt
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+# Cookie settings
+COOKIE_NAME = "auth_session"
+CSRF_COOKIE_NAME = "csrf_token"
+COOKIE_MAX_AGE = 60 * 60 * 24 * 30  # 30 days in seconds
 
 
 def get_password_hash(password: str) -> str:
@@ -96,41 +96,62 @@ def hash_password(password: str, salt: Optional[bytes] = None) -> Tuple[bytes, b
     return hash_bytes, salt
 
 
-def create_access_token(
-        data: Dict[str, Any],
+def jwt_encode(
+        payload: Dict[str, Any],
+        secret_key: str,
+        algorithm: str = "HS256",
         expires_delta: Optional[timedelta] = None
 ) -> Tuple[str, datetime]:
     """
-    Create a JWT access token.
+    Encode data into a JWT token.
 
     Args:
-        data: Data to encode in the token
+        payload: Data to encode in the token
+        secret_key: Secret key for signing
+        algorithm: JWT algorithm to use
         expires_delta: Optional expiration time
 
     Returns:
         Tuple[str, datetime]: JWT token and expiration time
     """
-    to_encode = data.copy()
+    to_encode = payload.copy()
 
-    expire = datetime.utcnow() + (expires_delta or JWT_EXPIRATION_DELTA)
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(days=1)  # Default to 1 day
+
     to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, secret_key, algorithm=algorithm)
 
-    encoded_jwt = jwt.encode(to_encode, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
+    # Handle PyJWT version differences
+    if isinstance(encoded_jwt, bytes):
+        encoded_jwt = encoded_jwt.decode('utf-8')
+
     return encoded_jwt, expire
 
 
-def verify_token(token: str) -> Optional[Dict[str, Any]]:
+def jwt_decode(
+        token: str,
+        secret_key: str,
+        algorithms: list[str] = None
+) -> Optional[Dict[str, Any]]:
     """
-    Verify and decode a JWT token.
+    Decode and verify a JWT token.
 
     Args:
         token: JWT token to verify
+        secret_key: Secret key used for signing
+        algorithms: List of allowed algorithms
 
     Returns:
         Optional[Dict[str, Any]]: Token payload if valid, None otherwise
     """
+    if algorithms is None:
+        algorithms = ["HS256"]
+
     try:
-        payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+        payload = jwt.decode(token, secret_key, algorithms=algorithms)
         return payload
     except jwt.PyJWTError as e:
         logger.warning(f"Token verification failed: {e}")
@@ -222,6 +243,16 @@ def secure_random_string(length: int = 16) -> str:
     return secrets.token_hex(length // 2)
 
 
+def generate_session_id() -> str:
+    """
+    Generate a secure random session ID.
+
+    Returns:
+        str: Random session ID
+    """
+    return secure_random_string(32)
+
+
 def generate_csrf_token(session_token: str) -> str:
     """
     Generate a CSRF token tied to the session token.
@@ -306,3 +337,67 @@ def sanitize_input(input_string: str) -> str:
         input_string = input_string.replace(char, replacement)
 
     return input_string
+
+
+def create_session_cookie(
+        response,
+        session_id: str,
+        expiry: datetime,
+        httponly: bool = True,
+        secure: bool = True
+) -> None:
+    """
+    Set a secure session cookie on the response.
+
+    Args:
+        response: FastAPI response object
+        session_id: Session ID to store
+        expiry: Expiration datetime
+        httponly: Whether cookie is HttpOnly
+        secure: Whether cookie requires HTTPS
+    """
+    max_age = int((expiry - datetime.utcnow()).total_seconds())
+    response.set_cookie(
+        key=COOKIE_NAME,
+        value=session_id,
+        max_age=max_age,
+        httponly=httponly,  # Prevent JavaScript access
+        secure=secure,  # Require HTTPS
+        samesite="lax"  # CSRF protection
+    )
+
+
+def set_csrf_cookie(
+        response,
+        csrf_token: str,
+        httponly: bool = True,
+        secure: bool = True
+) -> None:
+    """
+    Set a CSRF token cookie on the response.
+
+    Args:
+        response: FastAPI response object
+        csrf_token: CSRF token to store
+        httponly: Whether cookie is HttpOnly (false to allow JS access)
+        secure: Whether cookie requires HTTPS
+    """
+    response.set_cookie(
+        key=CSRF_COOKIE_NAME,
+        value=csrf_token,
+        max_age=3600,  # 1 hour
+        httponly=httponly,  # Allow JavaScript access for AJAX
+        secure=secure,  # Require HTTPS
+        samesite="lax"  # CSRF protection
+    )
+
+
+def clear_auth_cookies(response) -> None:
+    """
+    Clear authentication cookies from the response.
+
+    Args:
+        response: FastAPI response object
+    """
+    response.delete_cookie(key=COOKIE_NAME)
+    response.delete_cookie(key=CSRF_COOKIE_NAME)

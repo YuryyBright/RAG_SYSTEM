@@ -7,24 +7,24 @@ It also provides an entry point to run the app using Uvicorn.
 """
 
 import os
-import logging
 from fastapi import FastAPI, APIRouter, Request, HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
 import uvicorn
 from starlette.responses import RedirectResponse
 from starlette.status import HTTP_302_FOUND
 
+from adapters.auth.service import AuthService
+from api.middleware_auth import get_current_active_user
 from api.v1.routers import auth, documents, queries, files, pages, auth_pages, dashboard_pages, admin_pages
 
 from app.config import settings
 from app.api.middlewares import setup_middlewares
 from infrastructure.database.repository import get_async_db
 from utils.logger_util import get_logger
+from utils.security import COOKIE_NAME, set_csrf_cookie, CSRF_COOKIE_NAME
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
+
 logger = get_logger(__name__)
 
 # Initialize FastAPI application
@@ -69,15 +69,22 @@ from app.core.templates.templates import templates
 # Root route - redirect to dashboard if logged in, otherwise to login page
 @app.get("/", response_class=HTMLResponse)
 async def root(request: Request):
-    """
-    Root route redirects to dashboard if logged in, otherwise to login page
-    """
-    # Try to get user from token in cookie
+    """Root route redirects to dashboard if logged in, otherwise to login page"""
+    token = request.cookies.get(COOKIE_NAME)
+    if not token:
+        return RedirectResponse(url="/auth/login", status_code=HTTP_302_FOUND)
+
     try:
-        from api.v1.routers.auth import get_current_active_user
-        user = await get_current_active_user(db=next(get_async_db()), token=request.cookies.get("access_token"))
-        return RedirectResponse(url="/dashboard", status_code=HTTP_302_FOUND)
-    except:
+        # Use the AuthService directly instead of get_current_active_user
+        db = next(get_async_db())
+        auth_service = AuthService(db)
+        user = await auth_service.verify_token(token)
+
+        if user and user.is_active:
+            return RedirectResponse(url="/dashboard", status_code=HTTP_302_FOUND)
+        else:
+            return RedirectResponse(url="/auth/login", status_code=HTTP_302_FOUND)
+    except Exception:
         return RedirectResponse(url="/auth/login", status_code=HTTP_302_FOUND)
 
 

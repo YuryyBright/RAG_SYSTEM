@@ -7,9 +7,11 @@ import uuid
 
 Base = declarative_base()
 
+
 def generate_uuid():
     """Generate a unique UUID string."""
     return str(uuid.uuid4())
+
 
 class User(Base):
     """User model for authentication.
@@ -47,6 +49,11 @@ class User(Base):
     # Relationships
     files = relationship("File", back_populates="owner")
     documents = relationship("Document", back_populates="owner")
+
+    sessions = relationship("Session", back_populates="user", cascade="all, delete-orphan")
+    tokens = relationship("Token", backref="user",
+                             cascade="all, delete-orphan")  # Optional if Token references User
+
 
 class File(Base):
     """File storage model.
@@ -87,6 +94,7 @@ class File(Base):
     # Relationships
     owner = relationship("User", back_populates="files")
 
+
 class Document(Base):
     """Document model for RAG system.
 
@@ -118,6 +126,7 @@ class Document(Base):
     owner = relationship("User", back_populates="documents")
     document_metadata = relationship("DocumentMetadata", back_populates="document", cascade="all, delete-orphan")
 
+
 class DocumentMetadata(Base):
     """Metadata for Document.
 
@@ -142,6 +151,7 @@ class DocumentMetadata(Base):
     # Relationships
     document = relationship("Document", back_populates="document_metadata")
 
+
 class Token(Base):
     """Token model for authentication.
 
@@ -165,3 +175,24 @@ class Token(Base):
     user_id = Column(String, ForeignKey("users.id"), nullable=False)
     expires_at = Column(DateTime, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class Session(Base):
+    """
+    Database model for user sessions.
+    """
+    __tablename__ = "sessions"
+
+    id = Column(String, primary_key=True, index=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    username = Column(String, nullable=False)
+    csrf_token = Column(String, nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    created_at = Column(DateTime, nullable=False, default=func.now())
+    last_accessed = Column(DateTime, nullable=True)
+    remember = Column(Boolean, default=False)
+    user_agent = Column(String, nullable=True)
+    ip_address = Column(String, nullable=True)
+
+    # Relationships
+    user = relationship("User", back_populates="sessions")
