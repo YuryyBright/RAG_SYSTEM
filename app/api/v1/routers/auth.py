@@ -217,6 +217,28 @@ async def refresh_token(
     }
 
 
+@router.post("/refresh-csrf")
+async def refresh_csrf(
+        response: Response,
+        request: Request,
+        current_user: User = Depends(get_current_active_user),
+        session_id: str = Cookie(..., alias=COOKIE_NAME)
+):
+    """Generate a new CSRF token for the current session."""
+    # Generate a new CSRF token
+    csrf_token = generate_csrf_token()
+
+    # Set the new CSRF cookie
+    set_csrf_cookie(response, csrf_token, False, True)
+
+    logger.info(f"CSRF token refreshed for user {current_user.username}")
+
+    return {
+        "csrf_token": csrf_token,
+        "user_id": current_user.id,
+        "username": current_user.username
+    }
+
 @router.post("/refresh-session", response_model=SessionResponse)
 async def refresh_session(
         response: Response,

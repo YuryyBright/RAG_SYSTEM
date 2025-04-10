@@ -15,27 +15,31 @@ def generate_uuid():
 
 
 class User(Base):
-    """User model for authentication.
+    """
+    User model for authentication and profile information.
 
     Attributes
     ----------
     id : str
-        Unique identifier for the user.
+        Unique identifier for the user (UUID).
     username : str
-        Unique username for the user.
+        Unique username.
     email : str
-        Unique email address for the user.
+        Unique email address.
     hashed_password : str
-        Hashed password for the user.
+        Hashed password for secure authentication.
     is_active : bool
-        Indicates if the user is active.
+        Flag indicating if the user account is active.
     is_admin : bool
-        Indicates if the user has admin privileges.
+        Flag indicating if the user has administrative privileges.
+    avatar_url : str
+        URL to the user's avatar image.
     created_at : datetime
         Timestamp when the user was created.
     updated_at : datetime
         Timestamp when the user was last updated.
     """
+
     __tablename__ = "users"
 
     id = Column(String, primary_key=True, default=generate_uuid)
@@ -44,16 +48,15 @@ class User(Base):
     hashed_password = Column(String, nullable=False)
     is_active = Column(Boolean, default=True)
     is_admin = Column(Boolean, default=False)
+    avatar_url = Column(String, nullable=True, default="/static/dist/img/user.png")  # <--- ADDED FIELD
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     # Relationships
     files = relationship("File", back_populates="owner")
     documents = relationship("Document", back_populates="owner")
-
     sessions = relationship("Session", back_populates="user", cascade="all, delete-orphan")
-    tokens = relationship("Token", backref="user",
-                             cascade="all, delete-orphan")  # Optional if Token references User
+    tokens = relationship("Token", backref="user", cascade="all, delete-orphan")
     activities = relationship("UserActivity", back_populates="user", cascade="all, delete-orphan")
 
 class UserActivity(Base):

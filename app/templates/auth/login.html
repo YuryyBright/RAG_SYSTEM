@@ -162,29 +162,20 @@
         $("#login-form").submit(function (e) {
           e.preventDefault();
 
-          const formData = {
-            email: $(this).find('input[name="email"]').val(),
-            password: $(this).find('input[name="password"]').val(),
-            remember: $(this).find('input[name="remember"]').is(":checked"),
-          };
+          const email = $(this).find('input[name="email"]').val();
+          const password = $(this).find('input[name="password"]').val();
+          const remember = $(this).find('input[name="remember"]').is(":checked");
 
-          $.ajax({
-            url: $(this).attr("action"),
-            type: "POST",
-            contentType: "application/json",
-            data: JSON.stringify(formData),
-            success: function (response) {
-              // Store token with the AuthManager
-              AuthManager.storeToken(response, formData.remember);
-
+          // Use AuthManager's login method instead of direct AJAX
+          AuthManager.loginWithSession(email, password, remember)
+            .then(function (response) {
               // Redirect to dashboard on success
               window.location.href = "/dashboard";
-            },
-            error: function (xhr) {
+            })
+            .catch(function (xhr) {
               // Show error message
-              alertify.error("Login failed: " + xhr.responseText);
-            },
-          });
+              alertify.error("Login failed: " + (xhr.responseJSON?.detail || "Unknown error"));
+            });
         });
 
         // Handle register form submission
