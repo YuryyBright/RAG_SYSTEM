@@ -106,15 +106,15 @@ async def change_password(
 #     await service.delete_api_key(current_user, key_id)
 #     return {"status": "success", "message": "API key deleted"}
 
-@router.get("/stats", response_model=UserStats)
-async def get_user_stats(
-        current_user: User = Depends(get_current_active_user),
-        db: AsyncSession = Depends(get_async_db),
-        period: Optional[str] = Query("month", regex="^(week|month|year|all)$")
-):
-    """Retrieve usage statistics for the current user."""
-    service = UserService(db)
-    return await service.get_user_stats(current_user, period)
+# @router.get("/stats", response_model=UserStats)
+# async def get_user_stats(
+#         current_user: User = Depends(get_current_active_user),
+#         db: AsyncSession = Depends(get_async_db),
+#         period: Optional[str] = Query("month", regex="^(week|month|year|all)$")
+# ):
+#     """Retrieve usage statistics for the current user."""
+#     service = UserService(db)
+#     return await service.get_user_stats(current_user, period)
 
 
 @router.get("/sessions", response_model=List[SessionInfo])

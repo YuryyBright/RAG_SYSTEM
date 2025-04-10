@@ -446,18 +446,18 @@ class UserService:
             "labels": ["PDF", "Word", "Text", "Other"],
             "data": [10, 5, 15, 2]  # Placeholder data
         }
-
-        # Get total counts for different activities
-        activity_counts = await self.activity_repo.get_activity_counts_by_type(
+        activity_counts_list = await self.activity_repo.get_activity_counts_by_type(
             user.id,
             start_date
         )
+        # Get total counts for different activities
+        activity_counts = {item["type"]: item["count"] for item in activity_counts_list}
 
         # Create the response
         return UserStats(
             query_stats=query_stats,
             doc_stats=doc_stats,
-            file_count=25,  # Placeholder - implement based on your file model
+            file_count=25,  # Placeholder
             login_count=activity_counts.get("login", 0),
             query_count=activity_counts.get("query", 0),
             upload_count=activity_counts.get("file_upload", 0)

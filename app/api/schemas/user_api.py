@@ -174,6 +174,9 @@ class UserActivityResponse(BaseModel):
     timestamp: datetime
 
 
+from typing import Dict, List
+from pydantic import BaseModel, Field
+
 class UserStats(BaseModel):
     """
     Schema for summarizing a user's usage statistics.
@@ -181,24 +184,28 @@ class UserStats(BaseModel):
     Attributes
     ----------
     query_stats : Dict[str, int]
-        Dictionary of query activity counts grouped by day or date.
-    doc_stats : Dict[str, List]
-        Document usage statistics, typically in format: {"labels": [...], "data": [...]}
+        Dictionary of query activity counts grouped by date (YYYY-MM-DD) and count.
+    doc_stats : Dict[str, List[str | int]]
+        Document usage statistics: format {"labels": [doc_types], "data": [counts]}.
     file_count : int
         Total number of files uploaded by the user.
     login_count : int
-        Total number of times the user has logged in.
+        Total number of login actions by the user.
     query_count : int
         Total number of queries made by the user.
     upload_count : int
-        Total number of files uploaded (distinct from `file_count` if necessary).
+        Total number of file upload actions (may differ from file_count).
     """
-    query_stats: Dict[str, int]
-    doc_stats: Dict[str, List]
-    file_count: int
-    login_count: int
-    query_count: int
-    upload_count: int
+
+    query_stats: Dict[str, int] = Field(..., example={"2024-04-01": 5, "2024-04-02": 3})
+    doc_stats: Dict[str, List] = Field(
+        ..., example={"labels": ["PDF", "Word", "Text", "Other"], "data": [10, 5, 15, 2]}
+    )
+    file_count: int = Field(..., example=25)
+    login_count: int = Field(..., example=10)
+    query_count: int = Field(..., example=20)
+    upload_count: int = Field(..., example=8)
+
 
 
 # ----------------------
