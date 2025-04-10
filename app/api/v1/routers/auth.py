@@ -184,7 +184,7 @@ async def login(
     # Set cookies
     create_session_cookie(response, session_id, expire, True, True)
     set_csrf_cookie(response, csrf_token, False, True)
-
+    await auth_service.activity_repo.create_activity(user.id, "login", "User logged in")
     return {
         "csrf_token": csrf_token,
         "expires_at": expire,

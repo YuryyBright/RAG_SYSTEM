@@ -12,6 +12,7 @@ from app.adapters.auth.security import JWTAuth
 from app.utils.logger_util import get_logger
 from app.utils.security import generate_session_id, generate_csrf_token
 from app.config import settings
+from infrastructure.database.repository.activity_repository import ActivityRepository
 from infrastructure.database.repository.session_repository import SessionRepository
 from fastapi import Request
 # Configure logger
@@ -51,6 +52,7 @@ class AuthService:
         self.user_repo = UserRepository(db)
         self.token_repo = TokenRepository(db)
         self.session_repo = SessionRepository(db)
+        self.activity_repo = ActivityRepository(db)
         self.jwt_auth = JWTAuth()
         self.db = db
 
