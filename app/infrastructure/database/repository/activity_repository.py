@@ -4,7 +4,8 @@ from typing import List, Optional
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.infrastructure.database.db_models import UserActivity
-
+from sqlalchemy import func
+from sqlalchemy.sql import label
 
 class ActivityRepository:
     """
@@ -72,31 +73,39 @@ class ActivityRepository:
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def get_user_activities(self, user_id: str, skip: int = 0, limit: int = 100) -> List[UserActivity]:
+    async def get_user_activities(
+        self,
+        user_id: str,
+        offset: int = 0,
+        limit: int = 100,
+        activity_type: Optional[str] = None
+    ) -> List[UserActivity]:
         """
-        Retrieve user activities with pagination.
+        Retrieve user activities with optional filtering and pagination.
 
         Parameters
         ----------
         user_id : str
-            The user ID whose activities are being retrieved
-        skip : int
-            Number of records to skip (pagination)
+            The user ID whose activities are being retrieved.
+        offset : int
+            Number of records to skip (for pagination).
         limit : int
-            Maximum number of records to return
+            Maximum number of records to return.
+        activity_type : str, optional
+            Filter by activity type.
 
         Returns
         -------
         List[UserActivity]
-            List of activities for the user
+            List of activities for the user.
         """
-        stmt = (
-            select(UserActivity)
-            .where(UserActivity.user_id == user_id)
-            .order_by(UserActivity.timestamp.desc())
-            .offset(skip)
-            .limit(limit)
-        )
+        stmt = select(UserActivity).where(UserActivity.user_id == user_id)
+
+        if activity_type:
+            stmt = stmt.where(UserActivity.activity_type == activity_type)
+
+        stmt = stmt.order_by(UserActivity.timestamp.desc()).offset(offset).limit(limit)
+
         result = await self.db.execute(stmt)
         return result.scalars().all()
 
@@ -228,3 +237,86 @@ class ActivityRepository:
         )
         result = await self.db.execute(stmt)
         return result.scalars().all()
+
+    async def get_activity_counts_by_date(
+            self,
+            user_id: Optional[str] = None,
+            start_date: Optional[datetime] = None,
+            end_date: Optional[datetime] = None
+    ) -> List[dict]:
+        """
+        Get count of user activities grouped by date.
+
+        Parameters
+        ----------
+        user_id : Optional[str]
+            Optional user ID to filter by user.
+        start_date : Optional[datetime]
+            Filter activities from this date (inclusive).
+        end_date : Optional[datetime]
+            Filter activities until this date (inclusive).
+
+        Returns
+        -------
+        List[dict]
+            List of {date, count} records.
+        """
+        stmt = select(
+            func.date(UserActivity.timestamp).label("date"),
+            func.count().label("count")
+        )
+
+        if user_id:
+            stmt = stmt.where(UserActivity.user_id == user_id)
+        if start_date:
+            stmt = stmt.where(UserActivity.timestamp >= start_date)
+        if end_date:
+            stmt = stmt.where(UserActivity.timestamp <= end_date)
+
+        stmt = stmt.group_by(func.date(UserActivity.timestamp)).order_by(func.date(UserActivity.timestamp))
+
+        result = await self.db.execute(stmt)
+        rows = result.all()
+
+        return [{"date": row.date, "count": row.count} for row in rows]
+    async def get_activity_counts_by_type(
+        self,
+        user_id: Optional[str] = None,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None
+    ) -> List[dict]:
+        """
+        Get count of user activities grouped by activity type.
+
+        Parameters
+        ----------
+        user_id : Optional[str]
+            Optional user ID to filter by user.
+        start_date : Optional[datetime]
+            Optional start datetime filter.
+        end_date : Optional[datetime]
+            Optional end datetime filter.
+
+        Returns
+        -------
+        List[dict]
+            List of {type, count} records.
+        """
+        stmt = select(
+            UserActivity.activity_type,
+            func.count().label("count")
+        )
+
+        if user_id:
+            stmt = stmt.where(UserActivity.user_id == user_id)
+        if start_date:
+            stmt = stmt.where(UserActivity.timestamp >= start_date)
+        if end_date:
+            stmt = stmt.where(UserActivity.timestamp <= end_date)
+
+        stmt = stmt.group_by(UserActivity.activity_type).order_by(func.count().desc())
+
+        result = await self.db.execute(stmt)
+        rows = result.all()
+
+        return [{"type": row.activity_type, "count": row.count} for row in rows]

@@ -4,7 +4,8 @@ from sqlalchemy.sql import func
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 import uuid
-
+from sqlalchemy.ext.hybrid import hybrid_property
+import user_agents
 Base = declarative_base()
 
 
@@ -212,19 +213,57 @@ class Token(Base):
 class Session(Base):
     """
     Database model for user sessions.
+
+    Tracks login sessions, expiration, client info, and CSRF token per session.
     """
     __tablename__ = "sessions"
 
     id = Column(String, primary_key=True, index=True, default=lambda: str(uuid.uuid4()))
     user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     username = Column(String, nullable=False)
+
     csrf_token = Column(String, nullable=False)
     expires_at = Column(DateTime, nullable=False)
     created_at = Column(DateTime, nullable=False, default=func.now())
     last_accessed = Column(DateTime, nullable=True)
-    remember = Column(Boolean, default=False)
-    user_agent = Column(String, nullable=True)
-    ip_address = Column(String, nullable=True)
 
-    # Relationships
+    remember = Column(Boolean, default=False)
+
+    user_agent = Column(String, nullable=True)  # Browser / platform
+    ip_address = Column(String, nullable=True)  # Source IP address
+
+    # Relationship
     user = relationship("User", back_populates="sessions")
+
+    @hybrid_property
+    def device(self):
+        if self.user_agent:
+            ua = user_agents.parse(self.user_agent)
+            return ua.device.family
+        return None
+
+    @hybrid_property
+    def browser(self):
+        if self.user_agent:
+            ua = user_agents.parse(self.user_agent)
+            return f"{ua.browser.family} {ua.browser.version_string}"
+        return None
+
+    @hybrid_property
+    def os(self):
+        if self.user_agent:
+            ua = user_agents.parse(self.user_agent)
+            return f"{ua.os.family} {ua.os.version_string}"
+        return None
+
+    @hybrid_property
+    def location(self):
+        # Placeholder for IP-based geolocation lookup
+        # Implement actual geolocation retrieval based on ip_address
+        return "Unknown Location"
+
+    @hybrid_property
+    def is_current(self):
+        # Placeholder logic for determining if the session is the current one
+        # Implement actual logic based on application context
+        return False

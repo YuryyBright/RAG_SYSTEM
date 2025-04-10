@@ -1,25 +1,26 @@
 from datetime import datetime
-from typing import Optional
-
+from typing import Optional, List, Dict
 from pydantic import BaseModel
 
 
-# ----- Pydantic Models -----
+# -------------------------------
+# User Profile and Authentication
+# -------------------------------
 
 class ProfileUpdate(BaseModel):
     """
-    Model for updating user profile information.
+    Schema for updating user profile information.
 
     Attributes
     ----------
     name : str
-        The name of the user.
+        Full name of the user.
     email : str
-        The email address of the user.
+        Email address of the user.
     timezone : str
-        The timezone of the user.
+        User's timezone (e.g., "UTC", "Europe/Berlin").
     theme : str
-        The preferred theme of the user (e.g., light or dark mode).
+        UI theme preference, such as "light" or "dark".
     """
     name: str
     email: str
@@ -29,69 +30,143 @@ class ProfileUpdate(BaseModel):
 
 class PasswordChange(BaseModel):
     """
-    Model for changing a user's password.
+    Schema for changing a user's password.
 
     Attributes
     ----------
     current_password : str
         The user's current password.
     new_password : str
-        The new password the user wants to set.
+        The new password to set.
     """
     current_password: str
     new_password: str
 
 
+# ----------------------
+# API Key Management
+# ----------------------
+
+class ApiKeyCreate(BaseModel):
+    """
+    Schema for creating a new API key.
+
+    Attributes
+    ----------
+    name : str
+        Name or label for the API key.
+    expires_days : Optional[int]
+        Number of days before the key expires (None = no expiration).
+    """
+    name: str
+    expires_days: Optional[int] = None
+
+
 class ApiKeyResponse(BaseModel):
     """
-    Model for API key response data.
+    Schema for returning API key information to the client.
 
     Attributes
     ----------
     id : int
-        The unique identifier of the API key.
+        Unique identifier for the API key.
     name : str
-        The name of the API key.
+        Name or label for the key.
     key : Optional[str]
-        The actual API key value (optional, may not always be returned).
+        The plain API key value (only shown once on creation).
     created_at : datetime
-        The timestamp when the API key was created.
+        Timestamp when the key was created.
+    expires_at : Optional[datetime]
+        Expiration time for the key (if applicable).
     last_used : Optional[datetime]
-        The timestamp of the last usage of the API key (optional).
+        Last time this key was used.
     """
     id: int
     name: str
     key: Optional[str] = None
     created_at: datetime
+    expires_at: Optional[datetime] = None
     last_used: Optional[datetime] = None
 
 
-class ApiKeyCreate(BaseModel):
-    """
-    Model for creating a new API key.
+# --------------------
+# User Session Tracking
+# --------------------
 
-    Attributes
-    ----------
-    name : str
-        The name of the API key to be created.
-    """
-    name: str
+from pydantic import BaseModel, Field
+from typing import Optional
+from datetime import datetime
 
+from pydantic import BaseModel, Field
+from typing import Optional
+from datetime import datetime
+
+from pydantic import BaseModel, Field
+from typing import Optional
+from datetime import datetime
+
+class SessionInfo(BaseModel):
+    """
+    Schema for representing an active user session.
+
+    Attributes:
+        id (str): Session ID token.
+        device (Optional[str]): Device identifier (e.g., "iPhone 14", "Windows PC").
+        browser (Optional[str]): Parsed browser name and version (e.g., "Chrome 122.0").
+        os (Optional[str]): Operating system name and version (e.g., "Windows 11").
+        ip_address (Optional[str]): IP address associated with the session.
+        location (Optional[str]): Geographic location based on IP (e.g., "Berlin, Germany").
+        created_at (datetime): Timestamp when the session was started.
+        last_activity (Optional[datetime]): Last recorded activity timestamp.
+        is_current (bool): Whether this session is the currently active one.
+    """
+
+    id: str = Field(..., description="Session ID token.")
+    device: Optional[str] = Field(None, description='Device identifier (e.g., "iPhone 14", "Windows PC").')
+    browser: Optional[str] = Field(None, description='Parsed browser name and version (e.g., "Chrome 122.0").')
+    os: Optional[str] = Field(None, description='Operating system name and version (e.g., "Windows 11").')
+    ip_address: Optional[str] = Field(None, description="IP address associated with the session.")
+    location: Optional[str] = Field(None, description='Geographic location based on IP (e.g., "Berlin, Germany").')
+    created_at: datetime = Field(..., description="Timestamp when the session was started.")
+    last_activity: Optional[datetime] = Field(None, description="Last recorded activity timestamp.")
+    is_current: bool = Field(..., description="Whether this session is the currently active one.")
+
+    class Config:
+        schema_extra = {
+            "example": {
+                "id": "cbe73d70-4f01-4b9a-83dc-6788bfc8d231",
+                "device": "Windows PC",
+                "browser": "Chrome 122.0",
+                "os": "Windows 11",
+                "ip_address": "192.168.1.100",
+                "location": "Berlin, Germany",
+                "created_at": "2025-04-10T12:34:56.789Z",
+                "last_activity": "2025-04-10T14:01:22.456Z",
+                "is_current": True
+            }
+        }
+
+
+
+
+# -------------------------
+# User Activity & Statistics
+# -------------------------
 
 class UserActivityResponse(BaseModel):
     """
-    Model for user activity response data.
+    Schema for representing an individual user activity log entry.
 
     Attributes
     ----------
     id : int
-        The unique identifier of the activity.
+        Activity log ID.
     type : str
-        The type of activity (e.g., login, query, etc.).
+        Type of activity (e.g., "login", "upload", "query").
     description : str
-        A description of the activity.
+        Human-readable description of the activity.
     timestamp : datetime
-        The timestamp when the activity occurred.
+        Timestamp when the activity occurred.
     """
     id: int
     type: str
@@ -101,14 +176,95 @@ class UserActivityResponse(BaseModel):
 
 class UserStats(BaseModel):
     """
-    Model for user statistics.
+    Schema for summarizing a user's usage statistics.
 
     Attributes
     ----------
-    query_stats : dict
-        A dictionary containing statistics related to user queries.
-    doc_stats : dict
-        A dictionary containing statistics related to user documents.
+    query_stats : Dict[str, int]
+        Dictionary of query activity counts grouped by day or date.
+    doc_stats : Dict[str, List]
+        Document usage statistics, typically in format: {"labels": [...], "data": [...]}
+    file_count : int
+        Total number of files uploaded by the user.
+    login_count : int
+        Total number of times the user has logged in.
+    query_count : int
+        Total number of queries made by the user.
+    upload_count : int
+        Total number of files uploaded (distinct from `file_count` if necessary).
     """
-    query_stats: dict
-    doc_stats: dict
+    query_stats: Dict[str, int]
+    doc_stats: Dict[str, List]
+    file_count: int
+    login_count: int
+    query_count: int
+    upload_count: int
+
+
+# ----------------------
+# Notification Preferences
+# ----------------------
+
+class NotificationSettings(BaseModel):
+    """
+    Schema for user notification preferences.
+
+    Attributes
+    ----------
+    email_notifications : bool
+        Enable or disable email notifications.
+    browser_notifications : bool
+        Enable or disable browser push notifications.
+    login_alerts : bool
+        Enable alerts for new login activities.
+    api_usage_alerts : bool
+        Enable alerts when API keys are used.
+    file_activity_notifications : bool
+        Enable alerts when files are uploaded or accessed.
+    """
+    email_notifications: bool
+    browser_notifications: bool
+    login_alerts: bool
+    api_usage_alerts: bool
+    file_activity_notifications: bool
+
+
+# --------------------
+# Account Management
+# --------------------
+
+class AccountAction(BaseModel):
+    """
+    Schema for user account actions such as deactivation or reactivation.
+
+    Attributes
+    ----------
+    action : str
+        The action to perform. Expected values: "deactivate", "reactivate".
+    """
+    action: str
+
+
+# --------------------
+# Export Job Tracking
+# --------------------
+
+class ExportUserData(BaseModel):
+    """
+    Schema for representing a user data export job status.
+
+    Attributes
+    ----------
+    job_id : str
+        Unique identifier for the export job.
+    status : str
+        Current status of the job (e.g., "pending", "completed").
+    created_at : datetime
+        Timestamp when the job was scheduled.
+    progress : int
+        Export job progress in percentage (0-100).
+    """
+    job_id: str
+    status: str
+    created_at: datetime
+    progress: int

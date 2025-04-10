@@ -107,6 +107,8 @@ async def logout(
     return {"detail": "Successfully logged out"}
 
 
+
+
 @router.get("/me", response_model=UserResponse)
 async def read_users_me(
         current_user: User = Depends(get_current_active_user)
@@ -151,6 +153,7 @@ async def read_users_me(
 @router.post("/login", response_model=SessionResponse)
 async def login(
         response: Response,
+        request: Request,
         login_data: LoginRequest,
         db: AsyncSession = Depends(get_async_db)
 ):
@@ -168,7 +171,8 @@ async def login(
     session_id, csrf_token, expire = await auth_service.create_user_session(
         user.id,
         user.username,
-        remember=login_data.remember
+        remember=login_data.remember,
+        request=request  # ← Pass the FastAPI Request
     )
 
     if not session_id:

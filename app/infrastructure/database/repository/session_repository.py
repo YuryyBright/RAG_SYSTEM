@@ -36,7 +36,9 @@ class SessionRepository:
             username: str,
             expires_at: datetime,
             csrf_token: str,
-            remember: bool = False
+            remember: bool = False,
+            user_agent: Optional[str] = None,
+            ip_address: Optional[str] = None
     ) -> bool:
         """
         Create a new session in the database.
@@ -44,17 +46,21 @@ class SessionRepository:
         Parameters
         ----------
         session_id : str
-            The unique session identifier.
+            Unique session ID.
         user_id : str
-            The ID of the user associated with the session.
+            User ID associated with the session.
         username : str
-            The username of the user.
+            Username of the user.
         expires_at : datetime
-            When the session expires.
+            Expiration datetime of the session.
         csrf_token : str
-            The CSRF token associated with this session.
-        remember : bool, optional
-            Whether this is a long-lived "remember me" session.
+            CSRF token linked to this session.
+        remember : bool
+            Indicates if session should persist beyond current session.
+        user_agent : Optional[str]
+            User agent string (browser/device).
+        ip_address : Optional[str]
+            IP address from request.
 
         Returns
         -------
@@ -62,7 +68,6 @@ class SessionRepository:
             True if the session was created successfully, False otherwise.
         """
         try:
-            # Create new session object
             new_session = Session(
                 id=session_id,
                 user_id=user_id,
@@ -71,11 +76,10 @@ class SessionRepository:
                 csrf_token=csrf_token,
                 remember=remember,
                 created_at=datetime.utcnow(),
-                user_agent=None,  # This could be added if you track user agents
-                ip_address=None,  # This could be added for IP tracking
+                user_agent=user_agent,
+                ip_address=ip_address,
             )
 
-            # Add to database
             self.db.add(new_session)
             await self.db.commit()
 
@@ -101,7 +105,6 @@ class SessionRepository:
             The session data if found, otherwise None.
         """
         try:
-            # Query for session
             stmt = select(Session).where(Session.id == session_id)
             result = await self.db.execute(stmt)
             session = result.scalars().first()
@@ -109,7 +112,6 @@ class SessionRepository:
             if not session:
                 return None
 
-            # Convert to dictionary
             return {
                 "id": session.id,
                 "user_id": session.user_id,
@@ -118,10 +120,12 @@ class SessionRepository:
                 "csrf_token": session.csrf_token,
                 "remember": session.remember,
                 "created_at": session.created_at,
-                "last_accessed": session.last_accessed if hasattr(session, "last_accessed") else None,
+                "last_accessed": session.last_accessed,
+                "ip_address": session.ip_address,
+                "user_agent": session.user_agent,
             }
         except Exception as e:
-            logger.error(f"Error retrieving session: {e}")
+            logger.error(f"Error retrieving session {session_id[:8]}...: {e}")
             return None
 
     async def update_session_access_time(self, session_id: str) -> bool:
@@ -281,3 +285,89 @@ class SessionRepository:
         except Exception as e:
             logger.error(f"Error retrieving user sessions: {e}")
             return []
+
+    async def get_active_sessions(self, user_id: str) -> List[Session]:
+        """
+        Retrieve all active (non-expired) sessions for a user.
+
+        Parameters
+        ----------
+        user_id : str
+            The ID of the user.
+
+        Returns
+        -------
+        List[Session]
+            List of active session ORM objects.
+        """
+        now = datetime.utcnow()
+        stmt = select(Session).where(
+            and_(
+                Session.user_id == user_id,
+                Session.expires_at > now
+            )
+        ).order_by(Session.created_at.desc())
+        result = await self.db.execute(stmt)
+        return result.scalars().all()
+
+    async def revoke_session(self, user_id: str, session_id: str) -> bool:
+        """
+        Revoke a specific session for a user.
+
+        Parameters
+        ----------
+        user_id : str
+            The user who owns the session.
+        session_id : str
+            The session ID to revoke.
+
+        Returns
+        -------
+        bool
+            True if successfully revoked, False otherwise.
+        """
+        try:
+            stmt = delete(Session).where(
+                and_(
+                    Session.id == session_id,
+                    Session.user_id == user_id
+                )
+            )
+            result = await self.db.execute(stmt)
+            await self.db.commit()
+            return result.rowcount > 0
+        except Exception as e:
+            await self.db.rollback()
+            logger.error(f"Error revoking session {session_id}: {e}")
+            return False
+
+    async def revoke_all_other_sessions(self, user_id: str, current_session_id: str) -> int:
+        """
+        Revoke all user sessions except the current one.
+
+        Parameters
+        ----------
+        user_id : str
+            The ID of the user.
+        current_session_id : str
+            The session ID to keep.
+
+        Returns
+        -------
+        int
+            Number of sessions revoked.
+        """
+        try:
+            stmt = delete(Session).where(
+                and_(
+                    Session.user_id == user_id,
+                    Session.id != current_session_id
+                )
+            )
+            result = await self.db.execute(stmt)
+            await self.db.commit()
+            return result.rowcount
+        except Exception as e:
+            await self.db.rollback()
+            logger.error(f"Error revoking all other sessions: {e}")
+            return 0

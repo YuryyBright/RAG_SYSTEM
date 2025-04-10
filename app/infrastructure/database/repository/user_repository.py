@@ -1,7 +1,10 @@
 # app/infrastructure/database/repository/user_repository.py
+from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from uuid import uuid4
+
+from starlette import status
 
 from app.infrastructure.database.db_models import User, Token
 from app.utils.security import get_password_hash, verify_password
@@ -47,6 +50,43 @@ class UserRepository:
         result = await self.db.execute(select(User).where(User.username == username))
         return result.scalar_one_or_none()
 
+    async def update_user_profile(self, user: User, name: str, email: str, timezone: str, theme: str):
+        """
+        Update a user's profile fields.
+
+        Parameters
+        ----------
+        user : User
+            The user instance to update.
+        name : str
+            The new full name.
+        email : str
+            The new email address.
+        timezone : str
+            The new timezone string.
+        theme : str
+            The new theme preference.
+
+        Raises
+        ------
+        HTTPException
+            If the email is already registered to another user.
+        """
+        # Check if the new email is already used by another user
+        result = await self.db.execute(select(User).where(User.email == email, User.id != user.id))
+        existing_user = result.scalar_one_or_none()
+        if existing_user:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered")
+
+        # Apply updates
+        user.name = name
+        user.email = email
+        user.timezone = timezone
+        user.theme = theme
+
+        await self.db.commit()
+        await self.db.refresh(user)
+        logger.info(f"User profile updated: {user.id}")
     async def get_by_email(self, email: str):
         """
         Retrieve a user by their email.

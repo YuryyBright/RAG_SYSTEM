@@ -13,7 +13,7 @@ from app.utils.logger_util import get_logger
 from app.utils.security import generate_session_id, generate_csrf_token
 from app.config import settings
 from infrastructure.database.repository.session_repository import SessionRepository
-
+from fastapi import Request
 # Configure logger
 logger = get_logger(__name__)
 
@@ -235,7 +235,11 @@ class AuthService:
             return False
 
     async def create_user_session(
-            self, user_id: str, username: str, remember: bool = False
+            self,
+            user_id: str,
+            username: str,
+            remember: bool = False,
+            request: Optional[Request] = None
     ) -> Tuple[Optional[str], Optional[str], Optional[datetime]]:
         """
         Create a new session for cookie-based authentication.
@@ -247,7 +251,9 @@ class AuthService:
         username : str
             The username of the user.
         remember : bool, optional
-            Whether to create a long-lived session, by default False.
+            Whether to create a long-lived session. Default is False.
+        request : Request, optional
+            The current request to extract user-agent and IP.
 
         Returns
         -------
@@ -263,13 +269,24 @@ class AuthService:
 
             # Set expiration based on remember flag
             if remember:
-                expire = datetime.utcnow() + timedelta(days=30)  # 30 days
+                expire = datetime.utcnow() + timedelta(days=30)
             else:
-                expire = datetime.utcnow() + timedelta(hours=24)  # 24 hours
+                expire = datetime.utcnow() + timedelta(hours=24)
 
-            # Store session in database
+            # Extract device/IP info from request
+            user_agent = request.headers.get("user-agent") if request else None
+            ip_address = request.client.host if request else None
+
+            # Store session
             success = await self.session_repo.create_session(
-                session_id, user_id, username, expire, csrf_token
+                session_id=session_id,
+                user_id=user_id,
+                username=username,
+                expires_at=expire,
+                csrf_token=csrf_token,
+                remember=remember,
+                user_agent=user_agent,
+                ip_address=ip_address
             )
 
             if not success:

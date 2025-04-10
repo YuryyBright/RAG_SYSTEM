@@ -47,7 +47,7 @@ api_router.include_router(auth.router, prefix="/auth", tags=["Authentication"])
 api_router.include_router(documents.router, prefix="/documents", tags=["Documents"])
 api_router.include_router(queries.router, prefix="/queries", tags=["Queries"])
 api_router.include_router(files.router, prefix="/files", tags=["Files"])
-api_router.include_router(user_api.router, prefix="/api/user", tags=["User"])
+
 
 # Include page routers - note these are protected by auth
 app.include_router(pages.router, prefix="/pages", tags=["Pages"])
@@ -56,6 +56,7 @@ app.include_router(pages.router, prefix="/pages", tags=["Pages"])
 app.include_router(auth_pages.router, prefix="/auth", tags=["Authentication Pages"])
 app.include_router(dashboard_pages.router, prefix="/dashboard", tags=["Dashboard Pages"])
 app.include_router(admin_pages.router, prefix="/admin", tags=["Admin Pages"])
+api_router.include_router(user_api.router, prefix="/user", tags=["User"])
 app.include_router(api_router)
 
 # Serve static files from ./static directory if it exists
