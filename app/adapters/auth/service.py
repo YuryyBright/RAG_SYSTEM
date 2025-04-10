@@ -405,6 +405,7 @@ class AuthService:
         """
         try:
             # Decode token
+            print(token)
             payload = self.jwt_auth.decode_access_token(token)
 
             if not payload:
@@ -412,7 +413,6 @@ class AuthService:
                 return None
 
             user_id = payload.get("sub")
-
             if not user_id:
                 logger.warning(f"No user ID in token: {token[:8]}...")
                 return None

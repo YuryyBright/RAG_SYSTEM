@@ -176,6 +176,9 @@ class JWTAuth(AuthInterface):
     def decode_access_token(self, token: str) -> Optional[Dict[str, Any]]:
         """An alias for verify_token for better semantic clarity"""
         return self.verify_token(token)
+
+
+
     async def get_current_active_user(
             self,
             token: str,

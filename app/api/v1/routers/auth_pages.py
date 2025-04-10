@@ -45,8 +45,8 @@ async def login_page(request: Request,
         # Use the AuthService directly instead of get_current_active_user
         auth_service = AuthService(db)
         user = await auth_service.verify_token(token)
+
         print('user', user)
-        print('user.is_active', user.is_active)
         if user and user.is_active:
             return RedirectResponse(url="/dashboard", status_code=HTTP_302_FOUND)
 

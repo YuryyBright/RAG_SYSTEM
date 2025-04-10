@@ -69,24 +69,22 @@ from app.core.templates.templates import templates
 # Root route - redirect to dashboard if logged in, otherwise to login page
 @app.get("/", response_class=HTMLResponse)
 async def root(request: Request):
-    """Root route redirects to dashboard if logged in, otherwise to login page"""
-    token = request.cookies.get(COOKIE_NAME)
-    if not token:
+    """Redirect to dashboard if logged in, else to login"""
+    session_id = request.cookies.get(COOKIE_NAME)
+    if not session_id:
         return RedirectResponse(url="/auth/login", status_code=HTTP_302_FOUND)
 
     try:
-        # Use the AuthService directly instead of get_current_active_user
         db = next(get_async_db())
         auth_service = AuthService(db)
-        user = await auth_service.verify_token(token)
-
+        print('session id:', session_id)
+        user = await auth_service.get_user_by_session_id(session_id)
         if user and user.is_active:
             return RedirectResponse(url="/dashboard", status_code=HTTP_302_FOUND)
         else:
             return RedirectResponse(url="/auth/login", status_code=HTTP_302_FOUND)
     except Exception:
         return RedirectResponse(url="/auth/login", status_code=HTTP_302_FOUND)
-
 
 @app.get("/health", include_in_schema=False)
 async def health_check():
