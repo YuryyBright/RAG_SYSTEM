@@ -7,16 +7,16 @@ It also provides an entry point to run the app using Uvicorn.
 """
 
 import os
-from fastapi import FastAPI, APIRouter, Request, HTTPException
+from fastapi import FastAPI, APIRouter, Request, HTTPException, Depends
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 import uvicorn
+from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import RedirectResponse
 from starlette.status import HTTP_302_FOUND
 
 from adapters.auth.service import AuthService
-from api.middleware_auth import get_current_active_user
-from api.v1.routers import auth, documents, queries, files, pages, auth_pages, dashboard_pages, admin_pages
+from api.v1.routers import auth, documents, queries, files, pages, auth_pages, dashboard_pages, admin_pages, user_api
 
 from app.config import settings
 from app.api.middlewares import setup_middlewares
@@ -47,6 +47,7 @@ api_router.include_router(auth.router, prefix="/auth", tags=["Authentication"])
 api_router.include_router(documents.router, prefix="/documents", tags=["Documents"])
 api_router.include_router(queries.router, prefix="/queries", tags=["Queries"])
 api_router.include_router(files.router, prefix="/files", tags=["Files"])
+api_router.include_router(user_api.router, prefix="/api/user", tags=["User"])
 
 # Include page routers - note these are protected by auth
 app.include_router(pages.router, prefix="/pages", tags=["Pages"])
@@ -68,22 +69,21 @@ from app.core.templates.templates import templates
 
 # Root route - redirect to dashboard if logged in, otherwise to login page
 @app.get("/", response_class=HTMLResponse)
-async def root(request: Request):
+async def root(request: Request, db: AsyncSession = Depends(get_async_db)):
     """Redirect to dashboard if logged in, else to login"""
     session_id = request.cookies.get(COOKIE_NAME)
     if not session_id:
         return RedirectResponse(url="/auth/login", status_code=HTTP_302_FOUND)
 
     try:
-        db = next(get_async_db())
         auth_service = AuthService(db)
-        print('session id:', session_id)
         user = await auth_service.get_user_by_session_id(session_id)
         if user and user.is_active:
             return RedirectResponse(url="/dashboard", status_code=HTTP_302_FOUND)
         else:
             return RedirectResponse(url="/auth/login", status_code=HTTP_302_FOUND)
-    except Exception:
+    except Exception as e:
+        logger.error(f"Error in root redirect: {e}")
         return RedirectResponse(url="/auth/login", status_code=HTTP_302_FOUND)
 
 @app.get("/health", include_in_schema=False)

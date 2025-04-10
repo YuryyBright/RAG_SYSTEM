@@ -6,16 +6,16 @@ import tempfile
 import shutil
 from api.schemas.document import DocumentCreate, DocumentResponse
 from core.entities.document import Document
-from app.infrastructure.database.document_store import DocumentStore
 from app.infrastructure.loaders.document_loader import DocumentLoader
 from core.interfaces.embedding import EmbeddingInterface
 from core.interfaces.indexing import IndexInterface
 from app.api.dependencies import (
-    get_document_store,
+    get_document_repository,
     get_document_loader,
     get_embedding_service,
     get_indexing_service
 )
+from app.infrastructure.database.repository.document_repository import DocumentRepository
 
 router = APIRouter()
 
@@ -23,7 +23,7 @@ router = APIRouter()
 @router.post("/", response_model=DocumentResponse)
 async def create_document(
         document: DocumentCreate,
-        document_store: DocumentStore = Depends(get_document_store),
+        document_repository: DocumentRepository = Depends(get_document_repository),
         embedding_service: EmbeddingInterface = Depends(get_embedding_service),
         index_service: IndexInterface = Depends(get_indexing_service)
 ):
@@ -34,8 +34,8 @@ async def create_document(
     ----------
     document : DocumentCreate
         The document data to create.
-    document_store : DocumentStore
-        The document store dependency.
+    document_repository : DocumentRepository
+        The document repository dependency.
     embedding_service : EmbeddingInterface
         The embedding service dependency.
     index_service : IndexInterface
@@ -46,22 +46,31 @@ async def create_document(
     DocumentResponse
         The created document response.
     """
+    # Create a document entity
     doc = Document(
         id="",  # Will be generated in store
         content=document.content,
         metadata=document.metadata
     )
 
+    # Generate embeddings
     docs_with_embeddings = await embedding_service.embed_documents([doc])
     doc_with_embedding = docs_with_embeddings[0]
 
-    saved_doc = await document_store.save(doc_with_embedding)
+    # Save to database
+    saved_doc = await document_repository.create_document(
+        content=doc_with_embedding.content,
+        embedding=doc_with_embedding.embedding,
+        owner_id=doc_with_embedding.metadata.get("owner_id", "default_owner")
+    )
+
+    # Add to vector index
     await index_service.add_documents([saved_doc])
 
     return DocumentResponse(
         id=saved_doc.id,
         content=saved_doc.content,
-        metadata=saved_doc.metadata,
+        metadata=saved_doc.document_metadata,  # Changed to match DB model
         created_at=saved_doc.created_at,
         updated_at=saved_doc.updated_at
     )
@@ -69,27 +78,27 @@ async def create_document(
 
 @router.get("/", response_model=List[DocumentResponse])
 async def list_documents(
-        document_store: DocumentStore = Depends(get_document_store)
+        document_repository: DocumentRepository = Depends(get_document_repository)
 ):
     """
     List all documents.
 
     Parameters
     ----------
-    document_store : DocumentStore
-        The document store dependency.
+    document_repository : DocumentRepository
+        The document repository dependency.
 
     Returns
     -------
     List[DocumentResponse]
         A list of document responses.
     """
-    documents = await document_store.get_all()
+    documents = await document_repository.get_all()
     return [
         DocumentResponse(
             id=doc.id,
             content=doc.content,
-            metadata=doc.metadata,
+            metadata=doc.document_metadata,  # Changed to match DB model
             created_at=doc.created_at,
             updated_at=doc.updated_at
         )
@@ -100,7 +109,7 @@ async def list_documents(
 @router.get("/{document_id}", response_model=DocumentResponse)
 async def get_document(
         document_id: str,
-        document_store: DocumentStore = Depends(get_document_store)
+        document_repository: DocumentRepository = Depends(get_document_repository)
 ):
     """
     Get a document by ID.
@@ -109,8 +118,8 @@ async def get_document(
     ----------
     document_id : str
         The ID of the document to retrieve.
-    document_store : DocumentStore
-        The document store dependency.
+    document_repository : DocumentRepository
+        The document repository dependency.
 
     Returns
     -------
@@ -122,14 +131,14 @@ async def get_document(
     HTTPException
         If the document is not found.
     """
-    document = await document_store.get(document_id)
+    document = await document_repository.get_by_id(document_id)
     if not document:
         raise HTTPException(status_code=404, detail="Document not found")
 
     return DocumentResponse(
         id=document.id,
         content=document.content,
-        metadata=document.metadata,
+        metadata=document.document_metadata,  # Changed to match DB model
         created_at=document.created_at,
         updated_at=document.updated_at
     )
@@ -138,7 +147,7 @@ async def get_document(
 @router.delete("/{document_id}")
 async def delete_document(
         document_id: str,
-        document_store: DocumentStore = Depends(get_document_store),
+        document_repository: DocumentRepository = Depends(get_document_repository),
         index_service: IndexInterface = Depends(get_indexing_service)
 ):
     """
@@ -148,8 +157,8 @@ async def delete_document(
     ----------
     document_id : str
         The ID of the document to delete.
-    document_store : DocumentStore
-        The document store dependency.
+    document_repository : DocumentRepository
+        The document repository dependency.
     index_service : IndexInterface
         The indexing service dependency.
 
@@ -163,7 +172,7 @@ async def delete_document(
     HTTPException
         If the document is not found.
     """
-    deleted = await document_store.delete(document_id)
+    deleted = await document_repository.delete_document(document_id)
     if not deleted:
         raise HTTPException(status_code=404, detail="Document not found")
 
@@ -176,7 +185,8 @@ async def process_document_upload(
         directory: str,
         document_loader: DocumentLoader,
         embedding_service: EmbeddingInterface,
-        index_service: IndexInterface
+        index_service: IndexInterface,
+        document_repository: DocumentRepository
 ):
     """
     Background task to process uploaded documents.
@@ -191,10 +201,26 @@ async def process_document_upload(
         The embedding service dependency.
     index_service : IndexInterface
         The indexing service dependency.
+    document_repository : DocumentRepository
+        The document repository dependency.
     """
     documents = await document_loader.load_from_directory(directory, recursive=True)
     documents_with_embeddings = await embedding_service.embed_documents(documents)
-    await index_service.add_documents(documents_with_embeddings)
+
+    # Save documents to database
+    saved_documents = []
+    for doc in documents_with_embeddings:
+        saved_doc = await document_repository.create_document(
+            content=doc.content,
+            embedding=doc.embedding,
+            owner_id=doc.metadata.get("owner_id", "default_owner")
+        )
+        saved_documents.append(saved_doc)
+
+    # Add to vector index
+    await index_service.add_documents(saved_documents)
+
+    # Clean up
     shutil.rmtree(directory, ignore_errors=True)
 
 
@@ -205,7 +231,8 @@ async def upload_documents(
         metadata: Optional[str] = Form(None),
         document_loader: DocumentLoader = Depends(get_document_loader),
         embedding_service: EmbeddingInterface = Depends(get_embedding_service),
-        index_service: IndexInterface = Depends(get_indexing_service)
+        index_service: IndexInterface = Depends(get_indexing_service),
+        document_repository: DocumentRepository = Depends(get_document_repository)
 ):
     """
     Upload multiple document files and index them.
@@ -224,6 +251,8 @@ async def upload_documents(
         The embedding service dependency.
     index_service : IndexInterface
         The indexing service dependency.
+    document_repository : DocumentRepository
+        The document repository dependency.
 
     Returns
     -------
@@ -253,7 +282,8 @@ async def upload_documents(
             temp_dir,
             document_loader,
             embedding_service,
-            index_service
+            index_service,
+            document_repository
         )
 
         return {

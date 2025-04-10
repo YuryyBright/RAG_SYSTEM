@@ -53,7 +53,37 @@ class User(Base):
     sessions = relationship("Session", back_populates="user", cascade="all, delete-orphan")
     tokens = relationship("Token", backref="user",
                              cascade="all, delete-orphan")  # Optional if Token references User
+    activities = relationship("UserActivity", back_populates="user", cascade="all, delete-orphan")
 
+class UserActivity(Base):
+    """
+    Represents a record of user activities in the system.
+
+    Attributes
+    ----------
+    id : int
+        The unique identifier for the activity.
+    user_id : int
+        The ID of the user who performed the activity.
+    activity_type : str
+        The type of activity (e.g., login, profile update, etc.).
+    description : str
+        A detailed description of the activity.
+    timestamp : datetime
+        The timestamp when the activity occurred.
+    user : User
+        The user associated with this activity (relationship).
+    """
+    __tablename__ = "user_activities"
+
+    id = Column(Integer, primary_key=True, index=True)  # Primary key for the activity
+    user_id = Column(String, ForeignKey("users.id"))  # Foreign key linking to the User table
+    activity_type = Column(String(50), nullable=False)  # Type of activity (e.g., login, update)
+    description = Column(Text, nullable=False)  # Detailed description of the activity
+    timestamp = Column(DateTime, default=func.now())  # Timestamp of the activity
+
+    # Relationships
+    user = relationship("User", back_populates="activities")  # Link to the User model
 
 class File(Base):
     """File storage model.
@@ -175,6 +205,8 @@ class Token(Base):
     user_id = Column(String, ForeignKey("users.id"), nullable=False)
     expires_at = Column(DateTime, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    is_revoked = Column(Boolean, default=False)  # ✅ new column
+
 
 
 class Session(Base):

@@ -177,3 +177,57 @@ class UserRepository:
             logger.error(f"Error updating password: {e}")
             await self.db.rollback()
             return False
+
+    async def delete_user(self, user: User) -> None:
+        """
+        Permanently delete a user from the database.
+
+        Parameters
+        ----------
+        user : User
+            The user object to delete.
+        """
+        await self.db.delete(user)
+        await self.db.commit()
+        logger.info(f"User deleted: {user.id}")
+
+    async def deactivate_user(self, user: User) -> None:
+        """
+        Deactivate a user's account.
+
+        Parameters
+        ----------
+        user : User
+            The user object to deactivate.
+        """
+        user.is_active = False
+        await self.db.commit()
+        logger.info(f"User deactivated: {user.id}")
+
+    async def reactivate_user(self, user: User) -> None:
+        """
+        Reactivate a user's account.
+
+        Parameters
+        ----------
+        user : User
+            The user object to reactivate.
+        """
+        user.is_active = True
+        await self.db.commit()
+        logger.info(f"User reactivated: {user.id}")
+
+    async def update_avatar_url(self, user: User, avatar_url: str) -> None:
+        """
+        Update a user's avatar URL.
+
+        Parameters
+        ----------
+        user : User
+            The user object whose avatar URL is being updated.
+        avatar_url : str
+            The new avatar URL.
+        """
+        user.avatar_url = avatar_url
+        await self.db.commit()
+        logger.info(f"Avatar updated for user: {user.id}")

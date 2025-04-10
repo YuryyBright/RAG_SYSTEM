@@ -12,7 +12,7 @@ from app.adapters.auth.security import JWTAuth
 from app.utils.logger_util import get_logger
 from app.utils.security import generate_session_id, generate_csrf_token
 from app.config import settings
-from infrastructure.database.repository import SessionRepository
+from infrastructure.database.repository.session_repository import SessionRepository
 
 # Configure logger
 logger = get_logger(__name__)
@@ -152,7 +152,6 @@ class AuthService:
 
         return user
 
-
     async def create_user_token(self, user_id: str, username: str) -> Tuple[Optional[str], Optional[datetime]]:
         """
         Create an access token for the user using the JWT auth service.
@@ -203,7 +202,6 @@ class AuthService:
             If an error occurs during token verification or user retrieval.
         """
         return await self.get_user_by_token(token)
-
 
 
     async def logout_user(self, user_id: str, token: str) -> bool:
@@ -405,7 +403,6 @@ class AuthService:
         """
         try:
             # Decode token
-            print(token)
             payload = self.jwt_auth.decode_access_token(token)
 
             if not payload:

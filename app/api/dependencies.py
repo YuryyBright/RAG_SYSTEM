@@ -2,7 +2,7 @@
 This module defines dependency injection functions for various services used in the application.
 
 Dependencies:
-- DocumentStore: Singleton instance for storing documents.
+- DocumentRepository: Repository for document DB operations.
 - DocumentLoader: Singleton instance for loading documents.
 - EmbeddingService: Provides embedding functionality using the specified model.
 - IndexingService: Provides indexing functionality using the specified document store and embedding dimension.
@@ -11,7 +11,8 @@ Dependencies:
 - QueryProcessor: Processes queries using the provided embedding, indexing, reranking, and LLM services.
 
 Functions:
-- get_document_store: Returns the singleton DocumentStore instance.
+- get_db_session: Returns a database session for use with repositories.
+- get_document_repository: Returns a DocumentRepository instance with a DB session.
 - get_document_loader: Returns the singleton DocumentLoader instance.
 - get_embedding_service: Returns an instance of the embedding service.
 - get_indexing_service: Returns an instance of the indexing service.
@@ -21,6 +22,7 @@ Functions:
 """
 
 from fastapi import Depends
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.llm.mistral import MistralLLM
 from core.interfaces.embedding import EmbeddingInterface
@@ -28,37 +30,36 @@ from core.interfaces.indexing import IndexInterface
 from core.interfaces.llm import LLMInterface
 from core.interfaces.reranking import RerankerInterface
 
-
 from app.adapters.indexing.faiss_hnsw import FaissHNSWIndex
 from app.adapters.embeding.instructor import InstructorEmbedding
 from app.adapters.reranking.cross_encoder import CrossEncoderReranker
-from app.infrastructure.database.document_store import DocumentStore
+from app.infrastructure.database.repository.document_repository import DocumentRepository
 from app.infrastructure.loaders.document_loader import DocumentLoader
 from app.config import settings
 from core.use_cases.query import QueryProcessor
+from infrastructure.database.repository import get_async_db
 
 # Singleton instances
-document_store = DocumentStore()
 document_loader = DocumentLoader()
-
-def get_document_store() -> DocumentStore:
-    """Returns the singleton DocumentStore instance."""
-    return document_store
 
 def get_document_loader() -> DocumentLoader:
     """Returns the singleton DocumentLoader instance."""
     return document_loader
+
+def get_document_repository(db: AsyncSession = Depends(get_async_db)) -> DocumentRepository:
+    """Returns a DocumentRepository instance with a database session."""
+    return DocumentRepository(db)
 
 def get_embedding_service() -> EmbeddingInterface:
     """Returns an instance of the embedding service."""
     return InstructorEmbedding(model_name=settings.EMBEDDING_MODEL)
 
 def get_indexing_service(
-    document_store: DocumentStore = Depends(get_document_store)
+    document_repository: DocumentRepository = Depends(get_document_repository)
 ) -> IndexInterface:
     """Returns an instance of the indexing service."""
     return FaissHNSWIndex(
-        document_store=document_store,
+        document_repository=document_repository,
         dimension=settings.EMBEDDING_DIMENSION
     )
 
@@ -84,4 +85,3 @@ def get_query_processor(
         llm_service=llm_service,
         score_threshold=settings.SCORE_THRESHOLD
     )
-

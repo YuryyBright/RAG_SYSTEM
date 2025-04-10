@@ -1,6 +1,7 @@
 # app/infrastructure/database/repository/document_repository.py
+from typing import Optional, List
 
-from sqlalchemy import select
+from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.infrastructure.database.db_models import Document, DocumentMetadata
 from app.utils.logger_util import get_logger
@@ -31,7 +32,7 @@ class DocumentRepository:
         """
         self.db = db
 
-    async def get_by_id(self, document_id: str):
+    async def get_by_id(self, document_id: str) -> Optional[Document]:
         """
         Retrieve a document by its unique ID.
 
@@ -48,7 +49,7 @@ class DocumentRepository:
         result = await self.db.execute(select(Document).where(Document.id == document_id))
         return result.scalar_one_or_none()
 
-    async def get_by_owner(self, owner_id: str):
+    async def get_by_owner(self, owner_id: str) -> List[Document]:
         """
         Retrieve all documents associated with a specific user.
 
@@ -109,3 +110,15 @@ class DocumentRepository:
         await self.db.commit()
         logger.info(f"Deleted document: {document_id}")
         return True
+
+    async def get_all(self) -> List[Document]:
+        """
+        Retrieve all documents from the database.
+
+        Returns
+        -------
+        List[Document]
+            A list of all document entities.
+        """
+        result = await self.db.execute(select(Document))
+        return result.scalars().all()
