@@ -147,7 +147,7 @@ async def profile_page(
         Rendered user profile template
     """
     return templates.TemplateResponse(
-        "dashboard/profile.html",
+        "user/profile.html",
         {
             "request": request,
             "user": current_user,

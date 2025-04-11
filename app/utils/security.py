@@ -399,6 +399,5 @@ def clear_auth_cookies(response) -> None:
     Args:
         response: FastAPI response object
     """
-    print('Clearing authentication cookies')
     response.delete_cookie(key=COOKIE_NAME)
     response.delete_cookie(key=CSRF_COOKIE_NAME)

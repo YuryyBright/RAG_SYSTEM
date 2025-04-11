@@ -1,4 +1,4 @@
-<!-- Main Sidebar Container -->
+<!-- app/templates/sidebar.html -->
 <aside class="main-sidebar sidebar-dark-primary elevation-4">
   <!-- Brand Logo -->
   <a href="/" class="brand-link">
@@ -10,13 +10,11 @@
     />
     <span class="brand-text font-weight-light">Powerful RAG</span>
   </a>
-  <div class="alertify-logs"></div>
-  <!-- Sidebar -->
-  <div class="sidebar">
-    <!-- Sidebar user panel (optional) -->
 
-    <!-- SidebarSearch Form -->
-    <div class="form-inline">
+  <!-- Sidebar -->
+  <div class="sidebar d-flex flex-column" style="height: 100%">
+    <!-- Example search form or user info area if you want -->
+    <div class="form-inline mt-2">
       <div class="input-group" data-widget="sidebar-search">
         <input class="form-control form-control-sidebar" type="search" placeholder="Search" aria-label="Search" />
         <div class="input-group-append">
@@ -28,34 +26,54 @@
     </div>
 
     <!-- Sidebar Menu -->
-    <nav class="mt-2">
-      <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu" data-accordion="false">
-        <!-- Add icons to the links using the .nav-icon class
-               with font-awesome or any other icon font library -->
+    <nav class="mt-2 flex-grow-1">
+      <ul class="nav nav-pills nav-sidebar flex-column" data-widget="treeview" role="menu">
+        <!-- Admin Section -->
         <li class="nav-header">Admin part</li>
         <li class="nav-item">
-          <a href="/" class="nav-link {% if request.url.path == '/' %}active{% endif %}">
+          <a href="{{ url_for('dashboard_home') }}" class="nav-link">
             <i class="nav-icon fas fa-th"></i>
             <p>Dashboard</p>
           </a>
         </li>
-        <a
-          href="{{ url_for('documents_page') }}"
-          class="nav-link {% if request.url.path == '/documents' %}active{% endif %}"
-        >
-          <i class="fa-solid fa-users-viewfinder"></i>
-          <p>Documents</p>
-        </a>
 
-        <a href="{{ url_for('files_page') }}" class="nav-link {% if request.url.path == '/files' %}active{% endif %}">
-          <i class="fa-regular fa-folder-open"></i>
-          <p>Files</p>
-        </a>
+        <li class="nav-item">
+          <a href="{{ url_for('documents_page') }}" class="nav-link">
+            <i class="fa-solid fa-users-viewfinder nav-icon"></i>
+            <p>Documents</p>
+          </a>
+        </li>
 
+        <li class="nav-item">
+          <a href="{{ url_for('files_page') }}" class="nav-link">
+            <i class="fa-regular fa-folder-open nav-icon"></i>
+            <p>Files</p>
+          </a>
+        </li>
+
+        <!-- Add user personal page link below (the new route) -->
+        <li class="nav-item">
+          <a href="{{ url_for('profile_page') }}" class="nav-link">
+            <i class="fa-solid fa-user nav-icon"></i>
+            <p>User Personal</p>
+          </a>
+        </li>
+
+        <!-- Fans Section -->
         <li class="nav-header">Fans part</li>
+        <!-- etc. ... -->
       </ul>
     </nav>
-    <!-- /.sidebar-menu -->
+
+    <!-- Logout at the bottom -->
+    <ul class="nav nav-pills nav-sidebar flex-column mt-auto mb-3" role="menu">
+      <li class="nav-item">
+        <a href="#" class="nav-link text-danger" id="logoutBtn" role="button">
+          <i class="nav-icon fas fa-sign-out-alt"></i>
+          <p>Logout</p>
+        </a>
+      </li>
+    </ul>
   </div>
   <!-- /.sidebar -->
 </aside>

@@ -15,6 +15,9 @@ from app.config import settings
 from infrastructure.database.repository.activity_repository import ActivityRepository
 from infrastructure.database.repository.session_repository import SessionRepository
 from fastapi import Request
+
+from utils.security import clear_auth_cookies
+
 # Configure logger
 logger = get_logger(__name__)
 

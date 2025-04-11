@@ -20,7 +20,7 @@ from app.infrastructure.database.db_models import User, Token, UserActivity
 from app.infrastructure.database.repository.user_repository import UserRepository
 from app.infrastructure.database.repository.activity_repository import ActivityRepository
 from app.infrastructure.database.repository.token_repository import TokenRepository
-from app.utils.security import verify_password, get_password_hash, generate_api_key
+from app.utils.security import verify_password, get_password_hash, generate_api_key, COOKIE_NAME
 from infrastructure.database.repository.session_repository import SessionRepository
 from utils.logger_util import get_logger
 

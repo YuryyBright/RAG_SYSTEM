@@ -1,5 +1,5 @@
 # app/api/middleware_auth.py
-from fastapi import Depends, HTTPException, status, Cookie, Request, Header
+from fastapi import Depends,Response, HTTPException, status, Cookie, Request, Header
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime
@@ -9,7 +9,7 @@ from app.infrastructure.database.repository import get_async_db
 from app.infrastructure.database.db_models import User
 from app.adapters.auth.service import AuthService
 from app.utils.logger_util import get_logger
-from app.utils.security import COOKIE_NAME, CSRF_COOKIE_NAME
+from app.utils.security import COOKIE_NAME, CSRF_COOKIE_NAME, clear_auth_cookies
 
 # Configure logger
 logger = get_logger(__name__)
@@ -59,6 +59,7 @@ async def get_current_user(
 
 async def get_cookie_user(
         request: Request,
+        response: Response,
         session_id: Optional[str] = Cookie(None, alias=COOKIE_NAME),
         csrf_token: Optional[str] = Header(None, alias="X-CSRF-Token"),
         db: AsyncSession = Depends(get_async_db)
@@ -76,9 +77,12 @@ async def get_cookie_user(
         if request.method == "GET":
             # Skip CSRF verification for GET requests
             session = await auth_service.validate_session(session_id)
+
             if session:
                 user_id = session.get("user_id")
                 return await auth_service.user_repo.get_by_id(user_id)
+            logger.warning('Delete users cookies')
+            clear_auth_cookies(response)
             return None
 
         # For non-GET requests, enforce CSRF protection
@@ -153,3 +157,41 @@ async def get_admin_user(current_user: User = Depends(get_current_active_user)) 
 
     logger.info(f"Admin user authenticated: {current_user.username}")
     return current_user
+
+def get_session_id_from_cookie(request: Request) -> str:
+    """
+    Retrieve the session ID from the request cookies.
+
+    This function extracts the session ID from the cookies of an incoming request.
+    If the session ID cookie is not present, it raises an HTTPException with a 400 status code.
+
+    Parameters
+    ----------
+    request : Request
+        The FastAPI request object containing the cookies.
+
+    Returns
+    -------
+    str
+        The session ID extracted from the cookies.
+
+    Raises
+    ------
+    HTTPException
+        If the session ID cookie is missing.
+
+    Example
+    -------
+    ```python
+    from fastapi import Request, HTTPException
+
+    @app.get("/example")
+    async def example_endpoint(request: Request):
+        session_id = get_session_id_from_cookie(request)
+        return {"session_id": session_id}
+    ```
+    """
+    session_id = request.cookies.get(COOKIE_NAME)
+    if not session_id:
+        raise HTTPException(status_code=400, detail="Missing session ID cookie")
+    return session_id
