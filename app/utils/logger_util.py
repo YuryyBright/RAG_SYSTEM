@@ -12,4 +12,5 @@ def get_logger(module_name: str):
     Returns:
         Configured logger instance
     """
+    LoggerFactory.setup_logging()
     return LoggerFactory.get_logger(module_name)

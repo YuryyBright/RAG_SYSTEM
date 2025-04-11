@@ -7,20 +7,25 @@ It also provides an entry point to run the app using Uvicorn.
 """
 
 import os
-import logging
-from fastapi import FastAPI, APIRouter, Request, HTTPException
+from fastapi import FastAPI, APIRouter, Request, HTTPException, Depends
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
 import uvicorn
+from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.responses import RedirectResponse
+from starlette.status import HTTP_302_FOUND
 
-from api.v1.routers import auth, documents, queries, files, pages
+from adapters.auth.service import AuthService
+from api.v1.routers import auth, documents, queries, files, pages, auth_pages, dashboard_pages, admin_pages, user_api, \
+    theme
+
 from app.config import settings
 from app.api.middlewares import setup_middlewares
+from infrastructure.database.repository import get_async_db
 from utils.logger_util import get_logger
+from utils.security import COOKIE_NAME, set_csrf_cookie, CSRF_COOKIE_NAME
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
+
 logger = get_logger(__name__)
 
 # Initialize FastAPI application
@@ -44,8 +49,16 @@ api_router.include_router(documents.router, prefix="/documents", tags=["Document
 api_router.include_router(queries.router, prefix="/queries", tags=["Queries"])
 api_router.include_router(files.router, prefix="/files", tags=["Files"])
 
+
 # Include page routers - note these are protected by auth
 app.include_router(pages.router, prefix="/pages", tags=["Pages"])
+
+# Include page routers for frontend pages
+app.include_router(auth_pages.router, prefix="/auth", tags=["Authentication Pages"])
+app.include_router(dashboard_pages.router, prefix="/dashboard", tags=["Dashboard Pages"])
+app.include_router(admin_pages.router, prefix="/admin", tags=["Admin Pages"])
+api_router.include_router(user_api.router, prefix="/user", tags=["User"])
+api_router.include_router(theme.router, prefix="/themes", tags=["Themes"])
 app.include_router(api_router)
 
 # Serve static files from ./static directory if it exists
@@ -55,15 +68,26 @@ if os.path.exists(static_dir):
     logger.info(f"Static files mounted from: {static_dir}")
 
 # Jinja2 template configuration
-templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "templates"))
+from app.core.templates.templates import templates
 
-@app.get("/", include_in_schema=False)
-async def root():
-    """
-    Root endpoint redirecting to API documentation message.
-    """
-    return {"message": f"Welcome to {settings.APP_NAME}. Visit /api/docs for the API documentation."}
+# Root route - redirect to dashboard if logged in, otherwise to login page
+@app.get("/", response_class=HTMLResponse)
+async def root(request: Request, db: AsyncSession = Depends(get_async_db)):
+    """Redirect to dashboard if logged in, else to login"""
+    session_id = request.cookies.get(COOKIE_NAME)
+    if not session_id:
+        return RedirectResponse(url="/auth/login", status_code=HTTP_302_FOUND)
 
+    try:
+        auth_service = AuthService(db)
+        user = await auth_service.get_user_by_session_id(session_id)
+        if user and user.is_active:
+            return RedirectResponse(url="/dashboard", status_code=HTTP_302_FOUND)
+        else:
+            return RedirectResponse(url="/auth/login", status_code=HTTP_302_FOUND)
+    except Exception as e:
+        logger.error(f"Error in root redirect: {e}")
+        return RedirectResponse(url="/auth/login", status_code=HTTP_302_FOUND)
 
 @app.get("/health", include_in_schema=False)
 async def health_check():

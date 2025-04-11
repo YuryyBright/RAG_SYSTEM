@@ -1,146 +1,61 @@
 # app/api/routes/auth.py
-from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordRequestForm
-from sqlalchemy.orm import Session
-from datetime import timedelta
-import uuid
-
-from app.infrastructure.database.repository import get_db
-from app.infrastructure.database.db_models import User, Token
-from app.config import settings
-from app.api.schemas.auth import TokenResponse
+from fastapi import APIRouter, Depends, HTTPException, status, Response, Cookie, Request
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from sqlalchemy.ext.asyncio import AsyncSession
+from typing import Optional
+from fastapi import Header
+from app.adapters.auth.service import AuthService
+from app.infrastructure.database.repository import get_async_db
+from app.infrastructure.database.db_models import User
+from app.api.schemas.auth import TokenResponse, LoginRequest, SessionResponse
 from app.api.schemas.user import UserResponse, UserCreate
-from app.utils.security import get_password_hash, verify_password, create_access_token
-from app.adapters.auth.security import JWTAuth
+from app.api.middleware_auth import get_current_active_user
 from app.utils.logger_util import get_logger
+from app.utils.security import (
+    create_session_cookie,
+    set_csrf_cookie,
+    generate_csrf_token,
+    clear_auth_cookies,
+    COOKIE_NAME,
+    CSRF_COOKIE_NAME
+)
 
 # Configure logger
 logger = get_logger(__name__)
 
 router = APIRouter()
-auth_service = JWTAuth()
-
-
-def authenticate_user(db: Session, username: str, password: str):
-    """
-    Authenticate a user by username and password.
-
-    Args:
-        db: Database session
-        username: Username or email
-        password: Plain password
-
-    Returns:
-        User object if authenticated, None otherwise
-    """
-    # Check if the username is actually an email
-    if '@' in username:
-        user = db.query(User).filter(User.email == username).first()
-    else:
-        user = db.query(User).filter(User.username == username).first()
-
-    if not user:
-        logger.info(f"Authentication attempt for non-existent user: {username}")
-        return None
-
-    if not verify_password(password, user.hashed_password):
-        logger.info(f"Failed login attempt for user: {username}")
-        return None
-
-    logger.info(f"User authenticated successfully: {username}")
-    return user
-
-
-def get_current_active_user(db: Session = Depends(get_db), token: str = Depends(OAuth2PasswordRequestForm)):
-    """
-    Get the current active user from token.
-
-    Args:
-        db: Database session
-        token: JWT token
-
-    Returns:
-        User object if token is valid
-
-    Raises:
-        HTTPException: If token is invalid or user is inactive
-    """
-    payload = auth_service.verify_token(token)
-    if not payload:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authentication credentials",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    username = payload.get("sub")
-    user = db.query(User).filter(User.username == username).first()
-
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    if not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Inactive user",
-        )
-
-    return user
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 
 @router.post("/register", response_model=UserResponse)
-async def register_user(user_data: UserCreate, db: Session = Depends(get_db)):
+async def register_user(user_data: UserCreate, db: AsyncSession = Depends(get_async_db)):
     """Register a new user."""
-    # Check if username or email already exists
-    if db.query(User).filter(User.username == user_data.username).first():
-        logger.warning(f"Registration attempt with existing username: {user_data.username}")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Username already registered"
-        )
-    if db.query(User).filter(User.email == user_data.email).first():
-        logger.warning(f"Registration attempt with existing email: {user_data.email}")
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email already registered"
-        )
+    auth_service = AuthService(db)
 
-    # Create user
-    hashed_password = get_password_hash(user_data.password)
-    user = User(
-        id=str(uuid.uuid4()),
-        username=user_data.username,
-        email=str(user_data.email),  # Convert EmailStr to str
-        hashed_password=hashed_password,
-        is_active=True
+    user, error = await auth_service.register_user(
+        user_data.username,
+        str(user_data.email),
+        user_data.password
     )
 
-    try:
-        db.add(user)
-        db.commit()
-        db.refresh(user)
-        logger.info(f"User registered successfully: {user.username}")
-        return user
-    except Exception as e:
-        db.rollback()
-        logger.error(f"Error during user registration: {e}")
+    if error:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Error registering user"
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=error
         )
+
+    return user
 
 
 @router.post("/token", response_model=TokenResponse)
 async def login_for_access_token(
         form_data: OAuth2PasswordRequestForm = Depends(),
-        db: Session = Depends(get_db)
+        db: AsyncSession = Depends(get_async_db)
 ):
     """Generate an access token."""
-    user = authenticate_user(db, form_data.username, form_data.password)
+    auth_service = AuthService(db)
+
+    user = await auth_service.authenticate_user(form_data.username, form_data.password)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -148,27 +63,8 @@ async def login_for_access_token(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # Create token
-    access_token, expire = create_access_token(
-        data={"sub": user.username},
-        expires_delta=timedelta(days=settings.ACCESS_TOKEN_EXPIRE_DAYS)
-    )
-
-    # Store token in database
-    db_token = Token(
-        id=str(uuid.uuid4()),
-        token=access_token,
-        user_id=user.id,
-        expires_at=expire
-    )
-
-    try:
-        db.add(db_token)
-        db.commit()
-        logger.info(f"Access token created for user: {user.username}")
-    except Exception as e:
-        db.rollback()
-        logger.error(f"Error storing token: {e}")
+    access_token, expire = await auth_service.create_user_token(user.id, user.username)
+    if not access_token:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error creating token"
@@ -185,33 +81,265 @@ async def login_for_access_token(
 
 @router.post("/logout")
 async def logout(
-        current_user: User = Depends(get_current_active_user),
-        token: str = Depends(OAuth2PasswordRequestForm),
-        db: Session = Depends(get_db)
+    response: Response,
+    request: Request,
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Logout by invalidating the token."""
-    db_token = db.query(Token).filter(Token.token == token, Token.user_id == current_user.id).first()
+    """
+    Logout the user using cookie-based session authentication and CSRF protection.
 
-    if db_token:
-        try:
-            db.delete(db_token)
-            db.commit()
-            logger.info(f"User logged out successfully: {current_user.username}")
-        except Exception as e:
-            db.rollback()
-            logger.error(f"Error during logout: {e}")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Error logging out"
-            )
-    else:
-        logger.warning(f"Logout attempt with invalid token for user: {current_user.username}")
+    This endpoint:
+    - Reads session ID and CSRF token from cookies.
+    - Verifies that the CSRF token matches the one stored in the session.
+    - Invalidates the session on the server and clears client-side cookies.
 
+    Args:
+        response: HTTP response object to clear cookies.
+        request: HTTP request object to read cookies.
+        db: Async database session.
+
+    Returns:
+        JSON response indicating successful logout.
+
+    Raises:
+        HTTPException: If session is missing or CSRF validation fails.
+    """
+    auth_service = AuthService(db)
+
+    session_id = request.cookies.get(COOKIE_NAME)
+    csrf_token = request.cookies.get(CSRF_COOKIE_NAME)
+
+    if not session_id:
+        logger.warning("Logout attempted without session cookie.")
+        raise HTTPException(status_code=401, detail="No active session")
+
+    if not csrf_token:
+        logger.warning(f"Missing CSRF cookie for session {session_id[:8]}...")
+        raise HTTPException(status_code=403, detail="Missing CSRF token")
+
+    # Validate CSRF token against stored session token
+    valid_csrf = await auth_service.get_csrf_token_for_session(session_id)
+    if csrf_token != valid_csrf:
+        logger.warning(f"CSRF token mismatch during logout for session {session_id[:8]}...")
+        raise HTTPException(status_code=403, detail="Invalid CSRF token")
+
+    # Validate session and get current user
+    current_user = await auth_service.verify_session(session_id, csrf_token)
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Invalid session")
+
+    # Clear cookies and invalidate session
+    clear_auth_cookies(response)
+    await auth_service.invalidate_session(session_id)
+    await auth_service.activity_repo.create_activity(current_user.id, "logout", "User logged out")
+    logger.info(f"User {current_user.username} logged out successfully")
     return {"detail": "Successfully logged out"}
 
 
+
+
+
+
 @router.get("/me", response_model=UserResponse)
-async def read_users_me(current_user: User = Depends(get_current_active_user)):
+async def read_users_me(
+        current_user: User = Depends(get_current_active_user)
+):
     """Get current user info."""
     logger.info(f"User profile accessed: {current_user.username}")
     return current_user
+
+
+# @router.post("/login", response_model=TokenResponse)
+# async def login(
+#         response: Response,
+#         login_data: LoginRequest,
+#         db: AsyncSession = Depends(get_async_db)
+# ):
+#     """Generate an access token using email/password."""
+#     auth_service = AuthService(db)
+#
+#     user = await auth_service.authenticate_user(login_data.email, login_data.password)
+#     if not user:
+#         raise HTTPException(
+#             status_code=status.HTTP_401_UNAUTHORIZED,
+#             detail="Incorrect email or password",
+#         )
+#
+#     access_token, expire = await auth_service.create_user_token(user.id, user.username)
+#     if not access_token:
+#         raise HTTPException(
+#             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+#             detail="Error creating token"
+#         )
+#
+#     return {
+#         "access_token": access_token,
+#         "token_type": "bearer",
+#         "expires_at": expire,
+#         "user_id": user.id,
+#         "username": user.username
+#     }
+
+
+@router.post("/login", response_model=SessionResponse)
+async def login(
+        response: Response,
+        request: Request,
+        login_data: LoginRequest,
+        db: AsyncSession = Depends(get_async_db)
+):
+    """Login for web interface with cookie-based authentication and token support."""
+    auth_service = AuthService(db)
+
+    user = await auth_service.authenticate_user(login_data.email, login_data.password)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+        )
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User account disabled",
+        )
+    # Create session
+    session_id, csrf_token, expire = await auth_service.create_user_session(
+        user.id,
+        user.username,
+        remember=login_data.remember,
+        request=request
+    )
+
+    if not session_id:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error creating session"
+        )
+
+    # Create JWT token and store it
+    access_token, token_expiry = await auth_service.create_user_token(
+        user.id, user.username
+    )
+    if not access_token:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error creating access token"
+        )
+
+    # Set session and CSRF cookies
+    create_session_cookie(response, session_id, expire, True, True)
+    set_csrf_cookie(response, csrf_token, False, True)
+
+    await auth_service.activity_repo.create_activity(user.id, "login", "User logged in")
+
+    return {
+        "csrf_token": csrf_token,
+        "expires_at": expire,
+        "access_token": access_token,           # <- NEW FIELD
+        "access_token_expires_at": token_expiry, # <- OPTIONAL
+        "user_id": user.id,
+        "username": user.username
+    }
+
+
+@router.post("/refresh-token", response_model=TokenResponse)
+async def refresh_token(
+        current_user: User = Depends(get_current_active_user),
+        db: AsyncSession = Depends(get_async_db)
+):
+    """Refresh an access token."""
+    auth_service = AuthService(db)
+
+    access_token, expire = await auth_service.create_user_token(current_user.id, current_user.username)
+    if not access_token:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error creating token"
+        )
+
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "expires_at": expire,
+        "user_id": current_user.id,
+        "username": current_user.username
+    }
+
+
+@router.post("/refresh-csrf")
+async def refresh_csrf(
+        response: Response,
+        request: Request,
+        current_user: User = Depends(get_current_active_user),
+        session_id: str = Cookie(..., alias=COOKIE_NAME)
+):
+    """Generate a new CSRF token for the current session."""
+    # Generate a new CSRF token
+    csrf_token = generate_csrf_token()
+
+    # Set the new CSRF cookie
+    set_csrf_cookie(response, csrf_token, False, True)
+
+    logger.info(f"CSRF token refreshed for user {current_user.username}")
+
+    return {
+        "csrf_token": csrf_token,
+        "user_id": current_user.id,
+        "username": current_user.username
+    }
+
+@router.post("/refresh-session", response_model=SessionResponse)
+async def refresh_session(
+        response: Response,
+        request: Request,
+        session_id: str = Cookie(..., alias=COOKIE_NAME),
+        db: AsyncSession = Depends(get_async_db)
+):
+    """Refresh a session for web interface."""
+    auth_service = AuthService(db)
+
+    # Verify and refresh session
+    user_id, username, new_session_id, csrf_token, expire = await auth_service.refresh_session(session_id)
+
+    if not new_session_id:
+        # Clear invalid cookies
+        clear_auth_cookies(response)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired session"
+        )
+
+    # Set new cookies
+    create_session_cookie(response, new_session_id, expire, True, True)
+    set_csrf_cookie(response, csrf_token, False, True)
+
+    return {
+        "csrf_token": csrf_token,
+        "expires_at": expire,
+        "user_id": user_id,
+        "username": username
+    }
+
+
+@router.post("/reset-password")
+async def request_password_reset(
+        email_data: dict,
+        db: AsyncSession = Depends(get_async_db)
+):
+    """Send password reset link to user's email."""
+    auth_service = AuthService(db)
+
+    email = email_data.get("email")
+    if not email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email is required"
+        )
+
+    success = await auth_service.request_password_reset(email)
+    if not success:
+        # Don't reveal if email exists or not for security
+        logger.info(f"Password reset requested for non-existent email: {email}")
+
+    # Always return success to prevent email enumeration
+    return {"detail": "If your email is registered, you will receive a password reset link"}

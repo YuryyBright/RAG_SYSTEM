@@ -5,8 +5,8 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 import os
 
-from api.v1.routers.auth import get_current_active_user
-from app.infrastructure.database.repository import get_db
+from api.middleware_auth import get_current_active_user
+from app.infrastructure.database.repository import get_async_db
 from app.infrastructure.database.db_models import User, File as FileModel
 from app.adapters.storage.file_manager import FileManager
 from app.api.schemas.files import FileResponse as FileResponseSchema
@@ -20,7 +20,7 @@ async def upload_file(
         file: UploadFile = File(...),
         is_public: bool = False,
         current_user: User = Depends(get_current_active_user),
-        db: Session = Depends(get_db)
+        db: Session = Depends(get_async_db)
 ):
     """Upload a file."""
     # Save file to disk
@@ -45,7 +45,7 @@ async def upload_file(
 @router.get("/", response_model=List[FileResponseSchema])
 async def list_files(
         current_user: User = Depends(get_current_active_user),
-        db: Session = Depends(get_db)
+        db: Session = Depends(get_async_db)
 ):
     """List user's files."""
     files = db.query(FileModel).filter(FileModel.owner_id == current_user.id).all()
@@ -56,7 +56,7 @@ async def list_files(
 async def get_file(
         file_id: str,
         current_user: User = Depends(get_current_active_user),
-        db: Session = Depends(get_db)
+        db: Session = Depends(get_async_db)
 ):
     """Get a file."""
     # Get file from database
@@ -83,7 +83,7 @@ async def get_file(
 async def delete_file(
         file_id: str,
         current_user: User = Depends(get_current_active_user),
-        db: Session = Depends(get_db)
+        db: Session = Depends(get_async_db)
 ):
     """Delete a file."""
     # Get file from database
@@ -108,7 +108,7 @@ async def delete_file(
 @router.get("/public/{file_id}")
 async def get_public_file(
         file_id: str,
-        db: Session = Depends(get_db)
+        db: Session = Depends(get_async_db)
 ):
     """Get a public file without authentication."""
     # Get file from database

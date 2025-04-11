@@ -8,7 +8,7 @@
       class="brand-image img-circle elevation-3"
       style="opacity: 0.8"
     />
-    <span class="brand-text font-weight-light">Powerful File Server</span>
+    <span class="brand-text font-weight-light">Powerful RAG</span>
   </a>
   <div class="alertify-logs"></div>
   <!-- Sidebar -->
@@ -39,18 +39,19 @@
             <p>Dashboard</p>
           </a>
         </li>
-        <li class="nav-item">
-          <a href="{{ url_for('users') }}" class="nav-link {% if request.url.path == '/users/' %}active{% endif %}">
-            <i class="fa-solid fa-users-viewfinder"></i>
-            <p>Users</p>
-          </a>
-        </li>
-        <li class="nav-item">
-          <a href="{{ url_for('files') }}" class="nav-link {% if request.url.path == '/files/' %}active{% endif %}">
-            <i class="fa-regular fa-folder-open"></i>
-            <p>Files</p>
-          </a>
-        </li>
+        <a
+          href="{{ url_for('documents_page') }}"
+          class="nav-link {% if request.url.path == '/documents' %}active{% endif %}"
+        >
+          <i class="fa-solid fa-users-viewfinder"></i>
+          <p>Documents</p>
+        </a>
+
+        <a href="{{ url_for('files_page') }}" class="nav-link {% if request.url.path == '/files' %}active{% endif %}">
+          <i class="fa-regular fa-folder-open"></i>
+          <p>Files</p>
+        </a>
+
         <li class="nav-header">Fans part</li>
       </ul>
     </nav>

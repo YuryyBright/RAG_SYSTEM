@@ -1,14 +1,16 @@
 # app/adapters/auth/security.py
 from datetime import datetime, timedelta
-from typing import Optional, Dict, Any, Callable
+from typing import Optional, Dict, Any, Callable, Tuple
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
+from sqlalchemy.ext.asyncio import AsyncSession
 
-import jwt
 from app.core.interfaces.auth import AuthInterface
 from app.core.entities.user import User
-from app.utils.security import verify_password, get_password_hash
+from app.infrastructure.database.repository.user_repository import UserRepository
+from app.infrastructure.database.repository.token_repository import TokenRepository
+from app.utils.security import verify_password, get_password_hash, jwt_encode, jwt_decode
 from app.utils.logger_util import get_logger
 from app.config import settings
 
@@ -95,51 +97,35 @@ class JWTAuth(AuthInterface):
         Returns:
             tuple[str, datetime]: The encoded JWT token and expiration datetime.
         """
-        to_encode = data.copy()
+        if expires_delta is None:
+            expires_delta = timedelta(minutes=self.access_token_expire_minutes)
 
-        if expires_delta:
-            expire = datetime.utcnow() + expires_delta
-        else:
-            expire = datetime.utcnow() + timedelta(minutes=self.access_token_expire_minutes)
+        return jwt_encode(
+            payload=data,
+            secret_key=self.secret_key,
+            algorithm=self.algorithm,
+            expires_delta=expires_delta
+        )
 
-        to_encode.update({"exp": expire})
-        encoded_jwt = jwt.encode(to_encode, self.secret_key, algorithm=self.algorithm)
-
-        return encoded_jwt, expire
-
-    def get_password_hash(self, password: str) -> str:
+    def verify_token(
+            self,
+            token: str
+    ) -> Optional[Dict[str, Any]]:
         """
-        Hash a password using bcrypt.
+        Verify and decode a JWT token.
 
-        Parameters
-        ----------
-        password : str
-            The plaintext password to be hashed.
+        Args:
+            token (str): The JWT token.
 
-        Returns
-        -------
-        str
-            The hashed password, which can be stored securely in a database.
+        Returns:
+            Optional[Dict[str, Any]]: Token payload if valid, None otherwise
         """
-        return get_password_hash(password)
+        return jwt_decode(
+            token=token,
+            secret_key=self.secret_key,
+            algorithms=[self.algorithm]
+        )
 
-    def verify_password(self, plain_password: str, hashed_password: str) -> bool:
-        """
-        Verify a password against its hashed value.
-
-        Parameters
-        ----------
-        plain_password : str
-            The plaintext password provided by the user.
-        hashed_password : str
-            The hashed password stored in the database.
-
-        Returns
-        -------
-        bool
-            True if the plaintext password matches the hashed password, False otherwise.
-        """
-        return verify_password(plain_password, hashed_password)
     async def get_current_user(
             self,
             token: str,
@@ -158,17 +144,17 @@ class JWTAuth(AuthInterface):
         Raises:
             HTTPException: If the token is invalid or the user is not found.
         """
-        try:
-            payload = jwt.decode(token, self.secret_key, algorithms=[self.algorithm])
-            username: str = payload.get("sub")
-            if username is None:
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Could not validate credentials",
-                    headers={"WWW-Authenticate": "Bearer"},
-                )
-        except jwt.PyJWTError as e:
-            logger.warning(f"Token validation failed: {e}")
+        payload = self.verify_token(token)
+        if payload is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Could not validate credentials",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+
+        username: str = payload.get("sub")
+        if username is None:
+            logger.warning("Token missing subject claim")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Could not validate credentials",
@@ -186,10 +172,17 @@ class JWTAuth(AuthInterface):
 
         return user
 
+    # Add this method to JWTAuth class in security.py
+    def decode_access_token(self, token: str) -> Optional[Dict[str, Any]]:
+        """An alias for verify_token for better semantic clarity"""
+        return self.verify_token(token)
+
+
+
     async def get_current_active_user(
             self,
-            token: str = Depends(oauth2_scheme),
-            user_provider: Callable = None
+            token: str,
+            user_provider: Callable
     ) -> User:
         """
         Get the current active user.
@@ -211,3 +204,28 @@ class JWTAuth(AuthInterface):
             raise HTTPException(status_code=400, detail="Inactive user")
 
         return current_user
+
+    def get_password_hash(self, password: str) -> str:
+        """
+        Hash the password using bcrypt.
+
+        Args:
+            password (str): The plain password to hash.
+
+        Returns:
+            str: The hashed password.
+        """
+        return get_password_hash(password)
+
+    def verify_password(self, plain_password: str, hashed_password: str) -> bool:
+        """
+        Verify a password using bcrypt.
+
+        Args:
+            plain_password (str): The plain password.
+            hashed_password (str): The hashed password.
+
+        Returns:
+            bool: True if match, False otherwise.
+        """
+        return verify_password(plain_password, hashed_password)

@@ -142,11 +142,12 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_DAYS: int = Field(30, description="Token TTL (days)")
 
     # AI models
-    EMBEDDING_MODEL: str = Field("instructor-xl", description="Embedding model name")
-    EMBEDDING_DIMENSION: int = Field(768, description="Embedding dimension")
-    LLM_MODEL: str = Field("mistral-7b-instruct", description="LLM model name")
-    RERANKER_MODEL: str = Field("cross-encoder/ms-marco-MiniLM-L-6-v2", description="Reranker model")
-    SCORE_THRESHOLD: float = Field(0.7, description="Score threshold")
+    # File storage additions for document store and themes
+    DOCUMENT_STORAGE_PATH: Path = Field(Path("./data/processed"), description="Processed document storage")
+    THEME_STORAGE_PATH: Path = Field(Path("./data/themes"), description="Theme storage directory")
+    EMBEDDING_CACHE_TTL: int = Field(3600, description="Embedding cache TTL in seconds")
+    MAX_CHUNK_SIZE: int = Field(1000, description="Maximum chunk size for document splitting")
+    CHUNK_OVERLAP: int = Field(200, description="Overlap between chunks when splitting documents")
 
     # File storage
     UPLOAD_DIR: Path = Field(Path("./data/uploads"), description="Upload directory")

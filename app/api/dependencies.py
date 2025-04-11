@@ -1,82 +1,127 @@
 """
-This module defines dependency injection functions for various services used in the application.
+Dependency Injection Providers for FastAPI.
 
-Dependencies:
-- DocumentStore: Singleton instance for storing documents.
-- DocumentLoader: Singleton instance for loading documents.
-- EmbeddingService: Provides embedding functionality using the specified model.
-- IndexingService: Provides indexing functionality using the specified document store and embedding dimension.
-- LLMService: Provides large language model functionality using the specified model.
-- RerankerService: Provides reranking functionality using the specified model.
-- QueryProcessor: Processes queries using the provided embedding, indexing, reranking, and LLM services.
-
-Functions:
-- get_document_store: Returns the singleton DocumentStore instance.
-- get_document_loader: Returns the singleton DocumentLoader instance.
-- get_embedding_service: Returns an instance of the embedding service.
-- get_indexing_service: Returns an instance of the indexing service.
-- get_llm_service: Returns an instance of the LLM service.
-- get_reranker_service: Returns an instance of the reranking service.
-- get_query_processor: Returns an instance of the QueryProcessor with all required services.
+This module configures the DI system for:
+- Repositories (Document, Theme)
+- Services (Embedding, Indexing, Reranking, LLM)
+- Use Cases (Theme, QueryProcessor)
 """
 
 from fastapi import Depends
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.adapters.llm.mistral import MistralLLM
+from adapters.embeding.instructor import InstructorEmbedding
+from app.config import settings
+
+# Core Interfaces
+from core.interfaces.document_store import DocumentStoreInterface
 from core.interfaces.embedding import EmbeddingInterface
 from core.interfaces.indexing import IndexInterface
 from core.interfaces.llm import LLMInterface
 from core.interfaces.reranking import RerankerInterface
+from core.interfaces.theme_repository import ThemeRepositoryInterface
 
-
-from app.adapters.indexing.faiss_hnsw import FaissHNSWIndex
-from app.adapters.embeding.instructor import InstructorEmbedding
-from app.adapters.reranking.cross_encoder import CrossEncoderReranker
-from app.infrastructure.database.document_store import DocumentStore
-from app.infrastructure.loaders.document_loader import DocumentLoader
-from app.config import settings
+# Use Cases
 from core.use_cases.query import QueryProcessor
+from core.use_cases.theme import ThemeUseCase
 
-# Singleton instances
-document_store = DocumentStore()
+# Adapters
+from adapters.storage.document_store import DocumentStore
+from adapters.indexing.faiss_hnsw import FaissHNSWIndex
+from adapters.reranking.cross_encoder import CrossEncoderReranker
+from adapters.llm.mistral import MistralLLM
+
+# Uncomment if using OpenAI instead of Instructor
+# from adapters.embedding.open_ai import OpenAIEmbedding
+
+# Infrastructure
+from infrastructure.database.repository.theme_repository import ThemeRepository
+from infrastructure.database.repository.document_repository import DocumentRepository
+from infrastructure.loaders.document_loader import DocumentLoader
+from infrastructure.database.repository import get_async_db
+
+# Singleton instance
 document_loader = DocumentLoader()
 
-def get_document_store() -> DocumentStore:
-    """Returns the singleton DocumentStore instance."""
-    return document_store
 
-def get_document_loader() -> DocumentLoader:
-    """Returns the singleton DocumentLoader instance."""
-    return document_loader
+# === Infrastructure ===
+
+def get_document_repository(db: AsyncSession = Depends(get_async_db)) -> DocumentRepository:
+    """Provides DocumentRepository bound to a DB session."""
+    return DocumentRepository(db)
+
+
+def get_theme_repository(db: AsyncSession = Depends(get_async_db)) -> ThemeRepository:
+    """Provides ThemeRepository bound to a DB session."""
+    return ThemeRepository(db)
+
+
+# === Embedding / Model Services ===
 
 def get_embedding_service() -> EmbeddingInterface:
-    """Returns an instance of the embedding service."""
-    return InstructorEmbedding(model_name=settings.EMBEDDING_MODEL)
+    """Provides the embedding service as configured."""
+    if settings.EMBEDDING_SERVICE == "instructor":
+        return InstructorEmbedding(model_name=settings.INSTRUCTOR_MODEL_NAME)
+    # elif settings.EMBEDDING_SERVICE == "openai":
+    #     return OpenAIEmbedding(api_key=settings.OPENAI_API_KEY)
+    else:
+        raise ValueError(f"Unsupported embedding service: {settings.EMBEDDING_SERVICE}")
+
 
 def get_indexing_service(
-    document_store: DocumentStore = Depends(get_document_store)
+    document_repository: DocumentRepository = Depends(get_document_repository)
 ) -> IndexInterface:
-    """Returns an instance of the indexing service."""
+    """Provides FAISS-based vector indexing service."""
     return FaissHNSWIndex(
-        document_store=document_store,
+        document_repository=document_repository,
         dimension=settings.EMBEDDING_DIMENSION
     )
 
+
 def get_llm_service() -> LLMInterface:
-    """Returns an instance of the LLM service."""
+    """Provides Mistral or other LLM."""
     return MistralLLM(model_name=settings.LLM_MODEL)
 
+
 def get_reranker_service() -> RerankerInterface:
-    """Returns an instance of the reranking service."""
+    """Provides reranker model interface."""
     return CrossEncoderReranker(model_name=settings.RERANKER_MODEL)
+
+
+# === Storage Services ===
+
+def get_document_store(
+    document_repository: DocumentRepository = Depends(get_document_repository),
+    embedding_service: EmbeddingInterface = Depends(get_embedding_service)
+) -> DocumentStoreInterface:
+    """Provides a DocumentStore instance."""
+    return DocumentStore(
+        document_repository=document_repository,
+        embedding_service=embedding_service,
+        storage_path=settings.DOCUMENT_STORAGE_PATH
+    )
+
+
+# === Use Cases ===
+
+def get_theme_use_case(
+    theme_repository: ThemeRepositoryInterface = Depends(get_theme_repository),
+    document_store: DocumentStoreInterface = Depends(get_document_store)
+) -> ThemeUseCase:
+    """Provides the ThemeUseCase with repository + store dependencies."""
+    return ThemeUseCase(
+        theme_repository=theme_repository,
+        document_store=document_store
+    )
+
 
 def get_query_processor(
     embedding_service: EmbeddingInterface = Depends(get_embedding_service),
     index_service: IndexInterface = Depends(get_indexing_service),
     reranker_service: RerankerInterface = Depends(get_reranker_service),
-    llm_service: LLMInterface = Depends(get_llm_service),
+    llm_service: LLMInterface = Depends(get_llm_service)
 ) -> QueryProcessor:
-    """Returns an instance of the QueryProcessor with all required services."""
+    """Provides a QueryProcessor instance with all AI services."""
     return QueryProcessor(
         embedding_service=embedding_service,
         index_service=index_service,
@@ -85,3 +130,9 @@ def get_query_processor(
         score_threshold=settings.SCORE_THRESHOLD
     )
 
+
+# === Utilities ===
+
+def get_document_loader() -> DocumentLoader:
+    """Returns the singleton document loader instance."""
+    return document_loader

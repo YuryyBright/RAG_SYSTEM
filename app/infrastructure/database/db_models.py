@@ -4,35 +4,42 @@ from sqlalchemy.sql import func
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 import uuid
-
+from sqlalchemy.ext.hybrid import hybrid_property
+import user_agents
 Base = declarative_base()
+
 
 def generate_uuid():
     """Generate a unique UUID string."""
     return str(uuid.uuid4())
 
+
 class User(Base):
-    """User model for authentication.
+    """
+    User model for authentication and profile information.
 
     Attributes
     ----------
     id : str
-        Unique identifier for the user.
+        Unique identifier for the user (UUID).
     username : str
-        Unique username for the user.
+        Unique username.
     email : str
-        Unique email address for the user.
+        Unique email address.
     hashed_password : str
-        Hashed password for the user.
+        Hashed password for secure authentication.
     is_active : bool
-        Indicates if the user is active.
+        Flag indicating if the user account is active.
     is_admin : bool
-        Indicates if the user has admin privileges.
+        Flag indicating if the user has administrative privileges.
+    avatar_url : str
+        URL to the user's avatar image.
     created_at : datetime
         Timestamp when the user was created.
     updated_at : datetime
         Timestamp when the user was last updated.
     """
+
     __tablename__ = "users"
 
     id = Column(String, primary_key=True, default=generate_uuid)
@@ -41,12 +48,48 @@ class User(Base):
     hashed_password = Column(String, nullable=False)
     is_active = Column(Boolean, default=True)
     is_admin = Column(Boolean, default=False)
+    avatar_url = Column(String, nullable=True, default="/static/dist/img/user.png")  # <--- ADDED FIELD
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     # Relationships
     files = relationship("File", back_populates="owner")
     documents = relationship("Document", back_populates="owner")
+    sessions = relationship("Session", back_populates="user", cascade="all, delete-orphan")
+    tokens = relationship("Token", backref="user", cascade="all, delete-orphan")
+    activities = relationship("UserActivity", back_populates="user", cascade="all, delete-orphan")
+    # Add this relationship to User class
+    themes = relationship("Theme", back_populates="owner", cascade="all, delete-orphan")
+
+class UserActivity(Base):
+    """
+    Represents a record of user activities in the system.
+
+    Attributes
+    ----------
+    id : int
+        The unique identifier for the activity.
+    user_id : int
+        The ID of the user who performed the activity.
+    activity_type : str
+        The type of activity (e.g., login, profile update, etc.).
+    description : str
+        A detailed description of the activity.
+    timestamp : datetime
+        The timestamp when the activity occurred.
+    user : User
+        The user associated with this activity (relationship).
+    """
+    __tablename__ = "user_activities"
+
+    id = Column(Integer, primary_key=True, index=True)  # Primary key for the activity
+    user_id = Column(String, ForeignKey("users.id"))  # Foreign key linking to the User table
+    activity_type = Column(String(50), nullable=False)  # Type of activity (e.g., login, update)
+    description = Column(Text, nullable=False)  # Detailed description of the activity
+    timestamp = Column(DateTime, default=func.now())  # Timestamp of the activity
+
+    # Relationships
+    user = relationship("User", back_populates="activities")  # Link to the User model
 
 class File(Base):
     """File storage model.
@@ -87,6 +130,7 @@ class File(Base):
     # Relationships
     owner = relationship("User", back_populates="files")
 
+
 class Document(Base):
     """Document model for RAG system.
 
@@ -118,6 +162,7 @@ class Document(Base):
     owner = relationship("User", back_populates="documents")
     document_metadata = relationship("DocumentMetadata", back_populates="document", cascade="all, delete-orphan")
 
+
 class DocumentMetadata(Base):
     """Metadata for Document.
 
@@ -142,6 +187,115 @@ class DocumentMetadata(Base):
     # Relationships
     document = relationship("Document", back_populates="document_metadata")
 
+
+# Add to db_models.py
+class Theme(Base):
+    """
+    Theme model for grouping documents.
+
+    Attributes
+    ----------
+    id : str
+        Unique identifier for the theme (UUID).
+    name : str
+        Name of the theme.
+    description : str
+        Description of the theme.
+    is_public : bool
+        Flag indicating if the theme is publicly accessible.
+    owner_id : str
+        ID of the user who owns the theme.
+    created_at : datetime
+        Timestamp when the theme was created.
+    updated_at : datetime
+        Timestamp when the theme was last updated.
+    """
+    __tablename__ = "themes"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    name = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+    is_public = Column(Boolean, default=False)
+    owner_id = Column(String, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # Relationships
+    owner = relationship("User", back_populates="themes")
+    documents = relationship("ThemeDocument", back_populates="theme", cascade="all, delete-orphan")
+    shared_with = relationship("ThemeShare", back_populates="theme", cascade="all, delete-orphan")
+
+# Junction table for theme-document relationship
+class ThemeDocument(Base):
+    """
+    Junction table linking themes to documents.
+
+    This table establishes a many-to-many relationship between themes and documents,
+    allowing a document to belong to multiple themes and a theme to contain multiple documents.
+
+    Attributes
+    ----------
+    theme_id : str
+        The ID of the theme to which the document is linked.
+    document_id : str
+        The ID of the document linked to the theme.
+    added_at : datetime
+        The timestamp when the document was added to the theme.
+    theme : Theme
+        The theme associated with this link (relationship).
+    document : Document
+        The document associated with this link (relationship).
+    """
+    __tablename__ = "theme_documents"
+
+    theme_id = Column(String, ForeignKey("themes.id"), primary_key=True)
+    document_id = Column(String, ForeignKey("documents.id"), primary_key=True)
+    added_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # Relationships
+    theme = relationship("Theme", back_populates="documents")
+    document = relationship("Document")
+
+class ThemeShare(Base):
+    """
+    Table for tracking theme shares between users.
+
+    This table allows themes to be shared between users with specific permissions.
+
+    Attributes
+    ----------
+    id : str
+        Unique identifier for the theme share (UUID).
+    theme_id : str
+        The ID of the theme being shared.
+    shared_by : str
+        The ID of the user who shared the theme.
+    shared_with : str
+        The ID of the user with whom the theme is shared.
+    created_at : datetime
+        The timestamp when the theme was shared.
+    permission : str
+        The permission level for the shared theme ("read" or "edit").
+    theme : Theme
+        The theme associated with this share (relationship).
+    owner : User
+        The user who shared the theme (relationship).
+    recipient : User
+        The user with whom the theme is shared (relationship).
+    """
+    __tablename__ = "theme_shares"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    theme_id = Column(String, ForeignKey("themes.id"), nullable=False)
+    shared_by = Column(String, ForeignKey("users.id"), nullable=False)
+    shared_with = Column(String, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    permission = Column(String, default="read")  # "read" or "edit"
+
+    # Relationships
+    theme = relationship("Theme", back_populates="shared_with")
+    owner = relationship("User", foreign_keys=[shared_by])
+    recipient = relationship("User", foreign_keys=[shared_with])
 class Token(Base):
     """Token model for authentication.
 
@@ -165,3 +319,64 @@ class Token(Base):
     user_id = Column(String, ForeignKey("users.id"), nullable=False)
     expires_at = Column(DateTime, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    is_revoked = Column(Boolean, default=False)  # ✅ new column
+
+
+
+class Session(Base):
+    """
+    Database model for user sessions.
+
+    Tracks login sessions, expiration, client info, and CSRF token per session.
+    """
+    __tablename__ = "sessions"
+
+    id = Column(String, primary_key=True, index=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    username = Column(String, nullable=False)
+
+    csrf_token = Column(String, nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    created_at = Column(DateTime, nullable=False, default=func.now())
+    last_accessed = Column(DateTime, nullable=True)
+
+    remember = Column(Boolean, default=False)
+
+    user_agent = Column(String, nullable=True)  # Browser / platform
+    ip_address = Column(String, nullable=True)  # Source IP address
+
+    # Relationship
+    user = relationship("User", back_populates="sessions")
+
+    @hybrid_property
+    def device(self):
+        if self.user_agent:
+            ua = user_agents.parse(self.user_agent)
+            return ua.device.family
+        return None
+
+    @hybrid_property
+    def browser(self):
+        if self.user_agent:
+            ua = user_agents.parse(self.user_agent)
+            return f"{ua.browser.family} {ua.browser.version_string}"
+        return None
+
+    @hybrid_property
+    def os(self):
+        if self.user_agent:
+            ua = user_agents.parse(self.user_agent)
+            return f"{ua.os.family} {ua.os.version_string}"
+        return None
+
+    @hybrid_property
+    def location(self):
+        # Placeholder for IP-based geolocation lookup
+        # Implement actual geolocation retrieval based on ip_address
+        return "Unknown Location"
+
+    @hybrid_property
+    def is_current(self):
+        # Placeholder logic for determining if the session is the current one
+        # Implement actual logic based on application context
+        return False

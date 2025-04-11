@@ -5,6 +5,11 @@ import os
 from typing import Optional, Dict, Any
 import json
 
+try:
+    import colorlog
+except ImportError:
+    colorlog = None  # Graceful fallback if colorlog isn't installed
+
 
 class LoggerFactory:
     """Factory for creating and configuring loggers."""
@@ -25,12 +30,6 @@ class LoggerFactory:
                       log_format: Optional[str] = None) -> None:
         """
         Setup logging configuration from a dictionary, JSON file or defaults.
-
-        Args:
-            config: Logging config as a dictionary.
-            config_path: Optional path to a JSON logging config.
-            default_level: Default log level to fall back to.
-            log_format: Format string for default fallback logging.
         """
         if config:
             logging.config.dictConfig(config)
@@ -40,9 +39,30 @@ class LoggerFactory:
             logging.config.dictConfig(config)
         else:
             level = cls._LOG_LEVELS.get(default_level.lower(), logging.INFO)
-            if not log_format:
-                log_format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-            logging.basicConfig(level=level, format=log_format, datefmt='%Y-%m-%d %H:%M:%S')
+
+            if colorlog:
+                handler = colorlog.StreamHandler()
+                formatter = colorlog.ColoredFormatter(
+                    "%(log_color)s%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+                    datefmt='%Y-%m-%d %H:%M:%S',
+                    log_colors={
+                        'DEBUG': 'cyan',
+                        'INFO': 'green',
+                        'WARNING': 'yellow',
+                        'ERROR': 'red',
+                        'CRITICAL': 'bold_red',
+                    }
+                )
+                handler.setFormatter(formatter)
+                root_logger = logging.getLogger()
+                root_logger.setLevel(level)
+                root_logger.handlers = []  # Clear default handlers
+                root_logger.addHandler(handler)
+            else:
+                # Fallback to basicConfig if colorlog isn't available
+                if not log_format:
+                    log_format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+                logging.basicConfig(level=level, format=log_format, datefmt='%Y-%m-%d %H:%M:%S')
 
     @classmethod
     def get_logger(cls, name: str) -> logging.Logger:
@@ -55,4 +75,5 @@ class LoggerFactory:
         Returns:
             Configured logger instance
         """
+
         return logging.getLogger(name)

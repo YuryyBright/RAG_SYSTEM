@@ -3,10 +3,8 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>FILE MANAGER PRO</title>
-
-    <!-- Font Awesome -->
-
+    <title>POWERFULL AI MANAGER | Login</title>
+    <link href="{{ url_for('static', path='dist/img/favicon.ico') }}" rel="shortcut icon" />
     <!-- iCheck Bootstrap -->
     <link rel="stylesheet" href="{{ url_for('static', path='plugins/icheck-bootstrap/icheck-bootstrap.min.css') }}" />
     <link rel="stylesheet" href="{{ url_for('static', path='plugins/fontawesome-free/css/all.min.css') }}" />
@@ -16,20 +14,23 @@
   </head>
   <body class="hold-transition login-page dark-mode">
     <div class="login-box">
-      <!-- /.login-logo -->
-      <div class="card card-outline card-primary">
-        <div class="card-header text-center">
-          <a href="" class="h1">
-            <b>FILE MANAGER</b>
-            PRO
-          </a>
-        </div>
-        <div class="card-body">
-          <p class="login-box-msg">Забагато файлів не буває</p>
+      <!-- Logo -->
+      <div class="login-logo">
+        <a href="/">
+          <b>POWERFUL AI</b>
+          MANAGER
+        </a>
+      </div>
 
-          <form method="post" id="loginForm">
+      <!-- Card -->
+      <div class="card">
+        <div class="card-body login-card-body">
+          <p class="login-box-msg" id="form-title">Sign in to start your session</p>
+
+          <!-- Login Form -->
+          <form id="login-form" action="/api/auth/login" method="post">
             <div class="input-group mb-3">
-              <input type="email" class="form-control" placeholder="Email" id="email" required />
+              <input type="email" class="form-control" placeholder="Email" name="email" required />
               <div class="input-group-append">
                 <div class="input-group-text">
                   <span class="fas fa-envelope"></span>
@@ -37,7 +38,7 @@
               </div>
             </div>
             <div class="input-group mb-3">
-              <input type="password" class="form-control" placeholder="Password" id="password" required />
+              <input type="password" class="form-control" placeholder="Password" name="password" required />
               <div class="input-group-append">
                 <div class="input-group-text">
                   <span class="fas fa-lock"></span>
@@ -45,36 +46,86 @@
               </div>
             </div>
             <div class="row">
+              <div class="col-8">
+                <div class="icheck-primary">
+                  <input type="checkbox" id="remember" name="remember" />
+                  <label for="remember">Remember Me</label>
+                </div>
+              </div>
               <div class="col-4">
-                <button type="submit" class="btn btn-primary btn-block">Вдарити</button>
+                <button type="submit" class="btn btn-primary btn-block">Sign In</button>
               </div>
             </div>
           </form>
 
-          <!-- <div class="social-auth-links text-center mt-2 mb-3">
-            <a href="#" class="btn btn-block btn-primary">
-              <i class="fab fa-facebook mr-2"></i>
-              Sign in using Facebook
-            </a>
-            <a href="#" class="btn btn-block btn-danger">
-              <i class="fab fa-google-plus mr-2"></i>
-              Sign in using Google+
-            </a>
-          </div> -->
-          <!-- /.social-auth-links -->
+          <!-- Register Form (hidden by default) -->
+          <form id="register-form" action="/api/auth/register" method="post" class="d-none">
+            <div class="input-group mb-3">
+              <input type="text" class="form-control" placeholder="Full name" name="name" required />
+              <div class="input-group-append">
+                <div class="input-group-text">
+                  <span class="fas fa-user"></span>
+                </div>
+              </div>
+            </div>
+            <div class="input-group mb-3">
+              <input type="email" class="form-control" placeholder="Email" name="email" required />
+              <div class="input-group-append">
+                <div class="input-group-text">
+                  <span class="fas fa-envelope"></span>
+                </div>
+              </div>
+            </div>
+            <div class="input-group mb-3">
+              <input type="password" class="form-control" placeholder="Password" name="password" required />
+              <div class="input-group-append">
+                <div class="input-group-text">
+                  <span class="fas fa-lock"></span>
+                </div>
+              </div>
+            </div>
+            <div class="input-group mb-3">
+              <input
+                type="password"
+                class="form-control"
+                placeholder="Confirm password"
+                name="password_confirm"
+                required
+              />
+              <div class="input-group-append">
+                <div class="input-group-text">
+                  <span class="fas fa-lock"></span>
+                </div>
+              </div>
+            </div>
+            <div class="row">
+              <div class="col-8">
+                <div class="icheck-primary">
+                  <input type="checkbox" id="agreeTerms" name="terms" required />
+                  <label for="agreeTerms">
+                    I agree to the
+                    <a href="#">terms</a>
+                  </label>
+                </div>
+              </div>
+              <div class="col-4">
+                <button type="submit" class="btn btn-primary btn-block">Register</button>
+              </div>
+            </div>
+          </form>
 
-          <!-- <p class="mb-1">
-            <a href="forgot-password.html">I forgot my password</a>
+          <p class="mb-1">
+            <a href="#" id="forgot-password-link">I forgot my password</a>
           </p>
           <p class="mb-0">
-            <a href="register.html" class="text-center">Register a new membership</a>
-          </p> -->
+            <a href="#" id="toggle-form" class="text-center">Register a new membership</a>
+          </p>
         </div>
-        <!-- /.card-body -->
       </div>
-      <!-- /.card -->
+
+      <!-- Alerts -->
+      <div id="alert-container" class="mt-3"></div>
     </div>
-    <!-- /.login-box -->
 
     <!-- jQuery -->
     <script src="{{ url_for('static', path='plugins/jquery/jquery.min.js') }}"></script>
@@ -82,58 +133,164 @@
     <script src="{{ url_for('static', path='plugins/bootstrap/js/bootstrap.bundle.min.js') }}"></script>
     <!-- App -->
     <script src="{{ url_for('static', path='dist/js/adminlte.min.js') }}"></script>
+    <script src="{{ url_for('static', path='plugins/alertify.js/js/alertify.js') }}"></script>
+    <!-- Authentication script -->
+    <script src="{{ url_for('static', path='/dist/js/pages/auth.js') }}"></script>
     <script>
+      // Enhanced login page script
       $(document).ready(function () {
-        // Handle form submission
-        $("#loginForm").submit(function (event) {
-          event.preventDefault(); // Prevent form from submitting normally
+        // Show session expired message if applicable
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.has("session_expired")) {
+          alertify.error("Your session has expired. Please log in again.");
+        } else if (urlParams.has("logged_out")) {
+          alertify.success("You have been successfully logged out.");
+        }
 
-          // Get email and password values
-          let email = $("#email").val();
-          let password = $("#password").val();
+        // Toggle between login and register forms
+        $("#toggle-form").click(function (e) {
+          e.preventDefault();
 
-          // Basic form validation
-          if (!email || !password) {
-            alert("Please fill in both fields.");
+          if ($("#login-form").hasClass("d-none")) {
+            // Switch to login form
+            $("#login-form").removeClass("d-none");
+            $("#register-form").addClass("d-none");
+            $("#form-title").text("Sign in to start your session");
+            $(this).text("Register a new membership");
+          } else {
+            // Switch to register form
+            $("#login-form").addClass("d-none");
+            $("#register-form").removeClass("d-none");
+            $("#form-title").text("Register a new membership");
+            $(this).text("I already have a membership");
+          }
+        });
+
+        // Handle login form submission
+        $("#login-form").submit(function (e) {
+          e.preventDefault();
+
+          // Disable form during submission
+          const submitBtn = $(this).find('button[type="submit"]');
+          submitBtn.prop("disabled", true).html('<i class="fas fa-spinner fa-spin"></i> Signing in...');
+
+          const email = $(this).find('input[name="email"]').val();
+          const password = $(this).find('input[name="password"]').val();
+          const remember = $(this).find('input[name="remember"]').is(":checked");
+
+          // Use AuthManager's login method
+          AuthManager.loginWithSession(email, password, remember)
+            .then(function (response) {
+              alertify.success("Login successful!");
+              // Redirect to dashboard
+              window.location.href = "/dashboard";
+            })
+            .catch(function (xhr) {
+              // Re-enable the form
+              submitBtn.prop("disabled", false).text("Sign In");
+
+              // Show appropriate error message
+              if (xhr.status === 401) {
+                alertify.error("Invalid email or password. Please try again.");
+              } else if (xhr.status === 403) {
+                alertify.error(
+                  "Access denied (Probably due to account is suspended). Please contact support if you believe this is an error."
+                );
+              } else if (xhr.status === 429) {
+                alertify.error("Too many login attempts. Please try again later.");
+              } else {
+                alertify.error("Login failed: " + (xhr.responseJSON?.detail || "Server error"));
+              }
+            });
+        });
+
+        // Handle register form submission
+        $("#register-form").submit(function (e) {
+          e.preventDefault();
+
+          const submitBtn = $(this).find('button[type="submit"]');
+          submitBtn.prop("disabled", true).html('<i class="fas fa-spinner fa-spin"></i> Registering...');
+
+          const password = $(this).find('input[name="password"]').val();
+          const confirmPassword = $(this).find('input[name="password_confirm"]').val();
+
+          if (password !== confirmPassword) {
+            alertify.error("Passwords do not match!");
+            submitBtn.prop("disabled", false).text("Register");
             return;
           }
 
-          // Email format validation (optional)
-          let emailRegex = /^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,6}$/;
-          if (!emailRegex.test(email)) {
-            alert("Please enter a valid email.");
-            return;
-          }
-
-          // Prepare data to be sent
-          let loginData = {
-            email: email,
+          const formData = {
+            username: $(this).find('input[name="name"]').val(),
+            email: $(this).find('input[name="email"]').val(),
             password: password,
           };
 
-          // Send AJAX request to backend API
           $.ajax({
-            url: "/login/", // URL of your backend login endpoint
-            method: "POST",
+            url: $(this).attr("action"),
+            type: "POST",
             contentType: "application/json",
-            data: JSON.stringify(loginData),
+            data: JSON.stringify(formData),
             success: function (response) {
-              // On success, handle the response (e.g., redirect or show message)
-              if (response.token) {
-                // Store the token in localStorage for future requests
-                localStorage.setItem("accses_token", response.token);
-                console.log(response);
-                // Redirect to dashboard or home page
-                window.location.href = "/"; // Or wherever the user should go after login
+              alertify.success("Registration successful! Please login.");
+              // Switch back to login form
+              $("#login-form").removeClass("d-none");
+              $("#register-form").addClass("d-none");
+              $("#form-title").text("Sign in to start your session");
+              $("#toggle-form").text("Register a new membership");
+
+              // Pre-fill email for convenience
+              $("#login-form").find('input[name="email"]').val(formData.email);
+            },
+            error: function (xhr) {
+              submitBtn.prop("disabled", false).text("Register");
+
+              if (xhr.status === 409) {
+                alertify.error("This email is already registered. Please use a different email or login.");
               } else {
-                alert("Invalid credentials. Please try again.");
+                alertify.error("Registration failed: " + (xhr.responseJSON?.detail || "Server error"));
               }
             },
-            error: function (xhr, status, error) {
-              // Handle error response
-              alert("An error occurred. Please try again later.");
-            },
           });
+        });
+
+        // Handle forgot password with better error handling
+        $("#forgot-password-link").click(function (e) {
+          e.preventDefault();
+
+          // Use a custom dialog for better UX
+          alertify.prompt(
+            "Password Reset",
+            "Enter your email address to receive a password reset link:",
+            "",
+            function (evt, email) {
+              if (!email || !email.includes("@")) {
+                alertify.error("Please enter a valid email address.");
+                return;
+              }
+
+              $.ajax({
+                url: "/api/auth/reset-password",
+                type: "POST",
+                contentType: "application/json",
+                data: JSON.stringify({ email: email }),
+                success: function () {
+                  alertify.success(
+                    "If your email exists in our system, you will receive a password reset link shortly."
+                  );
+                },
+                error: function () {
+                  // Don't reveal if email exists or not
+                  alertify.success(
+                    "If your email exists in our system, you will receive a password reset link shortly."
+                  );
+                },
+              });
+            },
+            function () {
+              // User canceled
+            }
+          );
         });
       });
     </script>
