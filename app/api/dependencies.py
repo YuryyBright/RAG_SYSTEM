@@ -20,6 +20,7 @@ from core.interfaces.indexing import IndexInterface
 from core.interfaces.llm import LLMInterface
 from core.interfaces.reranking import RerankerInterface
 from core.interfaces.theme_repository import ThemeRepositoryInterface
+from core.use_cases.file_processing import FileProcessingUseCase
 
 # Use Cases
 from core.use_cases.query import QueryProcessor
@@ -37,11 +38,10 @@ from adapters.llm.mistral import MistralLLM
 # Infrastructure
 from infrastructure.database.repository.theme_repository import ThemeRepository
 from infrastructure.database.repository.document_repository import DocumentRepository
-from infrastructure.loaders.document_loader import DocumentLoader
+
 from infrastructure.database.repository import get_async_db
 
-# Singleton instance
-document_loader = DocumentLoader()
+
 
 
 # === Infrastructure ===
@@ -100,7 +100,9 @@ def get_document_store(
         embedding_service=embedding_service,
         storage_path=settings.DOCUMENT_STORAGE_PATH
     )
-
+# Dependency to get the file processing use case
+def file_processing_use_case():
+    return FileProcessingUseCase()
 
 # === Use Cases ===
 
@@ -131,8 +133,4 @@ def get_query_processor(
     )
 
 
-# === Utilities ===
 
-def get_document_loader() -> DocumentLoader:
-    """Returns the singleton document loader instance."""
-    return document_loader

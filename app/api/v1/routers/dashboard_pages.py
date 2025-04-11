@@ -126,36 +126,6 @@ async def documents_page(
     )
 
 
-@router.get("/profile", response_class=HTMLResponse)
-async def profile_page(
-        request: Request,
-        current_user: User = Depends(get_current_active_user)
-):
-    """
-    User profile page.
-
-    Parameters
-    ----------
-    request : Request
-        The FastAPI request object
-    current_user : User
-        The current authenticated user
-
-    Returns
-    -------
-    HTMLResponse
-        Rendered user profile template
-    """
-    return templates.TemplateResponse(
-        "user/profile.html",
-        {
-            "request": request,
-            "user": current_user,
-            "page_title": "User Profile",
-            "active_page": "profile"
-        }
-    )
-
 
 @router.get("/settings", response_class=HTMLResponse)
 async def settings_page(

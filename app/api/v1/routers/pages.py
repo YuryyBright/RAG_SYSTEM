@@ -41,6 +41,34 @@ async def home_page(
         }
     )
 
+@router.get("/documents_page", response_class=HTMLResponse)
+async def documents_page(
+        request: Request,
+        current_user: User = Depends(get_current_active_user)
+):
+    """
+    Files management page.
+
+    Parameters
+    ----------
+    request : Request
+        The FastAPI request object
+    current_user : User
+        The current authenticated user from JWT token
+
+    Returns
+    -------
+    HTMLResponse
+        Rendered files page template
+    """
+    return templates.TemplateResponse(
+        "AI/files_proccesor.html",
+        {
+            "request": request,
+            "username": current_user.username,
+            "page_title": "Files"
+        }
+    )
 
 @router.get("/dashboard", response_class=HTMLResponse)
 async def dashboard_page(
@@ -147,21 +175,20 @@ async def profile_page(
     request : Request
         The FastAPI request object
     current_user : User
-        The current authenticated user from JWT token
+        The current authenticated user
 
     Returns
     -------
     HTMLResponse
-        Rendered profile page template
+        Rendered user profile template
     """
     return templates.TemplateResponse(
-        "profile.html",
+        "user/profile.html",
         {
             "request": request,
-            "username": current_user.username,
-            "email": current_user.email,
-            "is_active": current_user.is_active,
-            "page_title": "Profile"
+            "user": current_user,
+            "page_title": "User Profile",
+            "active_page": "profile"
         }
     )
 

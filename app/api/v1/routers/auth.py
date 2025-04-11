@@ -149,38 +149,6 @@ async def read_users_me(
     return current_user
 
 
-# @router.post("/login", response_model=TokenResponse)
-# async def login(
-#         response: Response,
-#         login_data: LoginRequest,
-#         db: AsyncSession = Depends(get_async_db)
-# ):
-#     """Generate an access token using email/password."""
-#     auth_service = AuthService(db)
-#
-#     user = await auth_service.authenticate_user(login_data.email, login_data.password)
-#     if not user:
-#         raise HTTPException(
-#             status_code=status.HTTP_401_UNAUTHORIZED,
-#             detail="Incorrect email or password",
-#         )
-#
-#     access_token, expire = await auth_service.create_user_token(user.id, user.username)
-#     if not access_token:
-#         raise HTTPException(
-#             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-#             detail="Error creating token"
-#         )
-#
-#     return {
-#         "access_token": access_token,
-#         "token_type": "bearer",
-#         "expires_at": expire,
-#         "user_id": user.id,
-#         "username": user.username
-#     }
-
-
 @router.post("/login", response_model=SessionResponse)
 async def login(
         response: Response,

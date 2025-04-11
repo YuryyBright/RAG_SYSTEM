@@ -1,16 +1,10 @@
 <!-- app/templates/dashboard/documents.html -->
-{% extends "base.html" %}
-
-{% block title %}Documents - MyApp{% endblock %}
-{% block page_title %}Document Management{% endblock %}
-
-{% block content %}
+{% extends "base.html" %} {% block title %}Documents - MyApp{% endblock %} {% block page_title %}Document Management{%
+endblock %} {% block content %}
 <div class="container-fluid">
   <p>Here you can manage your documents.</p>
   <!-- Possibly list documents, show upload form, etc. -->
 </div>
-{% endblock %}
-
-{% block scripts %}
+{% endblock %} {% block scripts %}
 <script src="{{ url_for('static', path='js/dashboard_documents.js') }}"></script>
 {% endblock %}

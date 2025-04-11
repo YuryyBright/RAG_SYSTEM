@@ -6,12 +6,11 @@ import tempfile
 import shutil
 from api.schemas.document import DocumentCreate, DocumentResponse
 from core.entities.document import Document
-from app.infrastructure.loaders.document_loader import DocumentLoader
+
 from core.interfaces.embedding import EmbeddingInterface
 from core.interfaces.indexing import IndexInterface
 from app.api.dependencies import (
     get_document_repository,
-    get_document_loader,
     get_embedding_service,
     get_indexing_service
 )
@@ -143,154 +142,154 @@ async def get_document(
         updated_at=document.updated_at
     )
 
-
-@router.delete("/{document_id}")
-async def delete_document(
-        document_id: str,
-        document_repository: DocumentRepository = Depends(get_document_repository),
-        index_service: IndexInterface = Depends(get_indexing_service)
-):
-    """
-    Delete a document.
-
-    Parameters
-    ----------
-    document_id : str
-        The ID of the document to delete.
-    document_repository : DocumentRepository
-        The document repository dependency.
-    index_service : IndexInterface
-        The indexing service dependency.
-
-    Returns
-    -------
-    Dict[str, str]
-        A status message indicating the result of the deletion.
-
-    Raises
-    ------
-    HTTPException
-        If the document is not found.
-    """
-    deleted = await document_repository.delete_document(document_id)
-    if not deleted:
-        raise HTTPException(status_code=404, detail="Document not found")
-
-    await index_service.delete_document(document_id)
-
-    return {"status": "success", "message": f"Document {document_id} deleted"}
-
-
-async def process_document_upload(
-        directory: str,
-        document_loader: DocumentLoader,
-        embedding_service: EmbeddingInterface,
-        index_service: IndexInterface,
-        document_repository: DocumentRepository
-):
-    """
-    Background task to process uploaded documents.
-
-    Parameters
-    ----------
-    directory : str
-        The directory containing the uploaded documents.
-    document_loader : DocumentLoader
-        The document loader dependency.
-    embedding_service : EmbeddingInterface
-        The embedding service dependency.
-    index_service : IndexInterface
-        The indexing service dependency.
-    document_repository : DocumentRepository
-        The document repository dependency.
-    """
-    documents = await document_loader.load_from_directory(directory, recursive=True)
-    documents_with_embeddings = await embedding_service.embed_documents(documents)
-
-    # Save documents to database
-    saved_documents = []
-    for doc in documents_with_embeddings:
-        saved_doc = await document_repository.create_document(
-            content=doc.content,
-            embedding=doc.embedding,
-            owner_id=doc.metadata.get("owner_id", "default_owner")
-        )
-        saved_documents.append(saved_doc)
-
-    # Add to vector index
-    await index_service.add_documents(saved_documents)
-
-    # Clean up
-    shutil.rmtree(directory, ignore_errors=True)
-
-
-@router.post("/upload")
-async def upload_documents(
-        background_tasks: BackgroundTasks,
-        files: List[UploadFile] = File(...),
-        metadata: Optional[str] = Form(None),
-        document_loader: DocumentLoader = Depends(get_document_loader),
-        embedding_service: EmbeddingInterface = Depends(get_embedding_service),
-        index_service: IndexInterface = Depends(get_indexing_service),
-        document_repository: DocumentRepository = Depends(get_document_repository)
-):
-    """
-    Upload multiple document files and index them.
-
-    Parameters
-    ----------
-    background_tasks : BackgroundTasks
-        The background tasks dependency.
-    files : List[UploadFile]
-        The list of files to upload.
-    metadata : Optional[str]
-        Optional metadata for the documents.
-    document_loader : DocumentLoader
-        The document loader dependency.
-    embedding_service : EmbeddingInterface
-        The embedding service dependency.
-    index_service : IndexInterface
-        The indexing service dependency.
-    document_repository : DocumentRepository
-        The document repository dependency.
-
-    Returns
-    -------
-    Dict[str, str]
-        A status message indicating the result of the upload.
-
-    Raises
-    ------
-    HTTPException
-        If there is an error processing the upload.
-    """
-    temp_dir = tempfile.mkdtemp()
-
-    try:
-        meta_dict = {}
-        if metadata:
-            import json
-            meta_dict = json.loads(metadata)
-
-        for file in files:
-            file_path = os.path.join(temp_dir, file.filename)
-            with open(file_path, "wb") as f:
-                shutil.copyfileobj(file.file, f)
-
-        background_tasks.add_task(
-            process_document_upload,
-            temp_dir,
-            document_loader,
-            embedding_service,
-            index_service,
-            document_repository
-        )
-
-        return {
-            "status": "processing",
-            "message": f"Processing {len(files)} files in the background"
-        }
-
-    except Exception as e:
-        shutil.rmtree(temp_dir, ignore_errors=True)
-        raise HTTPException(status_code=500, detail=f"Error processing upload: {str(e)}")
+#
+# @router.delete("/{document_id}")
+# async def delete_document(
+#         document_id: str,
+#         document_repository: DocumentRepository = Depends(get_document_repository),
+#         index_service: IndexInterface = Depends(get_indexing_service)
+# ):
+#     """
+#     Delete a document.
+#
+#     Parameters
+#     ----------
+#     document_id : str
+#         The ID of the document to delete.
+#     document_repository : DocumentRepository
+#         The document repository dependency.
+#     index_service : IndexInterface
+#         The indexing service dependency.
+#
+#     Returns
+#     -------
+#     Dict[str, str]
+#         A status message indicating the result of the deletion.
+#
+#     Raises
+#     ------
+#     HTTPException
+#         If the document is not found.
+#     """
+#     deleted = await document_repository.delete_document(document_id)
+#     if not deleted:
+#         raise HTTPException(status_code=404, detail="Document not found")
+#
+#     await index_service.delete_document(document_id)
+#
+#     return {"status": "success", "message": f"Document {document_id} deleted"}
+#
+#
+# async def process_document_upload(
+#         directory: str,
+#         document_loader: DocumentLoader,
+#         embedding_service: EmbeddingInterface,
+#         index_service: IndexInterface,
+#         document_repository: DocumentRepository
+# ):
+#     """
+#     Background task to process uploaded documents.
+#
+#     Parameters
+#     ----------
+#     directory : str
+#         The directory containing the uploaded documents.
+#     document_loader : DocumentLoader
+#         The document loader dependency.
+#     embedding_service : EmbeddingInterface
+#         The embedding service dependency.
+#     index_service : IndexInterface
+#         The indexing service dependency.
+#     document_repository : DocumentRepository
+#         The document repository dependency.
+#     """
+#     documents = await document_loader.load_from_directory(directory, recursive=True)
+#     documents_with_embeddings = await embedding_service.embed_documents(documents)
+#
+#     # Save documents to database
+#     saved_documents = []
+#     for doc in documents_with_embeddings:
+#         saved_doc = await document_repository.create_document(
+#             content=doc.content,
+#             embedding=doc.embedding,
+#             owner_id=doc.metadata.get("owner_id", "default_owner")
+#         )
+#         saved_documents.append(saved_doc)
+#
+#     # Add to vector index
+#     await index_service.add_documents(saved_documents)
+#
+#     # Clean up
+#     shutil.rmtree(directory, ignore_errors=True)
+#
+#
+# @router.post("/upload")
+# async def upload_documents(
+#         background_tasks: BackgroundTasks,
+#         files: List[UploadFile] = File(...),
+#         metadata: Optional[str] = Form(None),
+#         document_loader: DocumentLoader = Depends(get_document_loader),
+#         embedding_service: EmbeddingInterface = Depends(get_embedding_service),
+#         index_service: IndexInterface = Depends(get_indexing_service),
+#         document_repository: DocumentRepository = Depends(get_document_repository)
+# ):
+#     """
+#     Upload multiple document files and index them.
+#
+#     Parameters
+#     ----------
+#     background_tasks : BackgroundTasks
+#         The background tasks dependency.
+#     files : List[UploadFile]
+#         The list of files to upload.
+#     metadata : Optional[str]
+#         Optional metadata for the documents.
+#     document_loader : DocumentLoader
+#         The document loader dependency.
+#     embedding_service : EmbeddingInterface
+#         The embedding service dependency.
+#     index_service : IndexInterface
+#         The indexing service dependency.
+#     document_repository : DocumentRepository
+#         The document repository dependency.
+#
+#     Returns
+#     -------
+#     Dict[str, str]
+#         A status message indicating the result of the upload.
+#
+#     Raises
+#     ------
+#     HTTPException
+#         If there is an error processing the upload.
+#     """
+#     temp_dir = tempfile.mkdtemp()
+#
+#     try:
+#         meta_dict = {}
+#         if metadata:
+#             import json
+#             meta_dict = json.loads(metadata)
+#
+#         for file in files:
+#             file_path = os.path.join(temp_dir, file.filename)
+#             with open(file_path, "wb") as f:
+#                 shutil.copyfileobj(file.file, f)
+#
+#         background_tasks.add_task(
+#             process_document_upload,
+#             temp_dir,
+#             document_loader,
+#             embedding_service,
+#             index_service,
+#             document_repository
+#         )
+#
+#         return {
+#             "status": "processing",
+#             "message": f"Processing {len(files)} files in the background"
+#         }
+#
+#     except Exception as e:
+#         shutil.rmtree(temp_dir, ignore_errors=True)
+#         raise HTTPException(status_code=500, detail=f"Error processing upload: {str(e)}")

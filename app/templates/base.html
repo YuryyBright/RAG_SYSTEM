@@ -26,6 +26,9 @@
   <body
     class="hold-transition dark-mode sidebar-mini layout-fixed layout-navbar-fixed layout-footer-fixed requires-auth"
   >
+    <!-- Alerts (Fixed position for global alerts) -->
+    <div id="alert-container" style="position: fixed; top: 70px; right: 20px; z-index: 1055"></div>
+
     <div class="wrapper">
       <!-- Preloader -->
       <!-- <div class="preloader flex-column justify-content-center align-items-center">
@@ -41,6 +44,7 @@
       <!-- Content Wrapper. Contains page content -->
       <div class="content-wrapper">
         <!-- Content Header (Page header) -->
+
         <section class="content-header">
           <div class="container-fluid">
             {% block header %}
@@ -55,6 +59,7 @@
                 </ol>
               </div>
             </div>
+
             {% endblock %}
           </div>
           <!-- /.container-fluid -->
@@ -91,10 +96,11 @@
     <script src="{{ url_for('static', path='dist/js/pages/auth.js') }}"></script>
     <!-- In your base template or protected pages -->
     <!-- Request Helper -->
-    <script src="{{ url_for('static', path='dist/js/request-helper.js') }}"></script>
+    <script src="{{ url_for('static', path='dist/js/pages/request-helper.js') }}"></script>
     <script>
       // Add CSRF token to all forms
       $(document).ready(function () {
+        alertify.set("notifier", "position", "top-right");
         const csrfToken = AuthManager.getCsrfToken();
         if (csrfToken) {
           // Add hidden input to all forms
@@ -106,6 +112,7 @@
         }
       });
     </script>
+
     {% block scripts %}
     <!-- Additional script content can be added here -->
     {% endblock %}

@@ -79,7 +79,6 @@ class SessionRepository:
                 user_agent=user_agent,
                 ip_address=ip_address,
             )
-
             self.db.add(new_session)
             await self.db.commit()
 

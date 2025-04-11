@@ -4,7 +4,7 @@ import logging
 from getpass import getpass
 from typing import Optional
 
-from sqlalchemy import inspect, text
+from sqlalchemy import inspect, text, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from passlib.context import CryptContext
@@ -14,11 +14,11 @@ from app.infrastructure.database.repository import AsyncSessionLocal
 from app.utils.logger_util import get_logger
 
 # Configure logger
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = get_logger(__name__)
 
 # Password hashing context
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
 
 def get_password_hash(password: str) -> str:
     """
@@ -35,6 +35,7 @@ def get_password_hash(password: str) -> str:
         The hashed password.
     """
     return pwd_context.hash(password)
+
 
 async def add_user(db: AsyncSession, username: str, email: str, password: str, is_admin: bool = False) -> None:
     """
@@ -73,6 +74,7 @@ async def add_user(db: AsyncSession, username: str, email: str, password: str, i
     await db.refresh(user)
     logger.info(f"User '{username}' created successfully.")
 
+
 async def remove_user(db: AsyncSession, username: str) -> None:
     """
     Remove a user by their username.
@@ -97,6 +99,7 @@ async def remove_user(db: AsyncSession, username: str) -> None:
     await db.commit()
     logger.info(f"User '{username}' deleted successfully.")
 
+
 async def list_users(db: AsyncSession) -> None:
     """
     Log all users in the database.
@@ -112,6 +115,7 @@ async def list_users(db: AsyncSession) -> None:
     for row in users:
         role = "Admin" if row.is_admin else "User"
         logger.info(f" - {row.username} ({row.email}) [{role}]")
+
 
 async def list_tables(db: AsyncSession) -> None:
     """
@@ -129,6 +133,7 @@ async def list_tables(db: AsyncSession) -> None:
         result = await db.execute(text(f"SELECT COUNT(*) FROM {table}"))
         count = result.scalar()
         logger.info(f" - {table}: {count} rows")
+
 
 async def find_user(db: AsyncSession, username: str) -> Optional[User]:
     """
@@ -157,6 +162,7 @@ async def find_user(db: AsyncSession, username: str) -> Optional[User]:
         logger.warning("User not found.")
     return user
 
+
 async def toggle_user_active(db: AsyncSession, username: str, active: bool) -> None:
     """
     Toggle the active status of a user.
@@ -182,6 +188,35 @@ async def toggle_user_active(db: AsyncSession, username: str, active: bool) -> N
     user.is_active = active
     await db.commit()
     logger.info(f"User '{username}' active status set to {active}.")
+
+
+async def change_user_password(db: AsyncSession, username: str) -> None:
+    """
+    Change the password for a given user.
+
+    Parameters
+    ----------
+    db : AsyncSession
+        The database session.
+    username : str
+        The username of the user whose password is to be changed.
+    """
+    result = await db.execute(select(User).where(User.username == username))
+    user = result.scalar_one_or_none()
+    if not user:
+        logger.warning("User not found.")
+        return
+
+    new_password = getpass("New Password: ")
+    confirm_password = getpass("Confirm New Password: ")
+    if new_password != confirm_password:
+        logger.warning("Passwords do not match.")
+        return
+
+    user.hashed_password = get_password_hash(new_password)
+    await db.commit()
+    logger.info(f"Password for user '{username}' has been updated.")
+
 
 async def main_async(args):
     """
@@ -215,9 +250,11 @@ async def main_async(args):
 
         elif args.command == "toggle_active":
             await toggle_user_active(db, args.username, args.active)
-
+        elif args.command == "change_password":
+            await change_user_password(db, args.username)
         else:
             print("Unknown command")
+
 
 def main():
     """
@@ -230,7 +267,8 @@ def main():
     add_user_cmd.add_argument("username", type=str)
     add_user_cmd.add_argument("email", type=str)
     add_user_cmd.add_argument("--admin", action="store_true", help="Grant admin privileges")
-
+    change_pw_cmd = subparsers.add_parser("change_password", help="Change user password")
+    change_pw_cmd.add_argument("username", type=str)
     rm_user_cmd = subparsers.add_parser("remove_user", help="Remove a user")
     rm_user_cmd.add_argument("username", type=str)
 
@@ -246,6 +284,7 @@ def main():
 
     args = parser.parse_args()
     asyncio.run(main_async(args))
+
 
 if __name__ == "__main__":
     main()
