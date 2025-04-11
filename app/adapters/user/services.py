@@ -611,37 +611,66 @@ class UserService:
         """
         Generate a data export for a user and return the file for immediate download.
         """
-        # Simulated data
-        export_data = {
-            "user_id": user.id,
-            "email": user.email,
-            "exported_at": datetime.utcnow().isoformat()
-        }
+        try:
 
-        # File path
-        export_id = str(uuid.uuid4())
-        filename = f"user_export_{user.id}.json"
-        export_path = Path(tempfile.gettempdir()) / filename
+            # Create more comprehensive export data
+            export_data = {
+                "user_info": {
+                    "user_id": user.id,
+                    "email": user.email,
+                    # "name": user.name,
+                    # "timezone": user.timezone,
+                    "created_at": user.created_at.isoformat() if user.created_at else None,
+                    # "last_login": user.last_login.isoformat() if user.last_login else None
+                },
+                "export_metadata": {
+                    "exported_at": datetime.utcnow().isoformat(),
+                    "export_version": "1.0"
+                }
+            }
 
-        # Write JSON export
-        with open(export_path, "w", encoding="utf-8") as f:
-            json.dump(export_data, f, indent=2)
+            # Use a more reliable directory
+            export_dir = Path("./exports")
+            export_dir.mkdir(exist_ok=True)
+
+            # Generate unique filename
+            filename = f"user_export_{user.id}_{int(datetime.utcnow().timestamp())}.json"
+            export_path = export_dir / filename
+            logger.info(f"Writing export to {export_path}")
+            # Write JSON export
+            with open(export_path, "w", encoding="utf-8") as f:
+                json.dump(export_data, f, indent=2)
+
+            # Log activity
+            await self.activity_repo.create_activity(
+                user.id,
+                "data_export_downloaded",
+                f"Downloaded user data export: {filename}"
+            )
+
+            # Return file with explicit headers
+            headers = {
+                "Content-Disposition": f"attachment; filename={filename}",
+                "Access-Control-Expose-Headers": "Content-Disposition"
+            }
+            logger.info(f"File created successfully at {export_path}, size: {export_path.stat().st_size} bytes")
+            # Log activity
+            await self.activity_repo.create_activity(
+                user.id,
+                "data_export_downloaded",
+                "Downloaded user data export"
+            )
+            return FileResponse(
+                path=str(export_path),
+                filename=filename,
+                media_type="application/octet-stream",  # Use octet-stream to force download
+                headers=headers
+            )
+        except Exception as e:
+            logger.error(f"Error generating export: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Export generation failed: {str(e)}")
 
 
-
-        # Log activity
-        await self.activity_repo.create_activity(
-            user.id,
-            "data_export_downloaded",
-            "Downloaded user data export"
-        )
-
-        # Return the actual file as response
-        return FileResponse(
-            path=export_path,
-            filename=filename,
-            media_type="application/json"
-        )
     async def _process_data_export(self, user: User, job_id: str) -> None:
         """
         Background task to process data export.
@@ -677,6 +706,7 @@ class UserService:
                     "updated_at": datetime.utcnow().isoformat(),
                     "error": str(e)
                 }, f)
+
     async def check_export_status(self, user: User, job_id: str) -> Dict[str, Any]:
         """
         Check the status of a data export job.

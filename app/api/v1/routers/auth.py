@@ -197,7 +197,11 @@ async def login(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
         )
-
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User account disabled",
+        )
     # Create session
     session_id, csrf_token, expire = await auth_service.create_user_session(
         user.id,
