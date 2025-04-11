@@ -273,12 +273,7 @@ async def request_data_export(
 ):
     """Request an export of all user data."""
     service = UserService(db)
-    job_id = await service.schedule_data_export(current_user, background_tasks)
-    return {
-        "status": "success",
-        "message": "Data export job scheduled",
-        "job_id": job_id
-    }
+    return await service.generate_data_export(current_user)
 
 
 @router.get("/export/{job_id}", response_model=dict)

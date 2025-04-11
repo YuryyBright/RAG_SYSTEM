@@ -41,14 +41,6 @@ async def login_page(request: Request,
                 "page_title": "Login"
             }
         )
-    else:
-        # Use the AuthService directly instead of get_current_active_user
-        auth_service = AuthService(db)
-        user = await auth_service.verify_token(token)
-
-        print('user', user)
-        if user and user.is_active:
-            return RedirectResponse(url="/dashboard", status_code=HTTP_302_FOUND)
 
 
 @router.get("/register", response_class=HTMLResponse)
@@ -124,28 +116,6 @@ async def reset_password_page(request: Request, token: str):
             "page_title": "Reset Password"
         }
     )
-
-
-@router.get("/logout")
-async def logout_page(request: Request, response: Response):
-    """
-    Logout route.
-
-    Parameters
-    ----------
-    request : Request
-        The FastAPI request object
-    response : Response
-        The response object for setting cookies
-
-    Returns
-    -------
-    RedirectResponse
-        Redirect to login page
-    """
-    response = RedirectResponse(url="/auth/login", status_code=HTTP_302_FOUND)
-    response.delete_cookie(key="access_token")
-    return response
 
 
 # AJAX Routes for authentication

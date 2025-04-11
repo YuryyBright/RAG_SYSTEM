@@ -1,3 +1,5 @@
+import asyncio
+import tempfile
 from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Any
 import json
@@ -7,8 +9,7 @@ from pathlib import Path
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import HTTPException, status, BackgroundTasks
-from sqlalchemy import func, and_, desc
-
+from fastapi.responses import FileResponse
 from app.api.schemas.user_api import (
     ProfileUpdate, PasswordChange, ApiKeyCreate, ApiKeyResponse,
     UserStats, UserActivityResponse, SessionInfo, NotificationSettings
@@ -606,6 +607,76 @@ class UserService:
 
         return job_id
 
+    async def generate_data_export(self, user: User) -> FileResponse:
+        """
+        Generate a data export for a user and return the file for immediate download.
+        """
+        # Simulated data
+        export_data = {
+            "user_id": user.id,
+            "email": user.email,
+            "exported_at": datetime.utcnow().isoformat()
+        }
+
+        # File path
+        export_id = str(uuid.uuid4())
+        filename = f"user_export_{user.id}.json"
+        export_path = Path(tempfile.gettempdir()) / filename
+
+        # Write JSON export
+        with open(export_path, "w", encoding="utf-8") as f:
+            json.dump(export_data, f, indent=2)
+
+
+
+        # Log activity
+        await self.activity_repo.create_activity(
+            user.id,
+            "data_export_downloaded",
+            "Downloaded user data export"
+        )
+
+        # Return the actual file as response
+        return FileResponse(
+            path=export_path,
+            filename=filename,
+            media_type="application/json"
+        )
+    async def _process_data_export(self, user: User, job_id: str) -> None:
+        """
+        Background task to process data export.
+
+        Parameters
+        ----------
+        user : User
+            The user for whom data is being exported.
+        job_id : str
+            The unique job identifier.
+        """
+        status_file = Path("exports") / f"{job_id}.status"
+
+        try:
+            # Simulate export steps
+            for progress in range(0, 101, 20):
+                await asyncio.sleep(1)  # Simulate time-consuming export work
+
+                with open(status_file, "w") as f:
+                    json.dump({
+                        "status": "in_progress" if progress < 100 else "completed",
+                        "user_id": user.id,
+                        "updated_at": datetime.utcnow().isoformat(),
+                        "progress": progress
+                    }, f)
+
+            # Optionally notify the user or update other systems
+        except Exception as e:
+            with open(status_file, "w") as f:
+                json.dump({
+                    "status": "failed",
+                    "user_id": user.id,
+                    "updated_at": datetime.utcnow().isoformat(),
+                    "error": str(e)
+                }, f)
     async def check_export_status(self, user: User, job_id: str) -> Dict[str, Any]:
         """
         Check the status of a data export job.

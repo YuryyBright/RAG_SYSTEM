@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Response, Cookie,
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
-
+from fastapi import Header
 from app.adapters.auth.service import AuthService
 from app.infrastructure.database.repository import get_async_db
 from app.infrastructure.database.db_models import User
@@ -81,30 +81,61 @@ async def login_for_access_token(
 
 @router.post("/logout")
 async def logout(
-        response: Response,
-        request: Request,
-        current_user: Optional[User] = Depends(get_current_active_user),
-        token: Optional[str] = Depends(oauth2_scheme),
-        session_id: Optional[str] = Cookie(None, alias=COOKIE_NAME),
-        db: AsyncSession = Depends(get_async_db)
+    response: Response,
+    request: Request,
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Logout by invalidating the token and/or session cookie."""
+    """
+    Logout the user using cookie-based session authentication and CSRF protection.
+
+    This endpoint:
+    - Reads session ID and CSRF token from cookies.
+    - Verifies that the CSRF token matches the one stored in the session.
+    - Invalidates the session on the server and clears client-side cookies.
+
+    Args:
+        response: HTTP response object to clear cookies.
+        request: HTTP request object to read cookies.
+        db: Async database session.
+
+    Returns:
+        JSON response indicating successful logout.
+
+    Raises:
+        HTTPException: If session is missing or CSRF validation fails.
+    """
     auth_service = AuthService(db)
 
-    # Clear session cookies
+    session_id = request.cookies.get(COOKIE_NAME)
+    csrf_token = request.cookies.get(CSRF_COOKIE_NAME)
+
+    if not session_id:
+        logger.warning("Logout attempted without session cookie.")
+        raise HTTPException(status_code=401, detail="No active session")
+
+    if not csrf_token:
+        logger.warning(f"Missing CSRF cookie for session {session_id[:8]}...")
+        raise HTTPException(status_code=403, detail="Missing CSRF token")
+
+    # Validate CSRF token against stored session token
+    valid_csrf = await auth_service.get_csrf_token_for_session(session_id)
+    if csrf_token != valid_csrf:
+        logger.warning(f"CSRF token mismatch during logout for session {session_id[:8]}...")
+        raise HTTPException(status_code=403, detail="Invalid CSRF token")
+
+    # Validate session and get current user
+    current_user = await auth_service.verify_session(session_id, csrf_token)
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Invalid session")
+
+    # Clear cookies and invalidate session
     clear_auth_cookies(response)
-
-    # If API token provided, invalidate it
-    if token and current_user:
-        success = await auth_service.logout_user(current_user.id, token)
-        if not success:
-            logger.warning(f"Failed to invalidate token for user {current_user.id}")
-
-    # If session cookie provided, invalidate it
-    if session_id:
-        await auth_service.invalidate_session(session_id)
-
+    await auth_service.invalidate_session(session_id)
+    await auth_service.activity_repo.create_activity(current_user.id, "logout", "User logged out")
+    logger.info(f"User {current_user.username} logged out successfully")
     return {"detail": "Successfully logged out"}
+
+
 
 
 
@@ -157,7 +188,7 @@ async def login(
         login_data: LoginRequest,
         db: AsyncSession = Depends(get_async_db)
 ):
-    """Login for web interface with cookie-based authentication."""
+    """Login for web interface with cookie-based authentication and token support."""
     auth_service = AuthService(db)
 
     user = await auth_service.authenticate_user(login_data.email, login_data.password)
@@ -172,7 +203,7 @@ async def login(
         user.id,
         user.username,
         remember=login_data.remember,
-        request=request  # ← Pass the FastAPI Request
+        request=request
     )
 
     if not session_id:
@@ -181,13 +212,27 @@ async def login(
             detail="Error creating session"
         )
 
-    # Set cookies
+    # Create JWT token and store it
+    access_token, token_expiry = await auth_service.create_user_token(
+        user.id, user.username
+    )
+    if not access_token:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error creating access token"
+        )
+
+    # Set session and CSRF cookies
     create_session_cookie(response, session_id, expire, True, True)
     set_csrf_cookie(response, csrf_token, False, True)
+
     await auth_service.activity_repo.create_activity(user.id, "login", "User logged in")
+
     return {
         "csrf_token": csrf_token,
         "expires_at": expire,
+        "access_token": access_token,           # <- NEW FIELD
+        "access_token_expires_at": token_expiry, # <- OPTIONAL
         "user_id": user.id,
         "username": user.username
     }

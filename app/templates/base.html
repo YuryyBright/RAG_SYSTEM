@@ -90,6 +90,8 @@
     <!-- Authentication script - MUST load before other page scripts -->
     <script src="{{ url_for('static', path='dist/js/pages/auth.js') }}"></script>
     <!-- In your base template or protected pages -->
+    <!-- Request Helper -->
+    <script src="{{ url_for('static', path='dist/js/request-helper.js') }}"></script>
     <script>
       // Add CSRF token to all forms
       $(document).ready(function () {

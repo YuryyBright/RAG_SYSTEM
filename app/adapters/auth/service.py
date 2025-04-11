@@ -153,6 +153,36 @@ class AuthService:
             raise HTTPException(status_code=404, detail="User not found")
 
         return user
+    async def get_csrf_token_for_session(self, session_id: str) -> Optional[str]:
+        """
+        Retrieve the CSRF token associated with a given session ID.
+
+        Parameters
+        ----------
+        session_id : str
+            The session ID from the client cookie.
+
+        Returns
+        -------
+        Optional[str]
+            The stored CSRF token if found, else None.
+        """
+        try:
+            session = await self.session_repo.get_session(session_id)
+
+            if not session:
+                logger.warning(f"Session not found while fetching CSRF token: {session_id[:8]}...")
+                return None
+
+            csrf_token = session.get("csrf_token")
+
+            if not csrf_token:
+                logger.warning(f"No CSRF token found in session: {session_id[:8]}...")
+
+            return csrf_token
+        except Exception as e:
+            logger.error(f"Error retrieving CSRF token from session: {e}")
+            return None
 
     async def create_user_token(self, user_id: str, username: str) -> Tuple[Optional[str], Optional[datetime]]:
         """
