@@ -1,3 +1,4 @@
+
 rag_system/
 ├── app/
 │   ├── __init__.py
@@ -11,6 +12,7 @@ rag_system/
 │   │   │   ├── document.py
 │   │   │   ├── embedding.py
 │   │   │   ├── query.py
+│   │   │   ├── theme.py             # New theme entity
 │   │   │   └── user.py
 │   │   ├── interfaces/              # Interfaces/abstractions
 │   │   │   ├── __init__.py
@@ -19,13 +21,15 @@ rag_system/
 │   │   │   ├── embedding.py
 │   │   │   ├── indexing.py
 │   │   │   ├── llm.py
-│   │   │   └── reranking.py
-│   │   ├── templates/              # templates/
+│   │   │   ├── reranking.py
+│   │   │   └── theme_repository.py  # New theme repository interface
+│   │   ├── templates/               # templates/
 │   │   │   ├── __init__.py
 │   │   │   └── templates.py
-│   │   ├── use_cases/              # use_cases/
+│   │   ├── use_cases/               # use_cases/
 │   │   │   ├── __init__.py
-│   │   └── └── query.py.py
+│   │   │   ├── query.py
+│   │   │   └── theme.py             # New theme use cases
 │   ├── adapters/                    # Implementation of interfaces
 │   │   ├── __init__.py
 │   │   ├── auth/
@@ -50,20 +54,24 @@ rag_system/
 │   │   ├── reranking/
 │   │   │   ├── __init__.py
 │   │   │   └── cross_encoder.py
-│   │   └── storage/
+│   │   ├── storage/
+│   │   │   ├── __init__.py
+│   │   │   └── document_store.py
+│   │   └── theme/                   # New theme adapter
 │   │       ├── __init__.py
-│   │       └── document_store.py
+│   │       └── repository.py
 │   │
 │   ├── infrastructure/                   # External interfaces (DB, file storage, APIs)
 │   │   ├── database/
-│   │   │    ├── __init__.py            # SQLAlchemy models
-│   │   │    ├── db_models.py             # SQLAlchemy models
+│   │   │    ├── __init__.py            
+│   │   │    ├── db_models.py             # SQLAlchemy models (updated with theme models)
 │   │   │    └── repository/
 │   │   │        ├── user_repository.py
 │   │   │        ├── token_repository.py
 │   │   │        ├── session_repository.py
 │   │   │        ├── apikey_repository.py
 │   │   │        ├── activity_repository.py
+│   │   │        ├── theme_repository.py  # New theme repository implementation
 │   │   │        └── stats_repository.py
 │   │   ├── loaders/
 │   │   │   ├── __init__.py
@@ -73,20 +81,26 @@ rag_system/
 │   │   ├── cache/
 │   │   │   ├── __init__.py
 │   │   │   └── redis_cache.py
-│   │   └── logging/                 # New logging infrastructure
+│   │   ├── theme_storage/              # New module for theme export/import
+│   │   │   ├── __init__.py
+│   │   │   ├── exporter.py
+│   │   │   └── importer.py
+│   │   └── logging/                   
 │   │       ├── __init__.py
-│   │       ├── logger.py            # Core logging functionality
-│   │       └── formatters.py        # Custom formatters if needed
+│   │       ├── logger.py            
+│   │       └── formatters.py        
 │   │
 │   ├── api/                         # API layer
 │   │   ├── __init__.py
-│   │   ├── dependencies.py          # FastAPI dependencies
+│   │   ├── dependencies.py          # FastAPI dependencies (updated with theme dependencies)
 │   │   ├── middlewares.py           # Custom middlewares including RequestLoggingMiddleware
 │   │   ├── schemas/                 # API schemas (Pydantic models)
 │   │   │   ├── __init__.py
 │   │   │   ├── auth.py
 │   │   │   ├── document.py
 │   │   │   ├── pages.py
+│   │   │   ├── theme.py            # New theme schemas
+│   │   │   ├── chat.py             # Updated chat schemas for theme support
 │   │   │   └── query.py
 │   │   ├── v1/
 │   │   │    ├── __init__.py
@@ -98,6 +112,8 @@ rag_system/
 │   │   │        ├── dashboard_pages.py
 │   │   │        ├── documents.py
 │   │   │        ├── files.py
+│   │   │        ├── themes.py       # New theme API endpoints
+│   │   │        ├── theme_pages.py  # New theme UI pages
 │   │   │        ├── user_api.py
 │   │   │        └── queries.py
 │   │   ├──  dependencies.py
@@ -105,13 +121,19 @@ rag_system/
 │   │   └──  middlewares.py
 │   ├── static/                      # Static assets for web UI
 │   │   ├── css/
+│   │   │   └── theme.css           # New CSS for theme UI
 │   │   ├── js/
+│   │   │   └── theme-manager.js    # New JS for theme UI interactions
 │   │   └── images/
 │   │
 │   └── templates/                   # Jinja templates for web UI
 │       ├── base.html
 │       ├── components/
+│       │   └── theme_card.html     # Reusable theme component
 │       └── pages/
+│           ├── themes.html         # Theme management page
+│           ├── theme_detail.html   # Single theme view
+│           └── theme_chat.html     # Chat with theme page
 │
 ├── utils/                           # Utility functions
 │   ├── __init__.py
@@ -119,19 +141,22 @@ rag_system/
 │   ├── file_handlers.py
 │   ├── text_processors.py
 │   ├── validators.py
-│   └── logger_util.py               # Helper for accessing loggers
+│   ├── theme_utils.py              # New theme utility functions
+│   └── logger_util.py               
 │
 ├── data/                            # Data storage
 │   ├── uploads/                     # User uploaded files
 │   ├── processed/                   # Processed documents
+│   ├── themes/                      # Theme exports and downloads
 │   └── embeddings/                  # Stored embeddings (if file-based)
 │
 ├── logs/                            # Log files directory
-│   └── .gitkeep                     # To keep directory in git but ignore log files
+│   └── .gitkeep                     
 │
 ├── scripts/                         # Utility scripts
 │   ├── setup_db.py                  # Database setup
 │   ├── generate_embeddings.py       # Batch embedding generation
+│   ├── export_themes.py             # Batch theme export script
 │   └── run_admin.py                 # CLI entrypoint script
 │
 ├── tests/                           # Tests
@@ -139,12 +164,17 @@ rag_system/
 │   ├── conftest.py
 │   ├── unit/
 │   │   ├── core/
+│   │   │   └── test_theme_use_cases.py  # Tests for theme use cases
 │   │   ├── adapters/
+│   │   │   └── test_theme_repository.py # Tests for theme repository
 │   │   └── api/
+│   │       └── test_theme_routes.py     # Tests for theme API routes
 │   └── integration/
+│       └── test_theme_workflow.py       # End-to-end theme tests
 │
-├── alembic/                         # Database migrations (if using SQLAlchemy)
+├── alembic/                         # Database migrations
 │   ├── versions/
+│   │   └── xxxx_add_theme_models.py # Migration for theme tables
 │   └── env.py
 │
 ├── docker/                          # Docker configuration
@@ -155,5 +185,5 @@ rag_system/
 ├── .env.example                     # Example environment variables
 ├── .gitignore                       # Including entries for log files
 ├── pyproject.toml                   # Modern Python project configuration
-├── requirements.txt                 # Updated with logging packages
+├── requirements.txt                 # Updated with needed packages
 └── README.md

@@ -193,7 +193,9 @@
               if (xhr.status === 401) {
                 alertify.error("Invalid email or password. Please try again.");
               } else if (xhr.status === 403) {
-                alertify.error("Access denied. Please contact support if you believe this is an error.");
+                alertify.error(
+                  "Access denied (Probably due to account is suspended). Please contact support if you believe this is an error."
+                );
               } else if (xhr.status === 429) {
                 alertify.error("Too many login attempts. Please try again later.");
               } else {

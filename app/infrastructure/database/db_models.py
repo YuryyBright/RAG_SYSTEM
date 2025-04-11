@@ -58,6 +58,8 @@ class User(Base):
     sessions = relationship("Session", back_populates="user", cascade="all, delete-orphan")
     tokens = relationship("Token", backref="user", cascade="all, delete-orphan")
     activities = relationship("UserActivity", back_populates="user", cascade="all, delete-orphan")
+    # Add this relationship to User class
+    themes = relationship("Theme", back_populates="owner", cascade="all, delete-orphan")
 
 class UserActivity(Base):
     """
@@ -186,6 +188,114 @@ class DocumentMetadata(Base):
     document = relationship("Document", back_populates="document_metadata")
 
 
+# Add to db_models.py
+class Theme(Base):
+    """
+    Theme model for grouping documents.
+
+    Attributes
+    ----------
+    id : str
+        Unique identifier for the theme (UUID).
+    name : str
+        Name of the theme.
+    description : str
+        Description of the theme.
+    is_public : bool
+        Flag indicating if the theme is publicly accessible.
+    owner_id : str
+        ID of the user who owns the theme.
+    created_at : datetime
+        Timestamp when the theme was created.
+    updated_at : datetime
+        Timestamp when the theme was last updated.
+    """
+    __tablename__ = "themes"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    name = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+    is_public = Column(Boolean, default=False)
+    owner_id = Column(String, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # Relationships
+    owner = relationship("User", back_populates="themes")
+    documents = relationship("ThemeDocument", back_populates="theme", cascade="all, delete-orphan")
+    shared_with = relationship("ThemeShare", back_populates="theme", cascade="all, delete-orphan")
+
+# Junction table for theme-document relationship
+class ThemeDocument(Base):
+    """
+    Junction table linking themes to documents.
+
+    This table establishes a many-to-many relationship between themes and documents,
+    allowing a document to belong to multiple themes and a theme to contain multiple documents.
+
+    Attributes
+    ----------
+    theme_id : str
+        The ID of the theme to which the document is linked.
+    document_id : str
+        The ID of the document linked to the theme.
+    added_at : datetime
+        The timestamp when the document was added to the theme.
+    theme : Theme
+        The theme associated with this link (relationship).
+    document : Document
+        The document associated with this link (relationship).
+    """
+    __tablename__ = "theme_documents"
+
+    theme_id = Column(String, ForeignKey("themes.id"), primary_key=True)
+    document_id = Column(String, ForeignKey("documents.id"), primary_key=True)
+    added_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # Relationships
+    theme = relationship("Theme", back_populates="documents")
+    document = relationship("Document")
+
+class ThemeShare(Base):
+    """
+    Table for tracking theme shares between users.
+
+    This table allows themes to be shared between users with specific permissions.
+
+    Attributes
+    ----------
+    id : str
+        Unique identifier for the theme share (UUID).
+    theme_id : str
+        The ID of the theme being shared.
+    shared_by : str
+        The ID of the user who shared the theme.
+    shared_with : str
+        The ID of the user with whom the theme is shared.
+    created_at : datetime
+        The timestamp when the theme was shared.
+    permission : str
+        The permission level for the shared theme ("read" or "edit").
+    theme : Theme
+        The theme associated with this share (relationship).
+    owner : User
+        The user who shared the theme (relationship).
+    recipient : User
+        The user with whom the theme is shared (relationship).
+    """
+    __tablename__ = "theme_shares"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    theme_id = Column(String, ForeignKey("themes.id"), nullable=False)
+    shared_by = Column(String, ForeignKey("users.id"), nullable=False)
+    shared_with = Column(String, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    permission = Column(String, default="read")  # "read" or "edit"
+
+    # Relationships
+    theme = relationship("Theme", back_populates="shared_with")
+    owner = relationship("User", foreign_keys=[shared_by])
+    recipient = relationship("User", foreign_keys=[shared_with])
 class Token(Base):
     """Token model for authentication.
 

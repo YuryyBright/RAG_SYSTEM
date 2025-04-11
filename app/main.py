@@ -16,7 +16,8 @@ from starlette.responses import RedirectResponse
 from starlette.status import HTTP_302_FOUND
 
 from adapters.auth.service import AuthService
-from api.v1.routers import auth, documents, queries, files, pages, auth_pages, dashboard_pages, admin_pages, user_api
+from api.v1.routers import auth, documents, queries, files, pages, auth_pages, dashboard_pages, admin_pages, user_api, \
+    theme
 
 from app.config import settings
 from app.api.middlewares import setup_middlewares
@@ -57,6 +58,7 @@ app.include_router(auth_pages.router, prefix="/auth", tags=["Authentication Page
 app.include_router(dashboard_pages.router, prefix="/dashboard", tags=["Dashboard Pages"])
 app.include_router(admin_pages.router, prefix="/admin", tags=["Admin Pages"])
 api_router.include_router(user_api.router, prefix="/user", tags=["User"])
+api_router.include_router(theme.router, prefix="/themes", tags=["Themes"])
 app.include_router(api_router)
 
 # Serve static files from ./static directory if it exists
