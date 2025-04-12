@@ -1,4 +1,7 @@
 # app/api/routes/files.py
+from pathlib import Path
+from uuid import uuid4
+
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
@@ -19,47 +22,142 @@ from api.schemas.files import (
 )
 from app.core.use_cases.file_processing import FileProcessingUseCase
 from app.api.dependencies import file_processing_use_case
+
+
 router = APIRouter()
 file_manager = FileManager()
 
 
-@router.post("/", response_model=FileProcessingResponse)
+# @router.post("/", response_model=FileProcessingResponse)
+# async def process_files(
+#         request: FileProcessingRequest,
+#         file_processing_use_case: FileProcessingUseCase = Depends(file_processing_use_case)
+# ):
+#     """
+#     Process files in a directory for the RAG system.
+#
+#     This endpoint:
+#     1. Reads different types of files
+#     2. Detects language
+#     3. Prepares text for the vector database
+#     4. Provides a detailed report of processing results
+#     """
+#     try:
+#         documents, report = await file_processing_use_case.process_directory(
+#             request.directory_path,
+#             recursive=request.recursive,
+#             metadata=request.additional_metadata
+#         )
+#
+#         return FileProcessingResponse(
+#             success=True,
+#             message=f"Successfully processed {len(documents)} documents",
+#             documents_count=len(documents),
+#             report=FileProcessingReport(
+#                 summary=ProcessedFileSummary(**report["summary"]),
+#                 details=report["details"],
+#                 recommendations=FileProcessingRecommendations(**report["recommendations"])
+#             )
+#         )
+#     except ValueError as e:
+#         raise HTTPException(status_code=400, detail=str(e))
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
+@router.post("/", response_model=FileResponseSchema)
+async def upload_file(
+    theme_id: str = None,
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_async_db)
+):
+    """
+    Upload a file to the server.
+    """
+    try:
+        # Define a safe destination folder
+        upload_dir = Path("uploads") / str(current_user.id) / (theme_id or "unclassified")
+        upload_dir.mkdir(parents=True, exist_ok=True)
+
+        file_ext = Path(file.filename).suffix
+        file_id = str(uuid4())
+        file_path = upload_dir / f"{file_id}{file_ext}"
+
+        # Save file
+        with open(file_path, "wb") as f:
+            f.write(await file.read())
+
+        # Save to DB
+        new_file = FileModel(
+            id=file_id,
+            filename=file.filename,
+            file_path=str(file_path),
+            content_type=file.content_type,
+            is_public=False,
+            owner_id=current_user.id,
+            theme_id=theme_id
+        )
+        db.add(new_file)
+        db.commit()
+        db.refresh(new_file)
+
+        return new_file
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+@router.post("/process", response_model=FileProcessingResponse)
 async def process_files(
         request: FileProcessingRequest,
-        file_processing_use_case: FileProcessingUseCase = Depends(file_processing_use_case)
+        current_user: User = Depends(get_current_active_user),
+        file_processing_use_case_: FileProcessingUseCase = Depends(file_processing_use_case),
+        db: Session = Depends(get_async_db)
 ):
     """
     Process files in a directory for the RAG system.
 
     This endpoint:
-    1. Reads different types of files
-    2. Detects language
-    3. Prepares text for the vector database
-    4. Provides a detailed report of processing results
+    1. Reads different types of files (marking unreadable files as warnings)
+    2. Detects language (marking detection failures as warnings)
+    3. Prepares text for vector database storage
+    4. Provides a detailed report with recommendations for files with warnings
     """
     try:
-        documents, report = await file_processing_use_case.process_directory(
+        # Process the directory
+        documents, report = await file_processing_use_case_.process_directory(
             request.directory_path,
             recursive=request.recursive,
             metadata=request.additional_metadata
         )
 
+        # Analyze document quality
+        quality_analysis = await file_processing_use_case_.analyze_document_quality(documents)
+
+        # Add quality analysis to the report
+        report["quality_analysis"] = quality_analysis
+
+        # Create the response
         return FileProcessingResponse(
             success=True,
-            message=f"Successfully processed {len(documents)} documents",
+            message=f"Successfully processed {len(documents)} documents from {request.directory_path}",
             documents_count=len(documents),
             report=FileProcessingReport(
-                summary=ProcessedFileSummary(**report["summary"]),
+                summary=ProcessedFileSummary(
+                    total_files=report["summary"]["total_files"],
+                    successful=report["summary"]["successful"],
+                    unreadable=report["summary"]["unreadable"],
+                    language_detection_failures=report["summary"]["language_detection_failures"],
+                    files_with_warnings=report["summary"]["files_with_warnings"]
+                ),
                 details=report["details"],
-                recommendations=FileProcessingRecommendations(**report["recommendations"])
+                recommendations=FileProcessingRecommendations(
+                    files_to_review=report["recommendations"]["files_to_review"],
+                    files_to_consider_removing=report["recommendations"]["files_to_consider_removing"]
+                )
             )
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
-
-
+        raise HTTPException(status_code=500, detail=f"An error occurred during file processing: {str(e)}")
 @router.get("/", response_model=List[FileResponseSchema])
 async def list_files(
         current_user: User = Depends(get_current_active_user),
@@ -145,96 +243,16 @@ async def get_public_file(
     )
 
 
-# app/api/routes/enhanced_files.py
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-from typing import List, Dict, Any, Optional
-
-from app.infrastructure.database.repository import get_async_db
-from app.api.middleware_auth import get_current_active_user
-from app.infrastructure.database.db_models import User
-from app.core.use_cases.file_processing import FileProcessingUseCase
-from app.api.schemas.files import (
-    FileProcessingRequest,
-    FileProcessingResponse,
-    FileProcessingReport,
-    ProcessedFileSummary,
-    FileProcessingRecommendations
-)
-
-router = APIRouter()
-
-
-# Dependency to get the file processing use case
-def get_enhanced_file_processing_use_case():
-    return FileProcessingUseCase()
-
-
-@router.post("/process", response_model=FileProcessingResponse)
-async def process_files(
-        request: FileProcessingRequest,
-        current_user: User = Depends(get_current_active_user),
-        file_processing_use_case: FileProcessingUseCase = Depends(get_enhanced_file_processing_use_case),
-        db: Session = Depends(get_async_db)
-):
-    """
-    Process files in a directory for the RAG system.
-
-    This endpoint:
-    1. Reads different types of files (marking unreadable files as warnings)
-    2. Detects language (marking detection failures as warnings)
-    3. Prepares text for vector database storage
-    4. Provides a detailed report with recommendations for files with warnings
-    """
-    try:
-        # Process the directory
-        documents, report = await file_processing_use_case.process_directory(
-            request.directory_path,
-            recursive=request.recursive,
-            metadata=request.additional_metadata
-        )
-
-        # Analyze document quality
-        quality_analysis = await file_processing_use_case.analyze_document_quality(documents)
-
-        # Add quality analysis to the report
-        report["quality_analysis"] = quality_analysis
-
-        # Create the response
-        return FileProcessingResponse(
-            success=True,
-            message=f"Successfully processed {len(documents)} documents from {request.directory_path}",
-            documents_count=len(documents),
-            report=FileProcessingReport(
-                summary=ProcessedFileSummary(
-                    total_files=report["summary"]["total_files"],
-                    successful=report["summary"]["successful"],
-                    unreadable=report["summary"]["unreadable"],
-                    language_detection_failures=report["summary"]["language_detection_failures"],
-                    files_with_warnings=report["summary"]["files_with_warnings"]
-                ),
-                details=report["details"],
-                recommendations=FileProcessingRecommendations(
-                    files_to_review=report["recommendations"]["files_to_review"],
-                    files_to_consider_removing=report["recommendations"]["files_to_consider_removing"]
-                )
-            )
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"An error occurred during file processing: {str(e)}")
-
 
 @router.get("/supported-formats")
 async def get_supported_formats(
         current_user: User = Depends(get_current_active_user),
-        file_processing_use_case: FileProcessingUseCase = Depends(get_enhanced_file_processing_use_case)
+        file_processing_use_case_: FileProcessingUseCase = Depends(file_processing_use_case)
 ):
     """
     Get the list of supported file formats for processing.
     """
-    supported_extensions = file_processing_use_case.file_processor.supported_extensions
+    supported_extensions = file_processing_use_case_.file_processor.supported_extensions
     return {
         "supported_formats": supported_extensions,
         "count": len(supported_extensions)

@@ -5,6 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>{% block title %}FILE_SERVER{% endblock %}</title>
     <link href="{{ url_for('static', path='dist/img/favicon.ico') }}" rel="shortcut icon" />
+
+    <link
+      href="{{ url_for('static', path='plugins/alertify.js/css/alertify.css') }}"
+      rel="stylesheet"
+      type="text/css"
+    />
     <!-- Font Awesome Icons -->
     <link rel="stylesheet" href="{{ url_for('static', path='plugins/fontawesome/css/all.min.css') }}" />
     <!-- overlayScrollbars -->
@@ -14,11 +20,7 @@
     />
     <!-- Theme style -->
     <link rel="stylesheet" href="{{ url_for('static', path='dist/css/adminlte.min.css') }}" />
-    <link
-      href="{{ url_for('static', path='plugins/alertify.js/css/alertify.css') }}"
-      rel="stylesheet"
-      type="text/css"
-    />
+
     {% block head %}
     <!-- Additional head content can be added here -->
     {% endblock %}
@@ -97,6 +99,7 @@
     <!-- In your base template or protected pages -->
     <!-- Request Helper -->
     <script src="{{ url_for('static', path='dist/js/pages/request-helper.js') }}"></script>
+    <script src="{{ url_for('static', path='plugins/sweetalert2/sweetalert2.min.js') }}"></script>
     <script>
       // Add CSRF token to all forms
       $(document).ready(function () {

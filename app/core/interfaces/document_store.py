@@ -155,3 +155,5 @@ class DocumentStoreInterface(ABC):
             The retrieved document entity or None if not found.
         """
         return None
+
+

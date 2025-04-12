@@ -4,13 +4,15 @@ from datetime import datetime
 from sqlalchemy import select, update, delete, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import selectinload
 
 from app.infrastructure.database.db_models import Theme, ThemeDocument, Document
 from app.utils.logger_util import get_logger
+from core.interfaces.theme_repository import ThemeRepositoryInterface
 
 logger = get_logger(__name__)
 
-class ThemeRepository:
+class ThemeRepository(ThemeRepositoryInterface):
     """
     Repository for managing theme-related database operations.
 
@@ -27,13 +29,12 @@ class ThemeRepository:
         """
         self.db = db
 
-    async def create_theme(self, id: str, name: str, description: Optional[str],
-                           is_public: bool, owner_id: str) -> str:
+    async def create_theme(self, name: str, description: Optional[str],
+                         is_public: bool, owner_id: str) -> str:
         """
         Create and persist a new theme in the database.
 
         Args:
-            id (str): Unique identifier for the theme.
             name (str): Name of the theme.
             description (Optional[str]): Optional description of the theme.
             is_public (bool): Flag to indicate if the theme is publicly accessible.
@@ -47,7 +48,6 @@ class ThemeRepository:
         """
         try:
             theme = Theme(
-                id=id,
                 name=name,
                 description=description,
                 is_public=is_public,
@@ -56,7 +56,7 @@ class ThemeRepository:
             )
             self.db.add(theme)
             await self.db.commit()
-            return id
+            return theme.id
         except SQLAlchemyError as e:
             logger.error(f"Error creating theme: {e}")
             await self.db.rollback()
@@ -94,12 +94,11 @@ class ThemeRepository:
             List[Theme]: List of matching Theme objects.
         """
         try:
-            query = select(Theme)
+            query = select(Theme).options(selectinload(Theme.documents))  # ✅ this line preloads documents
+
             if owner_id:
                 if include_public:
-                    query = query.where(
-                        (Theme.owner_id == owner_id) | (Theme.is_public == True)
-                    )
+                    query = query.where((Theme.owner_id == owner_id) | (Theme.is_public == True))
                 else:
                     query = query.where(Theme.owner_id == owner_id)
             elif include_public:

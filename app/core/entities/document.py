@@ -44,6 +44,7 @@ class Document:
             updated_at (str, optional): Update timestamp. Defaults to None.
             source (str, optional): Source of the document. Defaults to None.
             user_id (str, optional): User ID. Defaults to None.
+            user_id (str, optional): User ID. Defaults to None.
         """
         self.id = id if id is not None else str(uuid.uuid4())
         self.content = content
@@ -53,6 +54,7 @@ class Document:
         self.updated_at = updated_at
         self.source = source
         self.user_id = user_id
+        self.owner_id = user_id
 
     def to_dict(self) -> Dict[str, Any]:
         """

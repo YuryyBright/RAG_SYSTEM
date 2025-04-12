@@ -1,15 +1,14 @@
 # app/core/interfaces/theme_repository.py
+
 from abc import ABC, abstractmethod
 from typing import List, Optional, Dict, Any
-from app.core.entities.theme import Theme
 
 
 class ThemeRepositoryInterface(ABC):
     """
     Interface for theme repository operations.
 
-    This abstract class defines the methods that any theme repository
-    implementation must provide to work with the theme system.
+    Defines the required methods for interacting with the theme persistence layer.
     """
 
     @abstractmethod
@@ -19,82 +18,82 @@ class ThemeRepositoryInterface(ABC):
         Create a new theme.
 
         Args:
-            name: Name of the theme
-            description: Optional description of the theme
-            is_public: Whether the theme is publicly accessible
-            owner_id: ID of the user who owns the theme
+            name: Name of the theme.
+            description: Optional description of the theme.
+            is_public: Whether the theme is public.
+            owner_id: ID of the user creating the theme.
 
         Returns:
-            str: ID of the created theme
+            str: The ID of the created theme.
         """
         pass
 
     @abstractmethod
-    async def get_theme(self, theme_id: str) -> Optional[Theme]:
+    async def get_theme(self, theme_id: str) -> Optional[Any]:
         """
-        Retrieve a theme by its ID.
+        Retrieve a theme by ID.
 
         Args:
-            theme_id: ID of the theme to retrieve
+            theme_id: The ID of the theme.
 
         Returns:
-            Optional[Theme]: The theme if found, None otherwise
+            Optional[Any]: The theme object if found, else None.
         """
         pass
 
     @abstractmethod
     async def get_themes(self, owner_id: Optional[str] = None,
-                         include_public: bool = False) -> List[Theme]:
+                         include_public: bool = False) -> List[Any]:
         """
-        Get themes filtered by owner and public status.
+        Get themes filtered by ownership and public visibility.
 
         Args:
-            owner_id: Optional owner ID to filter by
-            include_public: Whether to include public themes
+            owner_id: Optional user ID to filter owned themes.
+            include_public: Whether to include public themes.
 
         Returns:
-            List[Theme]: List of themes matching the criteria
+            List[Any]: List of themes.
         """
         pass
 
     @abstractmethod
     async def update_theme(self, theme_id: str, updates: Dict[str, Any]) -> bool:
         """
-        Update a theme's properties.
+        Update fields in a theme.
 
         Args:
-            theme_id: ID of the theme to update
-            updates: Dictionary of properties to update
+            theme_id: ID of the theme to update.
+            updates: Dict of fields and values to update.
 
         Returns:
-            bool: True if updated successfully, False otherwise
+            bool: True if update was successful, else False.
         """
         pass
 
     @abstractmethod
     async def delete_theme(self, theme_id: str) -> bool:
         """
-        Delete a theme.
+        Delete a theme and its document links.
 
         Args:
-            theme_id: ID of the theme to delete
+            theme_id: ID of the theme to delete.
 
         Returns:
-            bool: True if deleted successfully, False otherwise
+            bool: True if deletion was successful, else False.
         """
         pass
 
     @abstractmethod
     async def add_document_to_theme(self, theme_id: str, document_id: str) -> bool:
         """
-        Add a document to a theme.
+        Link a document to a theme.
 
         Args:
-            theme_id: ID of the theme
-            document_id: ID of the document to add
+            theme_id: ID of the theme.
+            document_id: ID of the document to link.
 
         Returns:
-            bool: True if added successfully, False otherwise
+            bool: True if added successfully, else False.
         """
         pass
 
@@ -104,23 +103,23 @@ class ThemeRepositoryInterface(ABC):
         Remove a document from a theme.
 
         Args:
-            theme_id: ID of the theme
-            document_id: ID of the document to remove
+            theme_id: ID of the theme.
+            document_id: ID of the document to remove.
 
         Returns:
-            bool: True if removed successfully, False otherwise
+            bool: True if removal was successful, else False.
         """
         pass
 
     @abstractmethod
     async def get_theme_documents(self, theme_id: str) -> List[str]:
         """
-        Get the document IDs associated with a theme.
+        Get all document IDs associated with a theme.
 
         Args:
-            theme_id: ID of the theme
+            theme_id: ID of the theme.
 
         Returns:
-            List[str]: List of document IDs
+            List[str]: List of document IDs.
         """
         pass

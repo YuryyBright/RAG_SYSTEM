@@ -88,7 +88,7 @@ function initDropzone() {
 
   try {
     const myDropzone = new Dropzone("#file-upload-form", {
-      url: "/api/v1/files/upload", // Make sure this URL is correct and reachable
+      url: "/api/files", // Make sure this URL is correct and reachable
       paramName: "file",
       maxFilesize: 50, // MB
       acceptedFiles: ".pdf,.txt,.docx,.html,.md,.csv",
@@ -294,6 +294,9 @@ function handleThemeFormSubmit(e) {
  * Load themes from the API
  */
 function loadThemes() {
+  // Show the loading spinner
+  $("#themes-loader").removeClass("d-none");
+
   $.ajax({
     url: "/api/themes",
     method: "GET",
@@ -306,6 +309,10 @@ function loadThemes() {
     error: function (xhr, status, error) {
       console.error("Error loading themes:", error);
       alertify.error(`Error loading themes: ${xhr.responseJSON?.detail || error}`);
+    },
+    complete: function () {
+      // Always hide the loading spinner
+      $("#themes-loader").addClass("d-none");
     },
   });
 }

@@ -15,6 +15,7 @@ from app.api.middleware_auth import get_current_active_user
 from app.core.use_cases.theme import ThemeUseCase
 from app.core.interfaces.document_store import DocumentStoreInterface
 from app.api.dependencies import get_document_store
+from core.entities.user import User
 
 router = APIRouter()
 
@@ -33,7 +34,7 @@ async def create_theme(
             name=theme_data.name,
             description=theme_data.description,
             is_public=theme_data.is_public,
-            owner_id=user["id"]
+            owner_id=user.id
         )
 
         document_ids = await theme_use_case.theme_repository.get_theme_documents(theme.id)
@@ -66,14 +67,14 @@ async def get_themes(
     """
     try:
         themes = await theme_use_case.get_themes(
-            owner_id=user["id"],
+            owner_id=user.id,  # ✅ FIXED HERE
             include_public=include_public
         )
 
         # Add document count to each theme
         result = []
         for theme in themes:
-            document_ids = theme.document_ids or []
+            document_ids = [doc.document_id for doc in theme.documents] if theme.documents else []
             result.append({
                 "id": theme.id,
                 "name": theme.name,
@@ -112,7 +113,7 @@ async def get_theme(
             )
 
         # Check if user has access to the theme
-        if theme.owner_id != user["id"] and not theme.is_public:
+        if theme.owner_id != user.id and not theme.is_public:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You don't have access to this theme"
@@ -157,7 +158,7 @@ async def update_theme(
                 detail="Theme not found"
             )
 
-        if existing_theme.owner_id != user["id"]:
+        if existing_theme.owner_id != user.id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You don't have permission to update this theme"
@@ -210,7 +211,7 @@ async def update_theme(
 @router.delete("/{theme_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_theme(
     theme_id: str,
-    user: dict = Depends(get_current_active_user),
+    user: User = Depends(get_current_active_user),
     theme_use_case: ThemeUseCase = Depends(get_theme_use_case)
 ):
     """
@@ -225,7 +226,7 @@ async def delete_theme(
                 detail="Theme not found"
             )
 
-        if existing_theme.owner_id != user["id"]:
+        if existing_theme.owner_id != user.id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You don't have permission to delete this theme"
@@ -267,7 +268,7 @@ async def add_document_to_theme(
                 detail="Theme not found"
             )
 
-        if existing_theme.owner_id != user["id"]:
+        if existing_theme.owner_id != user.id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You don't have permission to modify this theme"
@@ -281,7 +282,7 @@ async def add_document_to_theme(
                 detail="Document not found"
             )
 
-        if document.owner_id != user["id"]:
+        if document.owner_id != user.id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You don't have permission to use this document"
@@ -328,7 +329,7 @@ async def remove_document_from_theme(
                 detail="Theme not found"
             )
 
-        if existing_theme.owner_id != user["id"]:
+        if existing_theme.owner_id != user.id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You don't have permission to modify this theme"
@@ -368,7 +369,7 @@ async def get_theme_documents(
                 detail="Theme not found"
             )
 
-        if existing_theme.owner_id != user["id"] and not existing_theme.is_public:
+        if existing_theme.owner_id != user.id and not existing_theme.is_public:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You don't have access to this theme"

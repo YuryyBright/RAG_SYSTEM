@@ -124,6 +124,7 @@ class File(Base):
     size = Column(Integer, nullable=False)
     is_public = Column(Boolean, default=False)
     owner_id = Column(String, ForeignKey("users.id"), nullable=False)
+    theme_id = Column(String, ForeignKey("themes.id"), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 

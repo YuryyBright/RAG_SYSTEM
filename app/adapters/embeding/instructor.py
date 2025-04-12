@@ -2,9 +2,13 @@
 from typing import List
 import os
 from InstructorEmbedding import INSTRUCTOR
+from sentence_transformers import SentenceTransformer
+
 from core.entities.document import Document
 from core.interfaces.embedding import EmbeddingInterface
+from utils.logger_util import get_logger
 
+logger = get_logger(__name__)
 
 class InstructorEmbedding(EmbeddingInterface):
     """
@@ -23,7 +27,7 @@ class InstructorEmbedding(EmbeddingInterface):
 
     def __init__(
             self,
-            model_name: str = "hkunlp/instructor-large",
+            model_name: str = "models/instructor-large",
             instruction: str = "Represent the document for retrieval:",
             query_instruction: str = "Represent the question for retrieving relevant documents:",
             batch_size: int = 8,
@@ -39,15 +43,18 @@ class InstructorEmbedding(EmbeddingInterface):
             batch_size (int): The maximum number of documents to process in a single batch.
             device (str): The device to run the model on ('cpu' or 'cuda').
         """
-        self.model_name = model_name
+        self.model_name = model_name.replace("\\", "/")
         self.instruction = instruction
         self.query_instruction = query_instruction
         self.batch_size = batch_size
         self.device = device
 
-        # Load the model
-        self.model = INSTRUCTOR(model_name, device=device)
+        if not os.path.exists(self.model_name):
+            raise FileNotFoundError(f"Model not found at path: {self.model_name}")
 
+        logger.info(f"✅ Loading model from local path: {self.model_name}")
+        self.model = SentenceTransformer(self.model_name, device=self.device)
+        self.model.set_pooling_include_prompt(False)
     async def embed_documents(self, documents: List[Document]) -> List[Document]:
         """
         Generate embeddings for a list of documents using the INSTRUCTOR model.
