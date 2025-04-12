@@ -59,58 +59,165 @@ function setupEventListeners() {
 /**
  * Initialize Dropzone file uploader
  */
+/**
+ * Initialize Dropzone file uploader
+ */
 function initDropzone() {
-  // Check if Dropzone is already initialized on the element to prevent the "already attached" error
-  if ($("#file-upload-form").hasClass("dz-clickable")) {
-    console.log("Dropzone already initialized, skipping...");
+  // Check if the element exists before trying to initialize Dropzone
+  if ($("#file-upload-form").length === 0) {
+    console.error("Dropzone target element #file-upload-form not found.");
     return;
   }
 
-  const myDropzone = new Dropzone("#file-upload-form", {
-    url: "/api/v1/files/upload", // Make sure this URL is correctly pointing to your backend endpoint
-    paramName: "file",
-    maxFilesize: 50, // MB
-    acceptedFiles: ".pdf,.txt,.docx,.html,.md,.csv",
-    addRemoveLinks: true,
-    dictRemoveFile: "Remove",
-    autoProcessQueue: true,
-    parallelUploads: 5,
-    headers: {
-      "X-CSRF-Token": $('meta[name="csrf-token"]').attr("content"),
-    },
-    init: function () {
-      this.on("sending", function (file, xhr, formData) {
-        formData.append("theme_id", state.currentThemeId);
-      });
+  // Check if Dropzone is already initialized on the element to prevent the "already attached" error
+  // This check might be redundant if autoDiscover is properly disabled, but it's good practice.
+  if ($("#file-upload-form")[0].dropzone) {
+    console.log("Dropzone instance already exists on #file-upload-form, skipping initialization.");
+    // Optionally, you might want to ensure the existing instance is configured correctly
+    // or destroy and recreate it if necessary.
+    // state.dropzone = $("#file-upload-form")[0].dropzone; // Assign existing instance
+    return;
+  }
 
-      this.on("success", function (file, response) {
-        state.uploadedFiles.push(response);
-        file.previewElement.classList.add("dz-success");
-        console.log("File uploaded successfully:", response);
-      });
+  // Check if Dropzone library is loaded
+  if (typeof Dropzone === "undefined") {
+    console.error("Dropzone library is not loaded.");
+    alertify.error("File uploader component failed to load. Please refresh the page or contact support.");
+    return;
+  }
 
-      this.on("error", function (file, errorMessage) {
-        // Handle the "No URL provided" error by providing a more specific message
-        if (errorMessage === "No URL provided.") {
-          errorMessage = "Server configuration issue: No upload URL provided. Please contact support.";
-        }
-        alertify.error(`Error uploading ${file.name}: ${errorMessage}`);
-        console.error("Upload error:", errorMessage);
-      });
+  try {
+    const myDropzone = new Dropzone("#file-upload-form", {
+      url: "/api/v1/files/upload", // Make sure this URL is correct and reachable
+      paramName: "file",
+      maxFilesize: 50, // MB
+      acceptedFiles: ".pdf,.txt,.docx,.html,.md,.csv",
+      addRemoveLinks: true,
+      dictDefaultMessage:
+        "<i class='fas fa-cloud-upload-alt fa-3x mb-3'></i><br>Drop files here or click to upload<br><span class='text-muted small'>Supported: PDF, TXT, DOCX, HTML, MD, CSV</span>", // Optional: Customize message
+      dictRemoveFile: "Remove",
+      autoProcessQueue: true, // Set to false if you want to trigger uploads manually
+      parallelUploads: 5,
+      headers: {
+        "X-CSRF-Token": getCsrfToken(), // Ensure getCsrfToken() is defined and returns a valid token
+      },
+      init: function () {
+        const dzInstance = this; // Reference to the dropzone instance
 
-      this.on("queuecomplete", function () {
-        if (this.getQueuedFiles().length === 0 && this.getUploadingFiles().length === 0) {
-          alertify.success("All files uploaded successfully");
+        // Ensure theme_id is set *before* sending
+        this.on("processing", function (file) {
+          if (!state.currentThemeId) {
+            alertify.error("Error: No theme selected. Cannot upload file.");
+            dzInstance.removeFile(file); // Prevent upload if no theme ID
+          }
+        });
+
+        this.on("sending", function (file, xhr, formData) {
+          // Append theme_id only if it exists
+          if (state.currentThemeId) {
+            formData.append("theme_id", state.currentThemeId);
+            console.log(`Sending file ${file.name} for theme ID: ${state.currentThemeId}`);
+          } else {
+            console.error("Cannot send file - theme_id is missing.");
+            // Optionally cancel the upload here if needed, though the 'processing' event handler is better
+            // xhr.abort();
+          }
+        });
+
+        this.on("success", function (file, response) {
+          // Make sure the response is the expected object/data
+          console.log("File upload success response:", response);
+          if (response && typeof response === "object") {
+            state.uploadedFiles.push(response); // Assuming response is the file metadata object
+            file.previewElement.classList.add("dz-success");
+            // You might want to add a file ID to the preview element for removal later
+            file.previewElement.setAttribute("data-file-id", response.id || file.upload.uuid);
+            alertify.success(`File "${file.name}" uploaded successfully.`);
+          } else {
+            console.error("Received unexpected success response:", response);
+            alertify.error(`Upload succeeded for ${file.name}, but received invalid server response.`);
+            file.previewElement.classList.add("dz-error"); // Mark as error visually
+            $(file.previewElement).find(".dz-error-message").text("Invalid server response");
+          }
+          // Enable next button if needed after *any* successful upload
           $("#upload-next-btn").prop("disabled", false);
-        }
-      });
-    },
-  });
+        });
 
-  // Store the Dropzone instance in the state for later reference
-  state.dropzone = myDropzone;
+        this.on("error", function (file, errorMessage, xhr) {
+          file.previewElement.classList.add("dz-error");
+          let displayMessage = errorMessage;
+          if (typeof errorMessage === "object" && errorMessage.error) {
+            displayMessage = errorMessage.error; // Handle JSON error responses
+          } else if (xhr && xhr.responseText) {
+            try {
+              const jsonResponse = JSON.parse(xhr.responseText);
+              displayMessage = jsonResponse.detail || jsonResponse.error || xhr.responseText;
+            } catch (e) {
+              displayMessage = xhr.statusText || "Server error";
+            }
+          }
+
+          alertify.error(`Error uploading ${file.name}: ${displayMessage}`);
+          console.error("Upload error:", file.name, errorMessage, xhr);
+        });
+
+        this.on("queuecomplete", function () {
+          console.log("Upload queue complete.");
+          // Check if there are actually successful uploads, not just an empty queue completion
+          if (this.getAcceptedFiles().length > 0 && this.getRejectedFiles().length === 0) {
+            // alertify.success("All files processed successfully."); // Might be too noisy if individual success alerts are shown
+          }
+          // Update button state based on *successful* uploads in the state array
+          $("#upload-next-btn").prop("disabled", state.uploadedFiles.length === 0);
+        });
+
+        this.on("removedfile", function (file) {
+          console.log(`Removing file: ${file.name}`);
+          // Add logic here to remove the file from your server if it was successfully uploaded
+          // This usually requires knowing the file's ID from the server
+          const fileId = file.previewElement.getAttribute("data-file-id");
+          if (file.status === "success" && fileId) {
+            console.log(`Attempting to delete file with ID: ${fileId} from server...`);
+            // $.ajax({
+            //     url: `/api/v1/files/${fileId}`, // Adjust URL as needed
+            //     method: 'DELETE',
+            //     headers: { "X-CSRF-Token": getCsrfToken() },
+            //     success: function(response) {
+            //         alertify.success(`File ${file.name} removed from server.`);
+            //         // Remove from state.uploadedFiles as well
+            //         state.uploadedFiles = state.uploadedFiles.filter(f => (f.id || f.uuid) !== fileId);
+            //         $("#upload-next-btn").prop("disabled", state.uploadedFiles.length === 0);
+            //     },
+            //     error: function(xhr, status, error) {
+            //         alertify.error(`Failed to remove ${file.name} from server.`);
+            //         console.error("Error deleting file:", error);
+            //     }
+            // });
+          } else {
+            // If the file was never uploaded successfully or has no ID, just remove from UI
+            // Potentially remove from state.uploadedFiles if it somehow got added without success/ID
+          }
+        });
+      },
+      // Fallback for browsers that don't support xhr2
+      fallback: function () {
+        alertify.error("Your browser does not support drag'n'drop file uploads.");
+        // Maybe hide the dropzone element or show an alternative upload method
+      },
+    });
+
+    // Store the Dropzone instance in the state for later reference
+    state.dropzone = myDropzone;
+    console.log("Dropzone initialized successfully on #file-upload-form");
+  } catch (error) {
+    console.error("Failed to initialize Dropzone:", error);
+    alertify.error("Error initializing the file uploader. Please try again.");
+    // Specific check for the URL error, though disabling autoDiscover should prevent it here.
+    if (error.message.includes("No URL provided")) {
+      alertify.error("Configuration error: Upload URL is missing.");
+    }
+  }
 }
-
 /**
  * Handle theme creation form submission
  */
@@ -147,7 +254,7 @@ function handleThemeFormSubmit(e) {
  * Get CSRF token from meta tag
  */
 function getCsrfToken() {
-  return $('meta[name="csrf-token"]').attr("content");
+  return AuthManager.getCsrfToken();
 }
 
 /**

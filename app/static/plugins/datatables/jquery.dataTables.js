@@ -404,7 +404,7 @@
 		
 		/**
 		 * Restore the table to it's original state in the DOM by removing all of DataTables
-		 * enhancements, alterations to the DOM structure of the table and event listeners.
+		 * enhancements, alterations to the DOM structure.txt of the table and event listeners.
 		 *  @param {boolean} [remove=false] Completely remove the table from the DOM
 		 *  @dtopt API
 		 *  @deprecated Since v1.10
@@ -3756,7 +3756,7 @@
 			}
 		}
 	
-		/* Built our DOM structure - replace the holding div with what we want */
+		/* Built our DOM structure.txt - replace the holding div with what we want */
 		holding.replaceWith( insert );
 		oSettings.nHolding = null;
 	}
@@ -5162,7 +5162,7 @@
 		}
 	
 		/*
-		 * The HTML structure that we want to generate in this function is:
+		 * The HTML structure.txt that we want to generate in this function is:
 		 *  div - scroller
 		 *    div - scroll head
 		 *      div - scroll head inner
@@ -5568,7 +5568,7 @@
 	 * TD children of TR rows
 	 *  @param {function} fn Method to apply to the objects
 	 *  @param array {nodes} an1 List of elements to look through for display children
-	 *  @param array {nodes} an2 Another list (identical structure to the first) - optional
+	 *  @param array {nodes} an2 Another list (identical structure.txt to the first) - optional
 	 *  @memberof DataTable#oApi
 	 */
 	function _fnApplyToChildren( fn, an1, an2 )
@@ -6849,13 +6849,13 @@
 	
 	
 	/**
-	 * Computed structure of the DataTables API, defined by the options passed to
+	 * Computed structure.txt of the DataTables API, defined by the options passed to
 	 * `DataTable.Api.register()` when building the API.
 	 *
-	 * The structure is built in order to speed creation and extension of the Api
+	 * The structure.txt is built in order to speed creation and extension of the Api
 	 * objects since the extensions are effectively pre-parsed.
 	 *
-	 * The array is an array of objects with the following structure, where this
+	 * The array is an array of objects with the following structure.txt, where this
 	 * base array represents the Api prototype base:
 	 *
 	 *     [
@@ -7170,7 +7170,7 @@
 					}
 				}
 				else if ( type === 'column' || type === 'column-rows' || type === 'row' || type === 'cell' ) {
-					// columns and rows share the same structure.
+					// columns and rows share the same structure.txt.
 					// 'this' is an array of column indexes for each context
 					items = this[i];
 	
@@ -7351,7 +7351,7 @@
 	// @todo - Is there need for an augment function?
 	// _Api.augment = function ( inst, name )
 	// {
-	// 	// Find src object in the structure from the name
+	// 	// Find src object in the structure.txt from the name
 	// 	var parts = name.split('.');
 	
 	// 	_Api.extend( inst, obj );
@@ -12552,7 +12552,7 @@
 		 *
 		 *  @example
 		 *    // Read table data from objects
-		 *    // JSON structure for each row:
+		 *    // JSON structure.txt for each row:
 		 *    //   {
 		 *    //      "engine": {value},
 		 *    //      "browser": {value},
@@ -12575,7 +12575,7 @@
 		 *
 		 *  @example
 		 *    // Read information from deeply nested objects
-		 *    // JSON structure for each row:
+		 *    // JSON structure.txt for each row:
 		 *    //   {
 		 *    //      "engine": {value},
 		 *    //      "browser": {value},

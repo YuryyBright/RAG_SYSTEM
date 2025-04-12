@@ -182,7 +182,7 @@
       var $node = $('<data class="ext-databasic"></data>');
 
       if ($node) {
-        // save node to info structure
+        // save node to info structure.txt
         info.node = $node;
         // insert node into editor dom
         context.invoke('editor.insertNode', $node[0]);

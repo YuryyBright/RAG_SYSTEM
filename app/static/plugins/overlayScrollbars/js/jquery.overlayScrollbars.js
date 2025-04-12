@@ -5269,7 +5269,7 @@
                      * - the targetElement has the class "os-host"
                      * - the targetElement has a a child with the class "os-padding"
                      * 
-                     * If that's the case, its assumed the DOM has already the following structure:
+                     * If that's the case, its assumed the DOM has already the following structure.txt:
                      * (The ".os-host" element is the targetElement)
                      *
                      *  <div class="os-host">
@@ -5298,7 +5298,7 @@
                      * - the targetElement has the class "os-textarea" 
                      * - the targetElement is inside a element with the class "os-content" 
                      * 
-                     * If that's the case, its assumed the DOM has already the following structure:
+                     * If that's the case, its assumed the DOM has already the following structure.txt:
                      * (The ".os-textarea" (textarea) element is the targetElement)
                      *
                      *  <div class="os-host-textarea">

@@ -22415,7 +22415,7 @@ folder-tree:
       - document
       - file
       - search
-      - structure
+      - structure.txt
   unicode: f802
   voted: true
 font:

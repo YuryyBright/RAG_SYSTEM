@@ -267,7 +267,11 @@ async def refresh_session(
     auth_service = AuthService(db)
 
     # Verify and refresh session
-    user_id, username, new_session_id, csrf_token, expire = await auth_service.refresh_session(session_id)
+    user_id, username, new_session_id, csrf_token, expire = await auth_service.refresh_session(
+        session_id,
+        request=request
+    )
+
 
     if not new_session_id:
         # Clear invalid cookies

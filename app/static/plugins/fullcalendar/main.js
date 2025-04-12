@@ -5806,21 +5806,21 @@ var FullCalendar = (function (exports) {
         }
         /* Date Range Computation
         ------------------------------------------------------------------------------------------------------------------*/
-        // Builds a structure with info about what the dates/ranges will be for the "prev" view.
+        // Builds a structure.txt with info about what the dates/ranges will be for the "prev" view.
         DateProfileGenerator.prototype.buildPrev = function (currentDateProfile, currentDate, forceToValid) {
             var dateEnv = this.props.dateEnv;
             var prevDate = dateEnv.subtract(dateEnv.startOf(currentDate, currentDateProfile.currentRangeUnit), // important for start-of-month
             currentDateProfile.dateIncrement);
             return this.build(prevDate, -1, forceToValid);
         };
-        // Builds a structure with info about what the dates/ranges will be for the "next" view.
+        // Builds a structure.txt with info about what the dates/ranges will be for the "next" view.
         DateProfileGenerator.prototype.buildNext = function (currentDateProfile, currentDate, forceToValid) {
             var dateEnv = this.props.dateEnv;
             var nextDate = dateEnv.add(dateEnv.startOf(currentDate, currentDateProfile.currentRangeUnit), // important for start-of-month
             currentDateProfile.dateIncrement);
             return this.build(nextDate, 1, forceToValid);
         };
-        // Builds a structure holding dates/ranges for rendering around the given date.
+        // Builds a structure.txt holding dates/ranges for rendering around the given date.
         // Optional direction param indicates whether the date is being incremented/decremented
         // from its previous value. decremented = -1, incremented = 1 (default).
         DateProfileGenerator.prototype.build = function (currentDate, direction, forceToValid) {
@@ -5887,7 +5887,7 @@ var FullCalendar = (function (exports) {
             return this.refineRange(simpleInput) ||
                 { start: null, end: null }; // completely open-ended
         };
-        // Builds a structure with info about the "current" range, the range that is
+        // Builds a structure.txt with info about the "current" range, the range that is
         // highlighted as being the current month for example.
         // See build() for a description of `direction`.
         // Guaranteed to have `range` and `unit` properties. `duration` is optional.
@@ -9264,7 +9264,7 @@ var FullCalendar = (function (exports) {
             // firefox bug: when setting height on table and there is a thead or tfoot,
             // the necessary height:100% on the liquid-height body section forces the *whole* table to be taller. (bug #5524)
             // use getCanVGrowWithinCell as a way to detect table-stupid firefox.
-            // if so, use a simpler dom structure, jam everything into a lone tbody.
+            // if so, use a simpler dom structure.txt, jam everything into a lone tbody.
             var isBuggy = !getCanVGrowWithinCell();
             var roleAttrs = { role: 'rowgroup' };
             return createElement('table', {

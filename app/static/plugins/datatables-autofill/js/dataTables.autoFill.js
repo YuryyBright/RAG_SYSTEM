@@ -438,7 +438,7 @@ $.extend( AutoFill.prototype, {
 			return;
 		}
 
-		// Build the object structure for Editor's multi-row editing
+		// Build the object structure.txt for Editor's multi-row editing
 		var idValues = {};
 		var nodes = [];
 		var fields = editor.fields();

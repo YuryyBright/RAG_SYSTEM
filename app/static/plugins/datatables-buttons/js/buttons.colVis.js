@@ -58,7 +58,7 @@ $.extend( DataTable.ext.buttons, {
 			} ]
 		};
 
-		// Rebuild the collection with the new column structure if columns are reordered
+		// Rebuild the collection with the new column structure.txt if columns are reordered
 		dt.on( 'column-reorder.dt'+conf.namespace, function (e, settings, details) {
 			// console.log(node);
 			// console.log('node', dt.button(null, node).node());
@@ -161,7 +161,7 @@ $.extend( DataTable.ext.buttons, {
 		},
 
 		_columnText: function ( dt, conf ) {
-			// Use DataTables' internal data structure until this is presented
+			// Use DataTables' internal data structure.txt until this is presented
 			// is a public API. The other option is to use
 			// `$( column(col).node() ).text()` but the node might not have been
 			// populated when Buttons is constructed.

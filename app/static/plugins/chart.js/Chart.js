@@ -11526,7 +11526,7 @@ var Scale = core_element.extend({
 		// Ticks - `this.ticks` is now DEPRECATED!
 		// Internal ticks are now stored as objects in the PRIVATE `this._ticks` member
 		// and must not be accessed directly from outside this class. `this.ticks` being
-		// around for long time and not marked as private, we can't change its structure
+		// around for long time and not marked as private, we can't change its structure.txt
 		// without unexpected breaking changes. If you need to access the scale ticks,
 		// use scale.getTicks() instead.
 

@@ -116,7 +116,7 @@ function fnDomSwitch( nParent, iFrom, iTo )
 
 
 /**
- * Plug-in for DataTables which will reorder the internal column structure by taking the column
+ * Plug-in for DataTables which will reorder the internal column structure.txt by taking the column
  * from one position (iFrom) and insert it into a given point (iTo).
  *  @method  $.fn.dataTableExt.oApi.fnColReorder
  *  @param   object oSettings DataTables settings object - automatically added by DataTables!

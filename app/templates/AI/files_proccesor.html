@@ -1,4 +1,8 @@
-{% extends "base.html" %} {% block title %}Document Processing System{% endblock %} {% block header %}
+{% extends "base.html" %} {% block title %}Document Processing System{% endblock %} {% block head %}
+<!-- Include Dropzone CSS -->
+<link rel="stylesheet" href="{{ url_for('static', path='plugins/dropzone/min/dropzone.min.css') }}" />
+<!-- Additional head content can be added here -->
+{% endblock %} {% block header %}
 <style>
   /* Additional CSS to fix progress steps styling */
   .progress-steps {
@@ -112,6 +116,7 @@
     margin: 0;
   }
 </style>
+
 <div class="row mb-2">
   <div class="col-sm-6">
     <h1>Document Processing System</h1>
@@ -245,7 +250,7 @@
             </h3>
           </div>
           <div class="card-body">
-            <form id="file-upload-form" class="dropzone dz-clickable">
+            <form id="file-upload-form" action="/api/v1/files/upload" class="dropzone dz-clickable">
               <div class="dz-message d-flex flex-column">
                 <i class="fas fa-cloud-upload-alt fa-3x mb-3"></i>
                 <span>Drop files here or click to upload</span>
