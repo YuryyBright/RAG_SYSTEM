@@ -2,8 +2,9 @@
 from pathlib import Path
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from fastapi.responses import FileResponse
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import os
@@ -22,7 +23,7 @@ from api.schemas.files import (
 )
 from app.core.use_cases.file_processing import FileProcessingUseCase
 from app.api.dependencies import file_processing_use_case
-
+from infrastructure.database.repository.file_repository import FileRepository
 
 router = APIRouter()
 file_manager = FileManager()
@@ -63,46 +64,47 @@ file_manager = FileManager()
 #         raise HTTPException(status_code=400, detail=str(e))
 #     except Exception as e:
 #         raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
-@router.post("/", response_model=FileResponseSchema)
-async def upload_file(
-    theme_id: str = None,
-    file: UploadFile = File(...),
+@router.post("/", response_model=List[FileResponseSchema])
+async def upload_files(
+    theme_id: Optional[str] = Form(None),
+    files: List[UploadFile] = File(...),
     current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_async_db)
+    db: AsyncSession = Depends(get_async_db)
 ):
     """
-    Upload a file to the server.
+    Upload multiple files and store them in the database.
     """
+    repo = FileRepository(db)
+    saved_files = []
+
     try:
-        # Define a safe destination folder
         upload_dir = Path("uploads") / str(current_user.id) / (theme_id or "unclassified")
         upload_dir.mkdir(parents=True, exist_ok=True)
 
-        file_ext = Path(file.filename).suffix
-        file_id = str(uuid4())
-        file_path = upload_dir / f"{file_id}{file_ext}"
+        for file in files:
+            file_ext = Path(file.filename).suffix
+            file_id = str(uuid4())
+            file_path = upload_dir / f"{file_id}{file_ext}"
 
-        # Save file
-        with open(file_path, "wb") as f:
-            f.write(await file.read())
+            # Save file content
+            with open(file_path, "wb") as f_out:
+                f_out.write(await file.read())
 
-        # Save to DB
-        new_file = FileModel(
-            id=file_id,
-            filename=file.filename,
-            file_path=str(file_path),
-            content_type=file.content_type,
-            is_public=False,
-            owner_id=current_user.id,
-            theme_id=theme_id
-        )
-        db.add(new_file)
-        db.commit()
-        db.refresh(new_file)
+            # Create file entry using repository
+            file_record = await repo.create_file(
+                filename=file.filename,
+                file_path=str(file_path),
+                content_type=file.content_type,
+                is_public=False,
+                owner_id=current_user.id,
+                theme_id=theme_id
+            )
+            saved_files.append(file_record)
 
-        return new_file
+        return saved_files
 
     except Exception as e:
+        await db.rollback()
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
 @router.post("/process", response_model=FileProcessingResponse)
 async def process_files(

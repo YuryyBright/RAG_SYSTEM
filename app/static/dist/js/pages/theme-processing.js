@@ -254,6 +254,10 @@ function handleThemeFormSubmit(e) {
  * Get CSRF token from meta tag
  */
 function getCsrfToken() {
+  if (typeof AuthManager === "undefined" || !AuthManager.getCsrfToken) {
+    console.warn("AuthManager is not defined or getCsrfToken is missing.");
+    return "";
+  }
   return AuthManager.getCsrfToken();
 }
 
