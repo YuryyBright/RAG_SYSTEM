@@ -6,7 +6,8 @@ from uuid import uuid4
 from datetime import datetime, timedelta
 from typing import List, Optional
 
-from fastapi import APIRouter, Response,Request, Depends, HTTPException, status, UploadFile, File, Query, BackgroundTasks
+from fastapi import APIRouter, Response, Request, Depends, HTTPException, status, UploadFile, File, Query, \
+    BackgroundTasks, Cookie
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,7 +18,7 @@ from app.api.schemas.user_api import (
 )
 from app.infrastructure.database.db_models import User
 from app.infrastructure.database.repository import get_async_db
-from app.api.middleware_auth import get_current_active_user
+from app.api.middleware_auth import get_current_active_user, get_session_id_from_cookie
 from utils.logger_util import get_logger
 from utils.security import create_session_cookie, set_csrf_cookie
 
@@ -127,18 +128,18 @@ async def get_active_sessions(
     return await service.get_active_sessions(current_user)
 
 
-# @router.delete("/sessions/{session_id}", response_model=dict)
-# async def revoke_session(
-#     session_id: str,  # ✅ correct!
-#     current_user: User = Depends(get_current_active_user),
-#     db: AsyncSession = Depends(get_async_db)
-# ):
-#     """
-#     Revoke a specific session by session ID (from URL path).
-#     """
-#     service = UserService(db)
-#     await service.revoke_session(current_user, session_id)
-#     return {"status": "success", "message": "Session revoked successfully"}
+@router.delete("/sessions/{id}", response_model=dict)
+async def revoke_session(
+    id:  str,  # ✅ correct!
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_async_db)
+):
+    """
+    Revoke a specific session by session ID (from URL path).
+    """
+    service = UserService(db)
+    await service.revoke_session(current_user, id)
+    return {"status": "success", "message": "Session revoked successfully"}
 
 
 
@@ -154,13 +155,12 @@ async def revoke_all_sessions(
     Revoke all sessions except the current one.
     The current session ID is extracted from cookies.
     """
-    session_id = request.cookies.get("session_id")
-    if not session_id:
-        raise HTTPException(status_code=400, detail="Missing session ID cookie")
+    session_id = get_session_id_from_cookie(request)
 
     service = UserService(db)
     await service.revoke_all_sessions(current_user, session_id)
     return {"status": "success", "message": "All other sessions revoked successfully"}
+
 
 
 

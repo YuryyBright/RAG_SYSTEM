@@ -1,0 +1,24 @@
+<!-- app/templates/dashboard/files.html -->
+{% extends "base.html" %}
+
+{% block title %}Files - MyApp{% endblock %}
+{% block page_title %}File Management{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+  <h3>Your Files</h3>
+  <ul>
+    {% for f in files %}
+    <li>
+      <strong>{{ f.filename }}</strong>
+      ({{ f.size }} bytes)
+      <!-- Possibly a link to download or see details -->
+    </li>
+    {% endfor %}
+  </ul>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', path='js/dashboard_files.js') }}"></script>
+{% endblock %}

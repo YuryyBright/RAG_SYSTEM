@@ -462,7 +462,7 @@ CodeMirror.defineMode("perl",function(){
                 umask                           :1,     // - set file creation mode mask
                 undef                           :1,     // - remove a variable or function definition
                 unlink                          :1,     // - remove one link to a file
-                unpack                          :1,     // - convert binary structure into normal perl variables
+                unpack                          :1,     // - convert binary structure.txt into normal perl variables
                 unshift                         :1,     // - prepend more elements to the beginning of a list
                 untie                           :1,     // - break a tie binding to a variable
                 use                             :1,     // - load in a module at compile time

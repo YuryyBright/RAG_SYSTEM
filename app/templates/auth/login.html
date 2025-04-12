@@ -139,6 +139,7 @@
     <script>
       // Enhanced login page script
       $(document).ready(function () {
+        alertify.set("notifier", "position", "top-right");
         // Show session expired message if applicable
         const urlParams = new URLSearchParams(window.location.search);
         if (urlParams.has("session_expired")) {

@@ -157,6 +157,26 @@ class Settings(BaseSettings):
         description="Allowed extensions"
     )
 
+    # Embedding configuration
+    EMBEDDING_SERVICE: str = Field("instructor",
+                                   description="Embedding service to use (instructor, openai, sentence_transformer)")
+    INSTRUCTOR_MODEL_NAME: str = Field("hkunlp/instructor-large", description="Instructor model name")
+    EMBEDDING_INSTRUCTION: str = Field("Represent the document for retrieval:",
+                                       description="Instruction for document embeddings")
+    QUERY_INSTRUCTION: str = Field("Represent the question for retrieving relevant documents:",
+                                   description="Instruction for query embeddings")
+    EMBEDDING_BATCH_SIZE: int = Field(8, description="Number of documents to embed in a batch")
+    EMBEDDING_DEVICE: str = Field("cpu", description="Device to run embedding model on (cpu or cuda)")
+    EMBEDDING_DIMENSION: int = Field(768, description="Dimension of embedding vectors")
+    OPENAI_EMBEDDING_MODEL: str = Field("text-embedding-3-small", description="OpenAI embedding model")
+    OPENAI_API_KEY: Optional[str] = Field(None, description="OpenAI API key")
+    OPENAI_BATCH_SIZE: int = Field(5, description="Batch size for OpenAI API calls")
+    SENTENCE_TRANSFORMER_MODEL_NAME: str = Field("all-MiniLM-L6-v2", description="SentenceTransformer model name")
+
+    # LLM and Reranker configuration
+    LLM_MODEL: str = Field("mistral/mistral-7b-instruct-v0.2", description="LLM model name")
+    RERANKER_MODEL: str = Field("cross-encoder/ms-marco-MiniLM-L-6-v2", description="Cross-encoder model for reranking")
+    SCORE_THRESHOLD: float = Field(0.3, description="Minimum similarity score for retrieval")
     # Email
     SMTP_SERVER: Optional[str] = Field(None, description="SMTP server")
     SMTP_PORT: Optional[int] = Field(None, description="SMTP port")

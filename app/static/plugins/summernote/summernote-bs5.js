@@ -3213,7 +3213,7 @@ var WrappedRange = /*#__PURE__*/function () {
   return WrappedRange;
 }();
 /**
- * Data structure
+ * Data structure.txt
  *  * BoundaryPoint: a point of dom tree
  *  * BoundaryPoints: two boundaryPoints corresponding to the start and the end of the Range
  *

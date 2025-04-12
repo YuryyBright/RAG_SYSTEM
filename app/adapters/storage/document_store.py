@@ -1,4 +1,3 @@
-# app/adapters/storage/document_store.py
 from pathlib import Path
 from typing import List, Optional, Dict, Any
 import json
@@ -40,6 +39,18 @@ class DocumentStore(DocumentStoreInterface):
         # Create storage directory if it doesn't exist
         os.makedirs(self.storage_path, exist_ok=True)
 
+    async def save(self, document: Document) -> str:
+        """
+        Store a document with its embedding (Interface method).
+
+        Args:
+            document: Document entity to store
+
+        Returns:
+            str: ID of the stored document
+        """
+        return await self.store_document(document)
+
     async def store_document(self, document: Document) -> str:
         """
         Store a document with its embedding.
@@ -66,6 +77,18 @@ class DocumentStore(DocumentStoreInterface):
         self._save_document_to_disk(doc_id, document)
 
         return doc_id
+
+    async def get(self, document_id: str) -> Optional[Document]:
+        """
+        Retrieve a document by its ID (Interface method).
+
+        Args:
+            document_id: ID of the document to retrieve
+
+        Returns:
+            Optional[Document]: Document if found, None otherwise
+        """
+        return await self.get_document(document_id)
 
     async def get_document(self, document_id: str) -> Optional[Document]:
         """
@@ -97,6 +120,94 @@ class DocumentStore(DocumentStoreInterface):
                 self._save_document_to_disk(document_id, document)
 
         return document
+
+    async def get_documents(self, document_ids: List[str]) -> List[Document]:
+        """
+        Get multiple documents by their IDs (Interface method).
+
+        Args:
+            document_ids: List of document IDs to retrieve
+
+        Returns:
+            List[Document]: List of found documents
+        """
+        # Try to get from disk cache first
+        documents = []
+        missing_ids = []
+
+        # First try from disk cache
+        for doc_id in document_ids:
+            doc = self._load_document_from_disk(doc_id)
+            if doc:
+                documents.append(doc)
+            else:
+                missing_ids.append(doc_id)
+
+        # Get any missing documents from database
+        if missing_ids:
+            # This assumes document_repository has a get_documents method
+            # If not, you'll need to fetch them one by one
+            try:
+                db_documents = await self.document_repository.get_documents(missing_ids)
+                for db_doc in db_documents:
+                    document = Document(
+                        id=db_doc.id,
+                        content=db_doc.content,
+                        embedding=db_doc.embedding,
+                        owner_id=db_doc.owner_id,
+                        metadata=self._extract_metadata(db_doc),
+                        created_at=db_doc.created_at,
+                        updated_at=db_doc.updated_at
+                    )
+                    documents.append(document)
+                    # Save to disk cache for future retrievals
+                    self._save_document_to_disk(db_doc.id, document)
+            except AttributeError:
+                # Fallback if get_documents is not implemented in repository
+                for doc_id in missing_ids:
+                    doc = await self.get_document(doc_id)
+                    if doc:
+                        documents.append(doc)
+
+        return documents
+
+    async def get_all(self, owner_id: Optional[str] = None) -> List[Document]:
+        """
+        Get all documents, optionally filtering by owner (Interface method).
+
+        Args:
+            owner_id: Optional filter for document owner
+
+        Returns:
+            List[Document]: List of documents
+        """
+        try:
+            # First try with get_all_documents if it exists
+            results = await self.document_repository.get_all_documents(owner_id=owner_id)
+        except AttributeError:
+            # Fallback to search without query if repository doesn't have get_all_documents
+            results = await self.document_repository.search_similar(
+                embedding=None,  # Some repositories might handle None as "get all"
+                limit=1000,  # Reasonable limit to prevent excessive data retrieval
+                owner_id=owner_id
+            )
+
+        documents = []
+        for result in results:
+            document = Document(
+                id=result.id,
+                content=result.content,
+                embedding=result.embedding,
+                owner_id=result.owner_id,
+                metadata=self._extract_metadata(result),
+                created_at=result.created_at,
+                updated_at=result.updated_at
+            )
+            documents.append(document)
+            # Cache the document for future use
+            self._save_document_to_disk(result.id, document)
+
+        return documents
 
     async def search_documents(
             self,
@@ -140,6 +251,18 @@ class DocumentStore(DocumentStoreInterface):
             documents.append(document)
 
         return documents
+
+    async def delete(self, document_id: str) -> bool:
+        """
+        Delete a document by its ID (Interface method).
+
+        Args:
+            document_id: ID of the document to delete
+
+        Returns:
+            bool: True if deleted, False if not found
+        """
+        return await self.delete_document(document_id)
 
     async def delete_document(self, document_id: str) -> bool:
         """

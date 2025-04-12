@@ -21,7 +21,7 @@
  *  'vim-mode-change' - raised on the editor anytime the current mode changes,
  *                      Event object: {mode: "visual", subMode: "linewise"}
  *
- * Code structure:
+ * Code structure.txt:
  *  1. Default keymap
  *  2. Variable declarations and short basic helpers
  *  3. Instance (External API) implementation

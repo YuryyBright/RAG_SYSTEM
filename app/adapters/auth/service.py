@@ -15,6 +15,9 @@ from app.config import settings
 from infrastructure.database.repository.activity_repository import ActivityRepository
 from infrastructure.database.repository.session_repository import SessionRepository
 from fastapi import Request
+
+from utils.security import clear_auth_cookies
+
 # Configure logger
 logger = get_logger(__name__)
 
@@ -391,7 +394,7 @@ class AuthService:
             logger.error(f"Error during session invalidation: {e}")
             return False
 
-    async def refresh_session(self, session_id: str) -> Tuple[
+    async def refresh_session(self, session_id: str, request=Request) -> Tuple[
         Optional[str], Optional[str], Optional[str], Optional[str], Optional[datetime]]:
         """
         Refresh a session with a new ID and CSRF token.
@@ -400,7 +403,8 @@ class AuthService:
         ----------
         session_id : str
             The current session ID.
-
+        request : Request, optional
+            The current request to extract user-agent and IP.
         Returns
         -------
         Tuple[str or None, str or None, str or None, str or None, datetime or None]
@@ -423,7 +427,7 @@ class AuthService:
 
             # Create a new session
             new_session_id, csrf_token, expire = await self.create_user_session(
-                user_id, username, remember
+                user_id, username, remember, request
             )
 
             if not new_session_id:

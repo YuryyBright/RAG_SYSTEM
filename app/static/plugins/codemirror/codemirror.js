@@ -2096,7 +2096,7 @@
 
   // When an aspect of a line changes, a string is added to
   // lineView.changes. This updates the relevant part of the line's
-  // DOM structure.
+  // DOM structure.txt.
   function updateLineForChanges(cm, lineView, lineN, dims) {
     for (var j = 0; j < lineView.changes.length; j++) {
       var type = lineView.changes[j];
@@ -2134,7 +2134,7 @@
     }
   }
 
-  // Wrapper around buildLineContent which will reuse the structure
+  // Wrapper around buildLineContent which will reuse the structure.txt
   // in display.externalMeasured when possible.
   function getLineContent(cm, lineView) {
     var ext = cm.display.externalMeasured;
@@ -2995,7 +2995,7 @@
     }
   }
 
-  // Updates the display.view data structure for a given change to the
+  // Updates the display.view data structure.txt for a given change to the
   // document. From and to are in pre-change coordinates. Lendiff is
   // the amount of lines added or subtracted by the change. This is
   // used for changes that span multiple lines, or change the way
@@ -4220,7 +4220,7 @@
     }
   }
 
-  // Sync the actual display DOM structure with display.view, removing
+  // Sync the actual display DOM structure.txt with display.view, removing
   // nodes for lines that are no longer in view, and creating the ones
   // that are not there yet, and updating the ones that are out of
   // date.
@@ -4752,7 +4752,7 @@
       (!doc.cm || doc.cm.options.wholeLineUpdateBefore)
   }
 
-  // Perform a change on the document data structure.
+  // Perform a change on the document data structure.txt.
   function updateDoc(doc, change, markedSpans, estimateHeight) {
     function spansFor(n) {return markedSpans ? markedSpans[n] : null}
     function update(line, text, spans) {
@@ -4770,7 +4770,7 @@
     var firstLine = getLine(doc, from.line), lastLine = getLine(doc, to.line);
     var lastText = lst(text), lastSpans = spansFor(text.length - 1), nlines = to.line - from.line;
 
-    // Adjust the line structure
+    // Adjust the line structure.txt
     if (change.full) {
       doc.insert(0, linesFor(0, text.length));
       doc.remove(text.length, doc.size - text.length);

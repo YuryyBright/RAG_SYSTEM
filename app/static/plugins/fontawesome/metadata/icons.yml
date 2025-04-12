@@ -18531,7 +18531,7 @@ folder-tree:
       - document
       - file
       - search
-      - structure
+      - structure.txt
   styles:
     - solid
   unicode: f802

@@ -3886,7 +3886,7 @@
    * Default options provided to Popper.js constructor.<br />
    * These can be overridden using the `options` argument of Popper.js.<br />
    * To override an option, simply pass an object with the same
-   * structure of the `options` object, as the 3rd argument. For example:
+   * structure.txt of the `options` object, as the 3rd argument. For example:
    * ```
    * new Popper(ref, pop, {
    *   modifiers: {

@@ -1,4 +1,5 @@
 # app/infrastructure/database/repository/file_repository.py
+from typing import Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -65,26 +66,51 @@ class FileRepository:
         result = await self.db.execute(select(File).where(File.owner_id == owner_id))
         return result.scalars().all()
 
-    async def create_file(self, **kwargs) -> File:
+    async def create_file(
+        self,
+        filename: str,
+        file_path: str,
+        content_type: str,
+        owner_id: str,
+        theme_id: Optional[str] = None,
+        is_public: bool = False
+    ) -> File:
         """
-        Create a new file record in the database.
+        Create and persist a new file record in the database.
 
         Parameters
         ----------
-        **kwargs : dict
-            Keyword arguments corresponding to File model fields.
+        filename : str
+            Original name of the uploaded file.
+        file_path : str
+            Path where the file is stored on disk.
+        content_type : str
+            MIME type of the file (e.g., 'application/pdf').
+        owner_id : str
+            ID of the user who owns the file.
+        theme_id : Optional[str], optional
+            Associated theme/category ID for organizing files.
+        is_public : bool, optional
+            Whether the file is publicly accessible (default is False).
 
         Returns
         -------
         File
-            The created File object.
+            The created File ORM object.
         """
-        file = File(**kwargs)
-        self.db.add(file)
+        new_file = File(
+            filename=filename,
+            file_path=file_path,
+            content_type=content_type,
+            owner_id=owner_id,
+            theme_id=theme_id,
+            is_public=is_public
+        )
+        self.db.add(new_file)
         await self.db.commit()
-        await self.db.refresh(file)
-        logger.info(f"Created file: {file.filename} (ID: {file.id})")
-        return file
+        await self.db.refresh(new_file)
+        logger.info(f"Created file: {filename} (ID: {file_id})")
+        return new_file
 
     async def delete_file(self, file_id: str) -> bool:
         """

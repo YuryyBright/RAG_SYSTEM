@@ -2266,7 +2266,7 @@ function GenericWorker(name) {
     this.isPaused = true;
     // true if the stream is finished (and should not do anything), false otherwise
     this.isFinished = false;
-    // true if the stream is locked to prevent further structure updates (pipe), false otherwise
+    // true if the stream is locked to prevent further structure.txt updates (pipe), false otherwise
     this.isLocked = false;
     // the event listeners
     this._listeners = {
@@ -9644,7 +9644,7 @@ function inflateGetHeader(strm, head) {
   state = strm.state;
   if ((state.wrap & 2) === 0) { return Z_STREAM_ERROR; }
 
-  /* save header structure */
+  /* save header structure.txt */
   state.head = head;
   head.done = false;
   return Z_OK;
@@ -10217,7 +10217,7 @@ var bl_order =
 
 var DIST_CODE_LEN = 512; /* see definition of array dist_code below */
 
-// !!!! Use flat array insdead of structure, Freq = i*2, Len = i*2+1
+// !!!! Use flat array insdead of structure.txt, Freq = i*2, Len = i*2+1
 var static_ltree  = new Array((L_CODES + 2) * 2);
 zero(static_ltree);
 /* The static literal tree. Since the bit lengths are imposed, there is no

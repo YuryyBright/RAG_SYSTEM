@@ -20168,7 +20168,7 @@ var OutlineMixin = {
   }
 };
 /*
-PDFStructureContent - a reference to a marked structure content
+PDFStructureContent - a reference to a marked structure.txt content
 By Ben Schmidt
 */
 
@@ -20258,11 +20258,11 @@ var PDFStructureElement = /*#__PURE__*/function () {
     key: "add",
     value: function add(child) {
       if (this._ended) {
-        throw new Error("Cannot add child to already-ended structure element");
+        throw new Error("Cannot add child to already-ended structure.txt element");
       }
 
       if (!this._isValidChild(child)) {
-        throw new Error("Invalid structure element child");
+        throw new Error("Invalid structure.txt element child");
       }
 
       if (child instanceof PDFStructureElement) {
@@ -20402,7 +20402,7 @@ var PDFStructureElement = /*#__PURE__*/function () {
       });
 
       this.dictionary.end(); // free memory used by children; the dictionary itself may still be
-      // referenced by a parent structure element or root, but we can
+      // referenced by a parent structure.txt element or root, but we can
       // at least trim the tree here
 
       this._children = [];
@@ -33615,7 +33615,7 @@ function inflateGetHeader(strm, head) {
   state = strm.state;
   if ((state.wrap & 2) === 0) { return Z_STREAM_ERROR; }
 
-  /* save header structure */
+  /* save header structure.txt */
   state.head = head;
   head.done = false;
   return Z_OK;
@@ -34208,7 +34208,7 @@ var bl_order =
 
 var DIST_CODE_LEN = 512; /* see definition of array dist_code below */
 
-// !!!! Use flat array instead of structure, Freq = i*2, Len = i*2+1
+// !!!! Use flat array instead of structure.txt, Freq = i*2, Len = i*2+1
 var static_ltree  = new Array((L_CODES + 2) * 2);
 zero(static_ltree);
 /* The static literal tree. Since the bit lengths are imposed, there is no
@@ -59859,7 +59859,7 @@ function StateTable(entryData, lookupType) {
     entryTable: new r.Pointer(r.uint32, new UnboundedArray(Entry))
   });
   return StateHeader;
-} // This is the old version of the StateTable structure
+} // This is the old version of the StateTable structure.txt
 
 
 function StateTable1(entryData, lookupType) {
@@ -73214,7 +73214,7 @@ DocMeasure.prototype.measureNode = function (node) {
 		} else if (node.qr) {
 			return extendMargins(self.measureQr(node));
 		} else {
-			throw 'Unrecognized document structure: ' + JSON.stringify(node, fontStringify);
+			throw 'Unrecognized document structure.txt: ' + JSON.stringify(node, fontStringify);
 		}
 	});
 
@@ -74021,7 +74021,7 @@ DocPreprocessor.prototype.preprocessNode = function (node) {
 	} else if (node.pageReference || node.textReference) {
 		return this.preprocessText(node);
 	} else {
-		throw 'Unrecognized document structure: ' + JSON.stringify(node, fontStringify);
+		throw 'Unrecognized document structure.txt: ' + JSON.stringify(node, fontStringify);
 	}
 };
 
@@ -75559,7 +75559,7 @@ LayoutBuilder.prototype.processNode = function (node) {
 		} else if (node.qr) {
 			self.processQr(node);
 		} else if (!node._span) {
-			throw 'Unrecognized document structure: ' + JSON.stringify(node, fontStringify);
+			throw 'Unrecognized document structure.txt: ' + JSON.stringify(node, fontStringify);
 		}
 
 		if (absPosition || relPosition) {
@@ -76334,7 +76334,7 @@ function PdfPrinter(fontDescriptors) {
  * ready to be saved.
  *
  * @param {Object} docDefinition document definition
- * @param {Object} docDefinition.content an array describing the pdf structure (for more information take a look at the examples in the /examples folder)
+ * @param {Object} docDefinition.content an array describing the pdf structure.txt (for more information take a look at the examples in the /examples folder)
  * @param {Object} [docDefinition.defaultStyle] default (implicit) style definition
  * @param {Object} [docDefinition.styles] dictionary defining all styles which can be used in the document
  * @param {Object} [docDefinition.pageSize] page size (pdfkit units, A4 dimensions by default)
