@@ -65,7 +65,7 @@ async def get_cookie_user(
         db: AsyncSession = Depends(get_async_db)
 ) -> Optional[User]:
     """
-    Get the current user from cookie session.
+    Get the current user from cookie session with improved security.
     """
     if not session_id:
         return None
@@ -73,29 +73,41 @@ async def get_cookie_user(
     auth_service = AuthService(db)
 
     try:
-        # For GET requests, we don't enforce CSRF check
-        if request.method == "GET":
-            # Skip CSRF verification for GET requests
-            session = await auth_service.validate_session(session_id)
-
-            if session:
-                user_id = session.get("user_id")
-                return await auth_service.user_repo.get_by_id(user_id)
-            logger.warning('Delete users cookies')
+        # First validate that the session exists and is not expired
+        session = await auth_service.validate_session(session_id)
+        if not session:
+            logger.warning('Invalid or expired session, clearing cookies')
             clear_auth_cookies(response)
             return None
 
-        # For non-GET requests, enforce CSRF protection
-        if not csrf_token:
-            logger.warning(f"Missing CSRF token for session: {session_id[:8]}...")
+        user_id = session.get("user_id")
+
+        # For non-GET/HEAD requests, enforce CSRF protection
+        if request.method not in ["GET", "HEAD"]:
+            # Check CSRF token header
+            if not csrf_token:
+                logger.warning(f"Missing CSRF token for non-GET request: {session_id[:8]}...")
+                clear_auth_cookies(response)
+                return None
+
+            # Verify CSRF token
+            if not await auth_service.verify_csrf_token(session_id, csrf_token):
+                logger.warning(f"Invalid CSRF token for session: {session_id[:8]}...")
+                clear_auth_cookies(response)
+                return None
+
+        # Get and return the user
+        user = await auth_service.user_repo.get_by_id(user_id)
+        if not user:
+            logger.warning(f"User not found for session: {session_id[:8]}...")
+            clear_auth_cookies(response)
             return None
 
-        # Verify session and CSRF token
-        return await auth_service.verify_session(session_id, csrf_token)
+        return user
     except Exception as e:
         logger.error(f"Cookie authentication error: {str(e)}")
+        clear_auth_cookies(response)
         return None
-
 
 async def get_current_active_user(
         token_user: Optional[User] = Depends(get_current_user),

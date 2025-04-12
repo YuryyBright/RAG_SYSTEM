@@ -20,6 +20,17 @@
     />
     <!-- Theme style -->
     <link rel="stylesheet" href="{{ url_for('static', path='dist/css/adminlte.min.css') }}" />
+    <!-- SweetAlert2 styling -->
+    <link rel="stylesheet" href="{{ url_for('static', path='plugins/sweetalert2/sweetalert2.min.css') }}" />
+
+    <!-- Security headers -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;"
+    />
+    <meta http-equiv="X-Content-Type-Options" content="nosniff" />
+    <meta http-equiv="X-Frame-Options" content="DENY" />
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
 
     {% block head %}
     <!-- Additional head content can be added here -->
@@ -28,16 +39,49 @@
   <body
     class="hold-transition dark-mode sidebar-mini layout-fixed layout-navbar-fixed layout-footer-fixed requires-auth"
   >
+    <!-- Authentication status monitor -->
+    <div id="auth-status-indicator" style="display: none"></div>
+
     <!-- Alerts (Fixed position for global alerts) -->
     <div id="alert-container" style="position: fixed; top: 70px; right: 20px; z-index: 1055"></div>
+
+    <!-- Session expiration warning modal -->
+    <div
+      class="modal fade"
+      id="sessionExpirationModal"
+      tabindex="-1"
+      aria-labelledby="sessionExpirationModalLabel"
+      aria-hidden="true"
+    >
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header bg-warning">
+            <h5 class="modal-title" id="sessionExpirationModalLabel">Session Expiring Soon</h5>
+            <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+              <span aria-hidden="true">&times;</span>
+            </button>
+          </div>
+          <div class="modal-body">
+            <p>
+              Your session will expire in
+              <span id="sessionExpirationCountdown">5</span>
+              minutes. Would you like to stay logged in?
+            </p>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-dismiss="modal">Logout</button>
+            <button type="button" class="btn btn-primary" id="extendSessionBtn">Stay Logged In</button>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <div class="wrapper">
       <!-- Preloader -->
       <!-- <div class="preloader flex-column justify-content-center align-items-center">
-      <i class="fa-regular fa-folder fa-5x"></i>
-     <img class="animation__wobble" src="dist/img/AdminLTELogo.png" alt="AdminLTELogo" height="60" width="60" />
-    </div> -->
-
+        <i class="fa-regular fa-folder fa-5x"></i>
+      </div> -->
+      <div class="pace-activity"></div>
       <!-- Navbar -->
       {% include 'include/navbar.html' %}
       <!-- Sidebar -->
@@ -46,7 +90,6 @@
       <!-- Content Wrapper. Contains page content -->
       <div class="content-wrapper">
         <!-- Content Header (Page header) -->
-
         <section class="content-header">
           <div class="container-fluid">
             {% block header %}
@@ -61,7 +104,6 @@
                 </ol>
               </div>
             </div>
-
             {% endblock %}
           </div>
           <!-- /.container-fluid -->
@@ -94,25 +136,125 @@
     <script src="{{ url_for('static', path='plugins/overlayScrollbars/js/jquery.overlayScrollbars.min.js') }}"></script>
     <script src="{{ url_for('static', path='dist/js/adminlte.js') }}"></script>
     <script src="{{ url_for('static', path='plugins/alertify.js/js/alertify.js') }}"></script>
+    <script src="{{ url_for('static', path='plugins/sweetalert2/sweetalert2.min.js') }}"></script>
+
     <!-- Authentication script - MUST load before other page scripts -->
     <script src="{{ url_for('static', path='dist/js/pages/auth.js') }}"></script>
-    <!-- In your base template or protected pages -->
     <!-- Request Helper -->
     <script src="{{ url_for('static', path='dist/js/pages/request-helper.js') }}"></script>
-    <script src="{{ url_for('static', path='plugins/sweetalert2/sweetalert2.min.js') }}"></script>
+    <script src="{{ url_for('static', path='plugins/pace-progress/pace.min.js') }}"></script>
+
     <script>
-      // Add CSRF token to all forms
+      // Global auth initialization with enhanced features
       $(document).ready(function () {
+        // Configure alertify
         alertify.set("notifier", "position", "top-right");
+        alertify.set("notifier", "delay", 5);
+
+        // Initialize auth with UI integration
         const csrfToken = AuthManager.getCsrfToken();
+
+        // Add CSRF token to all forms
         if (csrfToken) {
-          // Add hidden input to all forms
           $("form").each(function () {
             if (!$(this).find('input[name="csrf_token"]').length) {
               $(this).append(`<input type="hidden" name="csrf_token" value="${csrfToken}">`);
             }
           });
         }
+
+        // Setup automatic CSRF token updates for long-lived pages
+        function updateFormsWithNewCsrfToken() {
+          const newCsrfToken = AuthManager.getCsrfToken();
+          if (newCsrfToken) {
+            $('input[name="csrf_token"]').val(newCsrfToken);
+          }
+        }
+
+        // Add session extension functionality
+        $("#extendSessionBtn").on("click", function () {
+          // Show loading state
+          const btn = $(this);
+          const originalText = btn.text();
+          btn.prop("disabled", true).html('<i class="fas fa-spinner fa-spin"></i> Processing...');
+
+          // Try to refresh session
+          if (AuthManager.getToken()) {
+            AuthManager.refreshToken()
+              .then(() => {
+                $("#sessionExpirationModal").modal("hide");
+                alertify.success("Session extended successfully");
+              })
+              .catch(() => {
+                $("#sessionExpirationModal").modal("hide");
+                alertify.error("Failed to extend session. Please log in again.");
+                setTimeout(() => AuthManager.handleSessionExpiration(), 1000);
+              })
+              .finally(() => {
+                btn.prop("disabled", false).text(originalText);
+              });
+          } else {
+            AuthManager.refreshSession()
+              .then(() => {
+                $("#sessionExpirationModal").modal("hide");
+                alertify.success("Session extended successfully");
+                updateFormsWithNewCsrfToken();
+              })
+              .catch(() => {
+                $("#sessionExpirationModal").modal("hide");
+                alertify.error("Failed to extend session. Please log in again.");
+                setTimeout(() => AuthManager.handleSessionExpiration(), 1000);
+              })
+              .finally(() => {
+                btn.prop("disabled", false).text(originalText);
+              });
+          }
+        });
+
+        // Session expiration warning
+        if (typeof AuthManager !== "undefined") {
+          // Add a new session warning method to AuthManager
+          AuthManager.showSessionWarning = function (minutesLeft) {
+            $("#sessionExpirationCountdown").text(minutesLeft);
+            $("#sessionExpirationModal").modal("show");
+          };
+
+          // Add event for closing the modal (logout choice)
+          $("#sessionExpirationModal").on("hidden.bs.modal", function (e) {
+            // If they didn't click extend, assume they want to logout
+            if ($("#extendSessionBtn").prop("disabled") === false) {
+              AuthManager.logout();
+            }
+          });
+        }
+
+        // Enhance page loading behavior
+        $(document).ajaxStart(function () {
+          // For long-running operations, show preloader
+          if ($("body").hasClass("ajax-long-operation")) {
+            $(".preloader").show();
+          }
+        });
+
+        $(document).ajaxStop(function () {
+          // Hide preloader when all AJAX requests complete
+          $(".preloader").hide();
+        });
+
+        // Handle session errors via custom events
+        $(document).on("auth:sessionExpired", function () {
+          Swal.fire({
+            title: "Session Expired",
+            text: "Your session has expired. You will be redirected to the login page.",
+            icon: "warning",
+            confirmButtonText: "OK",
+          }).then(() => {
+            AuthManager.handleSessionExpiration();
+          });
+        });
+
+        // Hide preloader when page is fully loaded
+        $(".preloader").fadeOut("slow");
       });
     </script>
 
@@ -121,3 +263,4 @@
     {% endblock %}
   </body>
 </html>
+<!-- End of file: app/templates/base.html -->

@@ -305,7 +305,6 @@ def is_valid_csrf_token(token: str, session_token: str) -> bool:
             f"{timestamp}".encode(),
             digestmod=hashlib.sha256
         ).hexdigest()
-
         return hmac.compare_digest(token_part, expected_token)
     except Exception as e:
         logger.warning(f"CSRF token validation failed: {e}")

@@ -4,6 +4,21 @@ from typing import Optional
 from pydantic import BaseModel, Field, EmailStr
 from typing import List
 
+
+class UserInfo(BaseModel):
+    """Schema for user information returned from authentication endpoints."""
+    id: str
+    username: str
+    email: EmailStr
+    display_name: Optional[str] = None
+    created_at: Optional[datetime] = None
+    last_login: Optional[datetime] = None
+    is_active: bool = True
+    is_verified: bool = False
+    avatar_url: Optional[str] = None
+
+    class Config:
+        orm_mode = True
 class ActivityLogEntry(BaseModel):
     """
     Schema for user activity log entry.
