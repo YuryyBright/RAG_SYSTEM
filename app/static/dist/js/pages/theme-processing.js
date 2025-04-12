@@ -232,7 +232,7 @@ function handleThemeFormSubmit(e) {
 
   // Create theme via API
   $.ajax({
-    url: "/api/v1/themes",
+    url: "/api/themes",
     method: "POST",
     data: JSON.stringify(themeData),
     contentType: "application/json",
@@ -271,7 +271,7 @@ function handleThemeFormSubmit(e) {
 
   // Create theme via API
   $.ajax({
-    url: "/api/v1/themes",
+    url: "/api/themes",
     method: "POST",
     data: JSON.stringify(themeData),
     contentType: "application/json",
@@ -295,7 +295,7 @@ function handleThemeFormSubmit(e) {
  */
 function loadThemes() {
   $.ajax({
-    url: "/api/v1/themes",
+    url: "/api/themes",
     method: "GET",
     headers: {
       "X-CSRF-Token": getCsrfToken(),
@@ -378,7 +378,7 @@ function selectTheme(themeId, themeName) {
 function deleteTheme(themeId) {
   if (confirm("Are you sure you want to delete this theme? This action cannot be undone.")) {
     $.ajax({
-      url: `/api/v1/themes/${themeId}`,
+      url: `/api/themes/${themeId}`,
       method: "DELETE",
       headers: {
         "X-CSRF-Token": getCsrfToken(),
@@ -454,7 +454,7 @@ function navigateToStep(step) {
 function loadFilesTable() {
   if (state.currentThemeId) {
     $.ajax({
-      url: `/api/v1/themes/${state.currentThemeId}/documents`,
+      url: `/api/themes/${state.currentThemeId}/documents`,
       method: "GET",
       headers: {
         "X-CSRF-Token": getCsrfToken(),

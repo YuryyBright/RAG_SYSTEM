@@ -19,7 +19,7 @@ from app.api.dependencies import get_document_store
 router = APIRouter()
 
 
-@router.post("", response_model=ThemeResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=ThemeResponse, status_code=status.HTTP_201_CREATED)
 async def create_theme(
         theme_data: ThemeCreate,
         user: dict = Depends(get_current_active_user),
@@ -55,7 +55,7 @@ async def create_theme(
         )
 
 
-@router.get("", response_model=List[ThemeResponse])
+@router.get("/", response_model=List[ThemeResponse])
 async def get_themes(
         include_public: bool = False,
         user: dict = Depends(get_current_active_user),
