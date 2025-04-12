@@ -64,32 +64,31 @@ function setupEventListeners() {
  */
 function initDropzone() {
   // Check if the element exists before trying to initialize Dropzone
-  if ($("#file-upload-form").length === 0) {
+  const dropzoneElement = $("#file-upload-form")[0];
+
+  if (!dropzoneElement) {
     console.error("Dropzone target element #file-upload-form not found.");
     return;
   }
 
-  // Check if Dropzone is already initialized on the element to prevent the "already attached" error
-  // This check might be redundant if autoDiscover is properly disabled, but it's good practice.
-  if ($("#file-upload-form")[0].dropzone) {
-    console.log("Dropzone instance already exists on #file-upload-form, skipping initialization.");
-    // Optionally, you might want to ensure the existing instance is configured correctly
-    // or destroy and recreate it if necessary.
-    // state.dropzone = $("#file-upload-form")[0].dropzone; // Assign existing instance
-    return;
-  }
-
-  // Check if Dropzone library is loaded
-  if (typeof Dropzone === "undefined") {
-    console.error("Dropzone library is not loaded.");
-    alertify.error("File uploader component failed to load. Please refresh the page or contact support.");
-    return;
+  // Check and destroy existing Dropzone instance
+  if (dropzoneElement.dropzone) {
+    console.log("Destroying existing Dropzone instance on #file-upload-form.");
+    dropzoneElement.dropzone.destroy();
+    // Also clear the element's inner HTML if needed
+    $("#file-upload-form").html(`
+      <div class="dz-message d-flex flex-column">
+        <i class="fas fa-cloud-upload-alt fa-3x mb-3"></i>
+        <span>Drop files here or click to upload</span>
+        <span class="text-muted small">Supported formats: PDF, TXT, DOCX, HTML, MD, CSV</span>
+      </div>
+    `);
   }
 
   try {
     const myDropzone = new Dropzone("#file-upload-form", {
       url: "/api/files", // Make sure this URL is correct and reachable
-      paramName: "file",
+      paramName: "files",
       maxFilesize: 50, // MB
       acceptedFiles: ".pdf,.txt,.docx,.html,.md,.csv",
       addRemoveLinks: true,
@@ -98,9 +97,7 @@ function initDropzone() {
       dictRemoveFile: "Remove",
       autoProcessQueue: true, // Set to false if you want to trigger uploads manually
       parallelUploads: 5,
-      headers: {
-        "X-CSRF-Token": getCsrfToken(), // Ensure getCsrfToken() is defined and returns a valid token
-      },
+
       init: function () {
         const dzInstance = this; // Reference to the dropzone instance
 
@@ -113,34 +110,66 @@ function initDropzone() {
         });
 
         this.on("sending", function (file, xhr, formData) {
-          // Append theme_id only if it exists
-          if (state.currentThemeId) {
-            formData.append("theme_id", state.currentThemeId);
-            console.log(`Sending file ${file.name} for theme ID: ${state.currentThemeId}`);
-          } else {
-            console.error("Cannot send file - theme_id is missing.");
-            // Optionally cancel the upload here if needed, though the 'processing' event handler is better
-            // xhr.abort();
+          // Get the CSRF token
+          const token = getCsrfToken();
+          // Check if the token is valid
+          if (!token) {
+            console.error("CSRF Token is missing or invalid.");
+            alertify.error("Error: Authentication token missing. Please refresh the page.");
+            dzInstance.removeFile(file);
+            return;
           }
+          // Check if the file is valid
+          if (!file) {
+            console.error("File is missing or invalid.");
+            alertify.error("Error: File is missing or invalid.");
+            dzInstance.removeFile(file);
+            return;
+          }
+          // Only proceed if we have both theme ID and token
+          if (!state.currentThemeId) {
+            alertify.error("Error: No theme selected. Cannot upload file.");
+            dzInstance.removeFile(file);
+            return;
+          }
+
+          if (!token) {
+            alertify.error("Error: Authentication token missing. Please refresh the page.");
+            dzInstance.removeFile(file);
+            return;
+          }
+
+          // Append necessary data
+          xhr.withCredentials = true; // ← this is required for cookies
+          xhr.setRequestHeader("X-CSRF-Token", token);
+          formData.append("theme_id", state.currentThemeId);
+          console.log(`Sending file ${file.name} for theme ID: ${state.currentThemeId}`);
         });
 
         this.on("success", function (file, response) {
-          // Make sure the response is the expected object/data
           console.log("File upload success response:", response);
-          if (response && typeof response === "object") {
-            state.uploadedFiles.push(response); // Assuming response is the file metadata object
+
+          // Assume the server returns a list of uploaded files
+          const uploadedFile = Array.isArray(response) ? response[0] : response;
+
+          if (uploadedFile && uploadedFile.id) {
+            // Store the uploaded file data
+            state.uploadedFiles.push(uploadedFile);
+
+            // Update preview element
             file.previewElement.classList.add("dz-success");
-            // You might want to add a file ID to the preview element for removal later
-            file.previewElement.setAttribute("data-file-id", response.id || file.upload.uuid);
+            file.previewElement.setAttribute("data-file-id", uploadedFile.id);
+
             alertify.success(`File "${file.name}" uploaded successfully.`);
           } else {
-            console.error("Received unexpected success response:", response);
-            alertify.error(`Upload succeeded for ${file.name}, but received invalid server response.`);
-            file.previewElement.classList.add("dz-error"); // Mark as error visually
-            $(file.previewElement).find(".dz-error-message").text("Invalid server response");
+            console.error("Unexpected or missing file ID in server response:", response);
+            file.previewElement.classList.add("dz-error");
+            $(file.previewElement).find(".dz-error-message").text("Missing file ID from server.");
+            alertify.error(`Upload succeeded for ${file.name}, but no file ID was returned.`);
           }
-          // Enable next button if needed after *any* successful upload
-          $("#upload-next-btn").prop("disabled", false);
+
+          // Enable next button if needed
+          $("#upload-next-btn").prop("disabled", state.uploadedFiles.length === 0);
         });
 
         this.on("error", function (file, errorMessage, xhr) {
@@ -178,24 +207,28 @@ function initDropzone() {
           const fileId = file.previewElement.getAttribute("data-file-id");
           if (file.status === "success" && fileId) {
             console.log(`Attempting to delete file with ID: ${fileId} from server...`);
-            // $.ajax({
-            //     url: `/api/v1/files/${fileId}`, // Adjust URL as needed
-            //     method: 'DELETE',
-            //     headers: { "X-CSRF-Token": getCsrfToken() },
-            //     success: function(response) {
-            //         alertify.success(`File ${file.name} removed from server.`);
-            //         // Remove from state.uploadedFiles as well
-            //         state.uploadedFiles = state.uploadedFiles.filter(f => (f.id || f.uuid) !== fileId);
-            //         $("#upload-next-btn").prop("disabled", state.uploadedFiles.length === 0);
-            //     },
-            //     error: function(xhr, status, error) {
-            //         alertify.error(`Failed to remove ${file.name} from server.`);
-            //         console.error("Error deleting file:", error);
-            //     }
-            // });
-          } else {
-            // If the file was never uploaded successfully or has no ID, just remove from UI
-            // Potentially remove from state.uploadedFiles if it somehow got added without success/ID
+
+            $.ajax({
+              url: `/api/files/${fileId}`, // ✅ matches your FastAPI route
+              method: "DELETE",
+              headers: {
+                "X-CSRF-Token": getCsrfToken(),
+              },
+              success: function (response) {
+                alertify.success(`File "${file.name}" removed from server.`);
+                console.log("Server response:", response);
+
+                // Remove from uploaded state
+                state.uploadedFiles = state.uploadedFiles.filter((f) => f.id !== fileId);
+
+                // Update "next" button state
+                $("#upload-next-btn").prop("disabled", state.uploadedFiles.length === 0);
+              },
+              error: function (xhr, status, error) {
+                alertify.error(`Failed to remove "${file.name}" from server.`);
+                console.error("Error deleting file:", xhr.responseText || error);
+              },
+            });
           }
         });
       },
@@ -258,6 +291,9 @@ function getCsrfToken() {
     console.warn("AuthManager is not defined or getCsrfToken is missing.");
     return "";
   }
+
+  // Assuming AuthManager is a global object with a method to get CSRF token
+  // Ensure AuthManager is defined and has the method
   return AuthManager.getCsrfToken();
 }
 

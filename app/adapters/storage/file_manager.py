@@ -3,10 +3,13 @@ import os
 import uuid
 import shutil
 from fastapi import UploadFile, HTTPException
-from typing import Tuple
+from typing import Tuple, Optional
 from app.config import settings
 from pathlib import Path
 
+from utils.logger_util import get_logger
+
+logger = get_logger(__name__)
 
 class FileManager:
     """
@@ -22,61 +25,57 @@ class FileManager:
         self.upload_dir = settings.UPLOAD_DIR
         os.makedirs(self.upload_dir, exist_ok=True)
 
-    async def save_file(self, file: UploadFile, user_id: str) -> Tuple[str, str, int]:
+    async def save_file_to_theme(
+        self, file: UploadFile, user_id: str, theme_id: Optional[str]
+    ) -> Tuple[str, str, int]:
         """
-        Save an uploaded file to disk.
+        Save a file under a user's theme directory.
 
         Parameters
         ----------
         file : UploadFile
-            The uploaded file.
+            The file to save.
         user_id : str
-            The ID of the user uploading the file.
+            The ID of the uploading user.
+        theme_id : Optional[str]
+            The theme this file belongs to.
 
         Returns
         -------
         Tuple[str, str, int]
-            The filename, file path, and file size.
-
-        Raises
-        ------
-        HTTPException
-            If the file extension is not allowed or the file size exceeds the limit.
+            (filename, full path, file size in bytes)
         """
-        # Validate file extension
-        file_extension = file.filename.split(".")[-1] if "." in file.filename else ""
-        if file_extension.lower() not in settings.ALLOWED_EXTENSIONS:
+        file_extension = file.filename.split(".")[-1].lower() if "." in file.filename else ""
+        if file_extension not in settings.ALLOWED_EXTENSIONS:
             raise HTTPException(
                 status_code=400,
-                detail=f"File extension '{file_extension}' not allowed. Allowed extensions: {', '.join(settings.ALLOWED_EXTENSIONS)}"
+                detail=f"File extension '{file_extension}' not allowed. Allowed: {', '.join(settings.ALLOWED_EXTENSIONS)}"
             )
 
-        # Generate a unique filename
         unique_filename = f"{uuid.uuid4().hex}_{file.filename}"
+        user_theme_dir = self.upload_dir / user_id / (theme_id or "unclassified")
+        user_theme_dir.mkdir(parents=True, exist_ok=True)
 
-        # Create user directory
-        user_dir = os.path.join(self.upload_dir, user_id)
-        os.makedirs(user_dir, exist_ok=True)
+        file_path = user_theme_dir / unique_filename
 
-        # Save file
-        file_path = os.path.join(user_dir, unique_filename)
-
-        # Check file size
-        file.file.seek(0, 2)  # Seek to end
+        # Determine file size
+        file.file.seek(0, os.SEEK_END)
         file_size = file.file.tell()
-        file.file.seek(0)  # Seek back to start
+        file.file.seek(0)
 
         if file_size > settings.MAX_FILE_SIZE:
-            raise HTTPException(
-                status_code=400,
-                detail=f"File size ({file_size} bytes) exceeds the maximum allowed size ({settings.MAX_FILE_SIZE} bytes)"
-            )
+            raise HTTPException(status_code=400, detail="File too large")
 
         # Write file to disk
-        with open(file_path, "wb") as f:
-            shutil.copyfileobj(file.file, f)
+        try:
+            with open(file_path, "wb") as out_file:
+                shutil.copyfileobj(file.file, out_file)
+            logger.info(f"File saved: {file_path}")
+        except Exception as e:
+            logger.exception(f"Failed to save file: {file.filename}")
+            raise HTTPException(status_code=500, detail=f"Failed to save file: {str(e)}")
 
-        return unique_filename, file_path, file_size
+        return unique_filename, str(file_path), file_size
 
     async def delete_file(self, file_path: str) -> bool:
         """
@@ -85,17 +84,21 @@ class FileManager:
         Parameters
         ----------
         file_path : str
-            The path to the file to delete.
+            Absolute file path.
 
         Returns
         -------
         bool
-            True if the file was deleted, False otherwise.
+            True if file was deleted, False otherwise.
         """
         try:
-            if os.path.exists(file_path):
-                os.unlink(file_path)
+            path = Path(file_path)
+            if path.exists() and path.is_file():
+                path.unlink()
+                logger.info(f"Deleted file from disk: {file_path}")
                 return True
+            logger.warning(f"Tried to delete non-existent file: {file_path}")
             return False
         except Exception as e:
+            logger.exception(f"Failed to delete file at {file_path}")
             raise HTTPException(status_code=500, detail=f"Error deleting file: {str(e)}")

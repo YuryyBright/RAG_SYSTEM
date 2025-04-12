@@ -72,6 +72,7 @@ class FileRepository:
         file_path: str,
         content_type: str,
         owner_id: str,
+        size:int,
         theme_id: Optional[str] = None,
         is_public: bool = False
     ) -> File:
@@ -88,6 +89,8 @@ class FileRepository:
             MIME type of the file (e.g., 'application/pdf').
         owner_id : str
             ID of the user who owns the file.
+        size: int
+            Size of the file in bytes.
         theme_id : Optional[str], optional
             Associated theme/category ID for organizing files.
         is_public : bool, optional
@@ -104,12 +107,13 @@ class FileRepository:
             content_type=content_type,
             owner_id=owner_id,
             theme_id=theme_id,
+            size=size,
             is_public=is_public
         )
         self.db.add(new_file)
         await self.db.commit()
         await self.db.refresh(new_file)
-        logger.info(f"Created file: {filename} (ID: {file_id})")
+        logger.info(f"Created file: {filename} (ID: {new_file.id}) for user: {owner_id}")
         return new_file
 
     async def delete_file(self, file_id: str) -> bool:
@@ -126,12 +130,39 @@ class FileRepository:
         bool
             True if the file was successfully deleted, False otherwise.
         """
-        file = await self.get_by_id(file_id)
-        if not file:
-            logger.warning(f"Attempted to delete non-existent file: {file_id}")
+        try:
+            file = await self.get_by_id(file_id)
+            if not file:
+                logger.warning(f"[FileRepository] File not found: {file_id}")
+                return False
+
+            await self.db.delete(file)
+            await self.db.commit()
+            logger.info(f"[FileRepository] Deleted file: {file_id}")
+            return True
+
+        except Exception as e:
+            logger.exception(f"[FileRepository] Error deleting file {file_id}: {e}")
             return False
 
-        await self.db.delete(file)
-        await self.db.commit()
-        logger.info(f"Deleted file: {file_id}")
-        return True
+    async def get_file_by_id(self, file_id: str) -> Optional[File]:
+        """
+        Retrieve a file record by its unique ID.
+
+        Parameters
+        ----------
+        file_id : str
+            The unique identifier of the file to retrieve.
+
+        Returns
+        -------
+        Optional[FileModel]
+            The `FileModel` object if found, otherwise `None`.
+
+        Notes
+        -----
+        This method uses the asynchronous session to fetch the file record
+        directly by its primary key.
+        """
+        result = await self.db.get(File, file_id)
+        return result

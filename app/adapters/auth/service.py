@@ -334,6 +334,8 @@ class AuthService:
             logger.error(f"Error creating session: {e}")
             return None, None, None
 
+    # Update in validate_session method in service.py
+
     async def validate_session(self, session_id: str) -> Optional[Dict[str, Any]]:
         """
         Validate a session from a cookie.
@@ -354,15 +356,19 @@ class AuthService:
 
             if not session:
                 logger.warning(f"Session not found: {session_id[:8]}...")
-                return None
+                # Throw a specific error that can be caught by the API endpoint
+                raise HTTPException(status_code=401, detail="Session not found")
 
             # Check if session is expired
             if session.get("expires_at") < datetime.utcnow():
                 logger.warning(f"Session expired: {session_id[:8]}...")
                 await self.session_repo.delete_session(session_id)
-                return None
+                raise HTTPException(status_code=401, detail="Session expired")
 
             return session
+        except HTTPException:
+            # Re-raise HTTP exceptions
+            raise
         except Exception as e:
             logger.error(f"Error validating session: {e}")
             return None

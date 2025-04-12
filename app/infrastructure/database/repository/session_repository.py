@@ -89,6 +89,74 @@ class SessionRepository:
             logger.error(f"Error creating session: {e}")
             return False
 
+    async def update_session_csrf_token(self, session_id: str, csrf_token: str) -> bool:
+        """
+        Update the CSRF token for an existing session.
+
+        Parameters
+        ----------
+        session_id : str
+            The session ID to update.
+        csrf_token : str
+            The new CSRF token.
+
+        Returns
+        -------
+        bool
+            True if the update was successful, False otherwise.
+        """
+        try:
+            session = await self.get_session(session_id)
+
+            if not session:
+                logger.warning(f"Session not found when updating CSRF token: {session_id[:8]}...")
+                return False
+
+            # Update the session data with the new CSRF token
+            session["csrf_token"] = csrf_token
+
+            # Update the session in Redis or database
+            success = await self._update_session(session_id, session)
+
+            if success:
+                logger.info(f"CSRF token updated for session: {session_id[:8]}...")
+            else:
+                logger.warning(f"Failed to update CSRF token for session: {session_id[:8]}...")
+
+            return success
+        except Exception as e:
+            logger.error(f"Error updating CSRF token: {e}")
+            return False
+
+    async def _update_session(self, session_id: str, session_data: dict) -> bool:
+        """
+        Internal method to update session data in storage.
+        Implementation depends on your storage backend (Redis/Database).
+        """
+        try:
+            # Depending on your implementation this might be:
+            # For Redis:
+            # await self.redis.hset(f"session:{session_id}", mapping=session_data)
+            # await self.redis.expireat(f"session:{session_id}", int(session_data["expires_at"].timestamp()))
+
+            # For SQL database:
+            stmt = (
+                update(SessionModel)
+                .where(SessionModel.session_id == session_id)
+                .values(
+                    csrf_token=session_data["csrf_token"],
+                    updated_at=datetime.utcnow()
+                )
+            )
+            await self.db.execute(stmt)
+            await self.db.commit()
+
+            return True
+        except Exception as e:
+            logger.error(f"Error updating session in storage: {e}")
+            await self.db.rollback()
+            return False
+
     async def get_session(self, session_id: str) -> Optional[Dict[str, Any]]:
         """
         Retrieve a session by its ID.

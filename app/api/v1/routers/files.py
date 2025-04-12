@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from typing import List, Optional, Union
 import os
 
 from api.middleware_auth import get_current_active_user
@@ -67,34 +67,31 @@ file_manager = FileManager()
 @router.post("/", response_model=List[FileResponseSchema])
 async def upload_files(
     theme_id: Optional[str] = Form(None),
-    files: List[UploadFile] = File(...),
+    files: Union[UploadFile, List[UploadFile]] = File(...),
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_async_db)
 ):
     """
-    Upload multiple files and store them in the database.
+    Upload one or multiple files and store metadata in the database.
     """
     repo = FileRepository(db)
     saved_files = []
 
+    # Normalize single file to list
+    if isinstance(files, UploadFile):
+        files = [files]
+
     try:
-        upload_dir = Path("uploads") / str(current_user.id) / (theme_id or "unclassified")
-        upload_dir.mkdir(parents=True, exist_ok=True)
-
         for file in files:
-            file_ext = Path(file.filename).suffix
-            file_id = str(uuid4())
-            file_path = upload_dir / f"{file_id}{file_ext}"
+            # Save file using FileManager
+            filename, path, size = await file_manager.save_file_to_theme(file, str(current_user.id), theme_id)
 
-            # Save file content
-            with open(file_path, "wb") as f_out:
-                f_out.write(await file.read())
-
-            # Create file entry using repository
+            # Store file record in DB
             file_record = await repo.create_file(
                 filename=file.filename,
-                file_path=str(file_path),
+                file_path=str(path),
                 content_type=file.content_type,
+                size=size,
                 is_public=False,
                 owner_id=current_user.id,
                 theme_id=theme_id
@@ -199,28 +196,33 @@ async def get_file(
 
 @router.delete("/{file_id}")
 async def delete_file(
-        file_id: str,
-        current_user: User = Depends(get_current_active_user),
-        db: Session = Depends(get_async_db)
+    file_id: str,
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_async_db)
 ):
-    """Delete a file."""
-    # Get file from database
-    file = db.query(FileModel).filter(FileModel.id == file_id).first()
+    """Delete a file using FileRepository and FileManager."""
+    repo = FileRepository(db)
+
+    # Fetch file
+    file = await repo.get_file_by_id(file_id)
     if not file:
         raise HTTPException(status_code=404, detail="File not found")
 
-    # Check if user owns the file
+    # Authorization check
     if file.owner_id != current_user.id and not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Access denied")
 
-    # Delete file from disk
-    deleted = await file_manager.delete_file(file.file_path)
+    try:
+        # Delete file from disk
+        await file_manager.delete_file(file.file_path)
 
-    # Delete file from database
-    db.delete(file)
-    db.commit()
+        # Delete file from DB
+        await repo.delete_file(file.id)
 
-    return {"detail": "File deleted successfully"}
+        return {"detail": "File deleted successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete file: {str(e)}")
+
 
 
 @router.get("/public/{file_id}")

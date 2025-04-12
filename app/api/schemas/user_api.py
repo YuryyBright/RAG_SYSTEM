@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional, List, Dict
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 # -------------------------------
@@ -93,17 +93,6 @@ class ApiKeyResponse(BaseModel):
 # User Session Tracking
 # --------------------
 
-from pydantic import BaseModel, Field
-from typing import Optional
-from datetime import datetime
-
-from pydantic import BaseModel, Field
-from typing import Optional
-from datetime import datetime
-
-from pydantic import BaseModel, Field
-from typing import Optional
-from datetime import datetime
 
 class SessionInfo(BaseModel):
     """
@@ -172,10 +161,6 @@ class UserActivityResponse(BaseModel):
     type: str
     description: str
     timestamp: datetime
-
-
-from typing import Dict, List
-from pydantic import BaseModel, Field
 
 class UserStats(BaseModel):
     """
