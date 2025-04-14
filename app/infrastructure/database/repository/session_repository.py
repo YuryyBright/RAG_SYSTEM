@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Optional, Dict, Any, List
 from uuid import UUID
 
-from sqlalchemy import select, delete
+from sqlalchemy import select, delete, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.expression import and_
 
@@ -141,11 +141,10 @@ class SessionRepository:
 
             # For SQL database:
             stmt = (
-                update(SessionModel)
-                .where(SessionModel.session_id == session_id)
+                update(Session)
+                .where(Session.id == session_id)
                 .values(
                     csrf_token=session_data["csrf_token"],
-                    updated_at=datetime.utcnow()
                 )
             )
             await self.db.execute(stmt)

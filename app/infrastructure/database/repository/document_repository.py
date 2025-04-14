@@ -1,9 +1,8 @@
-# app/infrastructure/database/repository/document_repository.py
 from typing import Optional, List
 
-from sqlalchemy import select, delete
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.infrastructure.database.db_models import Document, DocumentMetadata
+from app.infrastructure.database.db_models import Document
 from app.utils.logger_util import get_logger
 
 logger = get_logger(__name__)
@@ -14,11 +13,6 @@ class DocumentRepository:
 
     Provides high-level methods for retrieving, storing, and managing documents
     and their associated metadata in a structured and reusable way.
-
-    Attributes
-    ----------
-    db : AsyncSession
-        The asynchronous SQLAlchemy session used for DB communication.
     """
 
     def __init__(self, db: AsyncSession):
@@ -46,7 +40,9 @@ class DocumentRepository:
         Document or None
             The Document object if found, otherwise None.
         """
-        result = await self.db.execute(select(Document).where(Document.id == document_id))
+        result = await self.db.execute(
+            select(Document).where(Document.id == document_id)
+        )
         return result.scalar_one_or_none()
 
     async def get_by_owner(self, owner_id: str) -> List[Document]:
@@ -63,7 +59,9 @@ class DocumentRepository:
         List[Document]
             A list of Document objects owned by the user.
         """
-        result = await self.db.execute(select(Document).where(Document.owner_id == owner_id))
+        result = await self.db.execute(
+            select(Document).where(Document.owner_id == owner_id)
+        )
         return result.scalars().all()
 
     async def create_document(self, **kwargs) -> Document:

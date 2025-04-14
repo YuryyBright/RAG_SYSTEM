@@ -123,3 +123,16 @@ class ThemeRepositoryInterface(ABC):
             List[str]: List of document IDs.
         """
         pass
+
+    @abstractmethod
+    async def count_documents(self, theme_id: str) -> int:
+        """
+        Get all count of document associated with a theme.
+
+        Args:
+            theme_id: ID of the theme.
+
+        Returns:
+            int: count of document.
+        """
+        pass

@@ -1,7 +1,7 @@
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 
-from sqlalchemy import select, update, delete, and_
+from sqlalchemy import select, update, delete, and_, func  # ADDED func for counting
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import selectinload
@@ -30,7 +30,7 @@ class ThemeRepository(ThemeRepositoryInterface):
         self.db = db
 
     async def create_theme(self, name: str, description: Optional[str],
-                         is_public: bool, owner_id: str) -> str:
+                           is_public: bool, owner_id: str) -> str:
         """
         Create and persist a new theme in the database.
 
@@ -94,7 +94,7 @@ class ThemeRepository(ThemeRepositoryInterface):
             List[Theme]: List of matching Theme objects.
         """
         try:
-            query = select(Theme).options(selectinload(Theme.documents))  # ✅ this line preloads documents
+            query = select(Theme).options(selectinload(Theme.documents))
 
             if owner_id:
                 if include_public:
@@ -249,3 +249,24 @@ class ThemeRepository(ThemeRepositoryInterface):
         except SQLAlchemyError as e:
             logger.error(f"Error fetching documents for theme {theme_id}: {e}")
             return []
+
+    async def count_documents(self, theme_id: str) -> int:
+        """
+        Count the number of documents associated with a theme.
+
+        Args:
+            theme_id (str): ID of the theme.
+
+        Returns:
+            int: The count of associated documents.
+        """
+        try:
+            result = await self.db.execute(
+                select(func.count(ThemeDocument.document_id)).where(
+                    ThemeDocument.theme_id == theme_id
+                )
+            )
+            return result.scalar_one_or_none() or 0
+        except SQLAlchemyError as e:
+            logger.error(f"Error counting documents for theme {theme_id}: {e}")
+            return 0

@@ -12,7 +12,7 @@ from core.interfaces.indexing import IndexInterface
 from app.api.dependencies import (
     get_document_repository,
     get_embedding_service,
-    get_indexing_service
+    get_vector_index
 )
 from app.infrastructure.database.repository.document_repository import DocumentRepository
 
@@ -24,7 +24,7 @@ async def create_document(
         document: DocumentCreate,
         document_repository: DocumentRepository = Depends(get_document_repository),
         embedding_service: EmbeddingInterface = Depends(get_embedding_service),
-        index_service: IndexInterface = Depends(get_indexing_service)
+        index_service: IndexInterface = Depends(get_vector_index)
 ):
     """
     Create a new document and index it.

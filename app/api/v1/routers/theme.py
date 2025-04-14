@@ -30,25 +30,23 @@ async def create_theme(
     Create a new theme.
     """
     try:
-        theme = await theme_use_case.create_theme(
+        created_theme = await theme_use_case.create_theme(
             name=theme_data.name,
             description=theme_data.description,
             is_public=theme_data.is_public,
             owner_id=user.id
         )
 
-        document_ids = await theme_use_case.theme_repository.get_theme_documents(theme.id)
-
-        return {
-            "id": theme.id,
-            "name": theme.name,
-            "description": theme.description,
-            "is_public": theme.is_public,
-            "owner_id": theme.owner_id,
-            "created_at": theme.created_at,
-            "updated_at": theme.updated_at,
-            "document_count": len(document_ids)
-        }
+        return ThemeResponse(
+            id=created_theme.id,
+            name=created_theme.name,
+            description=created_theme.description,
+            is_public=created_theme.is_public,
+            owner_id=created_theme.owner_id,
+            document_count=await theme_use_case.theme_repository.count_documents(created_theme.id),
+            created_at=created_theme.created_at.isoformat(),
+            updated_at=created_theme.updated_at.isoformat() if created_theme.updated_at else None
+        )
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -81,8 +79,8 @@ async def get_themes(
                 "description": theme.description,
                 "is_public": theme.is_public,
                 "owner_id": theme.owner_id,
-                "created_at": theme.created_at,
-                "updated_at": theme.updated_at,
+                "created_at": theme.created_at.isoformat() if theme.created_at else None,
+                "updated_at": theme.updated_at.isoformat() if theme.updated_at else None,
                 "document_count": len(document_ids)
             })
 
