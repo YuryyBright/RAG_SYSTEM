@@ -1,4 +1,3 @@
-Thanks! Based on the structure, code, and `FastAPI` foundation of your project, here's a professional `README.md` file in a polished GitHub style.
 
 ---
 
