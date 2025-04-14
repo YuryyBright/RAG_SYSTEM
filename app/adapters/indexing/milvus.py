@@ -1,6 +1,6 @@
-# app/adapters/indexing/milvus.py
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 import os
+import pickle
 import numpy as np
 from pymilvus import (
     connections,
@@ -14,65 +14,67 @@ from core.entities.document import Document
 from core.interfaces.indexing import IndexInterface
 
 
-class MilvusIndex(IndexInterface):
+class MilvusVectorIndex(IndexInterface):
     """
-    Implementation of Milvus vector database for efficient similarity search.
+    Implementation of a Milvus vector database for efficient similarity search.
 
     This class implements the IndexInterface using Milvus, a vector database designed
     for similarity search and AI applications.
 
-    Attributes:
-        collection_name (str): The name of the Milvus collection to use.
-        dimension (int): The dimension of the vectors to be indexed.
-        host (str): The host address of the Milvus server.
-        port (str): The port of the Milvus server.
-        documents (Dict[str, Document]): A mapping of document IDs to Document objects.
-        collection (Collection): The Milvus collection object.
+    Attributes
+    ----------
+    collection_name : str
+        The name of the Milvus collection to use.
+    dimension : int
+        The dimension of the vectors to be indexed.
+    host : str
+        The host address of the Milvus server.
+    port : str
+        The port of the Milvus server.
+    documents : Dict[str, Document]
+        A mapping of document IDs to Document objects.
+    collection : Collection
+        The Milvus collection object.
     """
 
     def __init__(
             self,
             collection_name: str = "document_embeddings",
-            dimension: int = 1536,  # Default for OpenAI ada-002
+            dimension: int = 1536,  # default dimension for e.g. OpenAI embeddings
             host: str = "localhost",
             port: str = "19530"
     ):
         """
-        Initialize the Milvus index.
+        Initialize the Milvus vector index.
 
-        Args:
-            collection_name (str): The name of the Milvus collection to use.
-            dimension (int): The dimension of the vectors to be indexed.
-            host (str): The host address of the Milvus server.
-            port (str): The port of the Milvus server.
+        Parameters
+        ----------
+        collection_name : str
+            The name of the Milvus collection to use.
+        dimension : int
+            The dimension of the vectors to be indexed.
+        host : str
+            The host address of the Milvus server.
+        port : str
+            The port of the Milvus server.
         """
         self.collection_name = collection_name
         self.dimension = dimension
         self.host = host
         self.port = port
-        self.documents = {}
-        self.collection = None
+        self.documents: Dict[str, Document] = {}
+        self.collection: Collection = None
 
-        # Connect to Milvus
+        # Connect to Milvus and create/get the collection
         self._connect_to_milvus()
-
-        # Create or get collection
         self._create_or_get_collection()
 
     def _connect_to_milvus(self) -> None:
-        """
-        Connect to the Milvus server.
-        """
-        connections.connect(
-            alias="default",
-            host=self.host,
-            port=self.port
-        )
+        """Connect to the Milvus server."""
+        connections.connect(alias="default", host=self.host, port=self.port)
 
     def _create_or_get_collection(self) -> None:
-        """
-        Create a new collection in Milvus or get an existing one.
-        """
+        """Create or get an existing collection in Milvus."""
         if utility.has_collection(self.collection_name):
             self.collection = Collection(name=self.collection_name)
         else:
@@ -85,11 +87,9 @@ class MilvusIndex(IndexInterface):
 
             # Create collection schema
             schema = CollectionSchema(fields=fields)
-
-            # Create collection
             self.collection = Collection(name=self.collection_name, schema=schema)
 
-            # Create index
+            # Create an index (example: HNSW)
             index_params = {
                 "metric_type": "L2",
                 "index_type": "HNSW",
@@ -101,12 +101,12 @@ class MilvusIndex(IndexInterface):
         """
         Add documents to the index.
 
-        Args:
-            documents (List[Document]): A list of Document objects to be added to the index.
+        Parameters
+        ----------
+        documents : List[Document]
+            A list of Document objects to be added to the index.
         """
-        # Filter out documents without embeddings
         docs_with_embeddings = [doc for doc in documents if doc.embedding is not None]
-
         if not docs_with_embeddings:
             return
 
@@ -115,7 +115,7 @@ class MilvusIndex(IndexInterface):
         embeddings = [doc.embedding for doc in docs_with_embeddings]
         metadata = [doc.metadata for doc in docs_with_embeddings]
 
-        # Insert data into collection
+        # Insert data into the collection
         entities = [ids, embeddings, metadata]
         self.collection.insert(entities)
 
@@ -123,22 +123,26 @@ class MilvusIndex(IndexInterface):
         for doc in docs_with_embeddings:
             self.documents[doc.id] = doc
 
-        # Flush to ensure data is visible for search
+        # Flush to ensure data is persisted
         self.collection.flush()
 
     async def search(self, query_embedding: List[float], k: int = 5) -> List[Dict[str, Any]]:
         """
-        Search the index for similar documents to the query embedding.
+        Search for documents similar to the query embedding.
 
-        Args:
-            query_embedding (List[float]): A list of floats representing the embedding of the query.
-            k (int): The number of top similar documents to return.
+        Parameters
+        ----------
+        query_embedding : List[float]
+            A list of floats representing the embedding of the query.
+        k : int, optional
+            The number of top similar documents to return (default is 5).
 
-        Returns:
-            List[Dict[str, Any]]: A list of dictionaries containing the IDs, content, metadata,
-                                 and similarity scores of the top similar documents.
+        Returns
+        -------
+        List[Dict[str, Any]]
+            A list of dictionaries containing the IDs, content, metadata, and scores of similar documents.
         """
-        # Load collection
+        # Load collection into memory for searching
         self.collection.load()
 
         # Search parameters
@@ -153,19 +157,15 @@ class MilvusIndex(IndexInterface):
             output_fields=["id", "metadata"]
         )
 
-        # Process results
         search_results = []
         for hits in results:
             for hit in hits:
-                doc_id = hit.entity.get('id')
-
-                # Get document from cache or fetch from storage
+                doc_id = hit.entity.get("id")
                 doc = self.documents.get(doc_id)
 
                 if doc:
-                    # Convert distance to similarity score (1 - normalized distance)
-                    score = 1.0 - float(hit.distance) / 2.0  # Assuming L2 distance
-
+                    # Convert L2 distance to a rough similarity
+                    score = 1.0 - float(hit.distance) / 2.0
                     search_results.append({
                         "id": doc_id,
                         "content": doc.content,
@@ -173,23 +173,23 @@ class MilvusIndex(IndexInterface):
                         "score": score
                     })
 
-        # Release collection
+        # Release collection from memory if desired
         self.collection.release()
 
         return search_results
 
     async def delete_document(self, doc_id: str) -> None:
         """
-        Delete a document from the index.
+        Delete a document from the Milvus index.
 
-        Args:
-            doc_id (str): The unique identifier of the document to be deleted.
+        Parameters
+        ----------
+        doc_id : str
+            The unique identifier of the document to be deleted.
         """
-        # Delete from Milvus
         expr = f'id == "{doc_id}"'
         self.collection.delete(expr)
 
-        # Remove from cache
         if doc_id in self.documents:
             del self.documents[doc_id]
 
@@ -197,19 +197,15 @@ class MilvusIndex(IndexInterface):
         """
         Save the index to disk.
 
-        For Milvus, the data is already persisted in the Milvus server.
-        This method only saves the document cache.
+        For Milvus, the vector data is already managed/persisted by the Milvus server.
+        This method can optionally save the local document cache to disk.
 
-        Args:
-            path (str): The file path where the document cache should be saved.
+        Parameters
+        ----------
+        path : str
+            The file path where the documents cache will be saved.
         """
-        import pickle
-        import os
-
-        # Create directory if it doesn't exist
         os.makedirs(os.path.dirname(path), exist_ok=True)
-
-        # Save document cache
         with open(f"{path}.documents", "wb") as f:
             pickle.dump(self.documents, f)
 
@@ -217,14 +213,14 @@ class MilvusIndex(IndexInterface):
         """
         Load the index from disk.
 
-        For Milvus, this method only loads the document cache.
+        For Milvus, the vector data is managed by the server. This method only loads
+        the local document cache.
 
-        Args:
-            path (str): The file path from where the document cache should be loaded.
+        Parameters
+        ----------
+        path : str
+            The file path from which the documents cache will be loaded.
         """
-        import pickle
-
-        # Load document cache if file exists
         try:
             with open(f"{path}.documents", "rb") as f:
                 self.documents = pickle.load(f)

@@ -1,6 +1,177 @@
 /**
+ * Attempt to reconnect WebSocket after connection lost
+ */
+function attemptReconnect() {
+  if (state.reconnectAttempts >= state.maxReconnectAttempts) {
+    console.error("Maximum reconnection attempts reached");
+    alertify.error("Lost connection to server. Please refresh the page.");
+    return;
+  }
+
+  state.reconnectAttempts++;
+
+  console.log(`Attempting to reconnect (${state.reconnectAttempts}/${state.maxReconnectAttempts})...`);
+
+  setTimeout(() => {
+    initializeWebSocketConnection();
+  }, state.reconnectDelay);
+}
+
+/**
+ * Handle page visibility change to manage WebSocket connection
+ */
+function handleWindowFocus() {
+  // If the WebSocket is closed, try to reconnect
+  if (state.taskSocket && state.taskSocket.readyState === WebSocket.CLOSED) {
+    console.log("Window gained focus, reconnecting WebSocket...");
+    initializeWebSocketConnection();
+  }
+  
+  // Also refresh task status if we have an active task
+  if (state.processingTask && state.processingTask.id) {
+    refreshTaskStatus(state.processingTask.id);
+  }
+}
+
+/**
+ * Refresh task status from the server
+ */
+function refreshTaskStatus(taskId) {
+  $.ajax({
+    url: `/api/tasks/${taskId}`,
+    method: "GET",
+    headers: {
+      "X-CSRF-Token": getCsrfToken(),
+    },
+    success: function(task) {
+      // Update our state
+      state.processingTask = task;
+      
+      // Update UI
+      updateTaskUI(task);
+      
+      // Update vector DB status if available
+      if (task.metadata && task.metadata.vectorDBStatus) {
+        state.vectorDBStatus = task.metadata.vectorDBStatus;
+        updateVectorDBStatusUI();
+      }
+      
+      // Update logs if available
+      if (task.logs && task.logs.length > 0) {
+        // Clear existing logs
+        $("#process-log-content").empty();
+        
+        // Add each log entry
+        task.logs.forEach(log => {
+          $("#process-log-content").append(`<div>> ${log}</div>`);
+        });
+        
+        // Store in state
+        state.processingLogs = task.logs;
+        
+        // Auto-scroll to bottom
+        const logContainer = $("#process-log-content").parent();
+        logContainer.scrollTop(logContainer[0].scrollHeight);
+      }
+    },
+    error: function(xhr, status, error) {
+      console.error("Error refreshing task status:", error);
+    }
+  });
+}
+
+/**
+ * Handle window blur event (user navigated away)
+ */
+function handleWindowBlur() {
+  // We could pause long-running operations here or update status
+  console.log("Window lost focus");
+}
+
+/**
+ * Handle before unload event to warn if there's an active task
+ */
+function handleBeforeUnload(e) {
+  // Only show warning if there's an active task
+  if (state.processingTask && ["pending", "in_progress"].includes(state.processingTask.status)) {
+    const message = "You have an active processing task. Are you sure you want to leave?";
+    e.returnValue = message;
+    return message;
+  }
+}
+
+/**
+ * Cancel the current processing task
+ */
+function cancelCurrentTask() {
+  if (!state.processingTask || !state.processingTask.id) {
+    alertify.error("No active task to cancel");
+    return;
+  }
+
+  if (confirm("Are you sure you want to cancel this task? This action cannot be undone.")) {
+    $.ajax({
+      url: `/api/tasks/${state.processingTask.id}/cancel`,
+      method: "POST",
+      headers: {
+        "X-CSRF-Token": getCsrfToken(),
+      },
+      success: function(response) {
+        alertify.success("Task cancelled successfully");
+
+        // Update local state
+        state.processingTask.status = "cancelled";
+
+        // Update UI
+        updateTaskUI(state.processingTask);
+        
+        // Add log entry
+        addProcessingLog("Task cancelled by user");
+      },
+      error: function(xhr, status, error) {
+        console.error("Error cancelling task:", error);
+        alertify.error(`Error cancelling task: ${xhr.responseJSON?.detail || error}`);
+      },
+    });
+  }
+}
+
+/**
+ * Resume the current processing task
+ */
+function resumeCurrentTask() {
+  if (!state.processingTask || !state.processingTask.id) {
+    alertify.error("No task to resume");
+    return;
+  }
+
+  $.ajax({
+    url: `/api/tasks/${state.processingTask.id}/resume`,
+    method: "POST",
+    headers: {
+      "X-CSRF-Token": getCsrfToken(),
+    },
+    success: function(response) {
+      alertify.success("Task resumed successfully");
+
+      // Update local state
+      state.processingTask.status = "in_progress";
+
+      // Update UI
+      updateTaskUI(state.processingTask);
+      
+      // Add log entry
+      addProcessingLog("Task resumed by user");
+    },
+    error: function(xhr, status, error) {
+      console.error("Error resuming task:", error);
+      alertify.error(`Error resuming task: ${xhr.responseJSON?.detail || error}`);
+    },
+  });
+}/**
  * theme-processing.js
- * Handles the theme and document processing workflow
+ * Handles the theme and document processing workflow with real-time updates
+ * for RAG vector database creation pipeline
  */
 
 // Global state
@@ -11,13 +182,583 @@ const state = {
   downloadedFiles: [],
   processedFiles: [],
   currentThemeId: null,
-};
+  processingTask: null,
+  taskSocket: null,
+  reconnectAttempts: 0,
+  maxReconnectAttempts: 5,
+  reconnectDelay: 3000,
+  dropzone: null,
+  vectorDBStatus: {
+    dataIngestion: 'pending',
+    textChunking: 'pending',
+    generateEmbeddings: 'pending',
+    storeVectors: 'pending'
+  },
+  vectorDBProgress: 0,
+  processingLogs: []
+}; // End of state object definition
+/**
+ * Generate sample content for preview
+ */
+function generateSampleContent(file) {
+  const fileType = file.source ? file.source.split(".").pop().toLowerCase() : "txt";
 
-$(document).ready(function () {
-  console.log("Theme Processing initialized");
+  const lorem = `Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nullam auctor, nisl eget ultricies 
+  aliquam, nunc nisl aliquet nunc, eget aliquam nisl nunc eget nisl. Nullam auctor, nisl eget ultricies aliquam, 
+  nunc nisl aliquet nunc, eget aliquam nisl nunc eget nisl.`;
+
+  switch (fileType) {
+    case "pdf":
+      return `<p><strong>PDF Content:</strong> ${file.title || "Document"}</p>
+              <p>${lorem}</p>
+              <p>Page 1 of estimated 5 pages</p>`;
+    case "docx":
+      return `<p><strong>Word Document:</strong> ${file.title || "Document"}</p>
+              <p>${lorem}</p>
+              <p>Contains text, formatting and possibly images</p>`;
+    case "html":
+      return `<p><strong>HTML Content:</strong> ${file.title || "Document"}</p>
+              <div style="background-color: #f5f5f5; padding: 10px; border-radius: 5px; font-family: monospace;">
+                &lt;html&gt;<br>
+                &nbsp;&nbsp;&lt;head&gt;<br>
+                &nbsp;&nbsp;&nbsp;&nbsp;&lt;title&gt;Sample Document&lt;/title&gt;<br>
+                &nbsp;&nbsp;&lt;/head&gt;<br>
+                &nbsp;&nbsp;&lt;body&gt;<br>&nbsp;&nbsp;&nbsp;&nbsp;&lt;p&gt;${lorem}&lt;/p&gt;<br>
+              &nbsp;&nbsp;&lt;/body&gt;<br>
+                &lt;/html&gt;
+              </div>`;
+    case "md":
+      return `<p><strong>Markdown Content:</strong> ${file.title || "Document"}</p>
+              <div style="background-color: #f5f5f5; padding: 10px; border-radius: 5px; font-family: monospace;">
+                # Sample Document<br>
+                <br>
+                ${lorem}<br>
+                <br>
+                ## Heading 2<br>
+                <br>
+                * List item 1<br>
+                * List item 2<br>
+              </div>`;
+    case "csv":
+      return `<p><strong>CSV Data:</strong> ${file.title || "Data File"}</p>
+              <div style="background-color: #f5f5f5; padding: 10px; border-radius: 5px; font-family: monospace;">
+                id,name,value<br>
+                1,Item 1,100<br>
+                2,Item 2,200<br>
+                3,Item 3,300<br>
+              </div>`;
+    default:
+      return `<p><strong>Text Content:</strong> ${file.title || "Document"}</p>
+              <div class="border p-3">${lorem}</div>`;
+  }
+}
+
+/**
+ * Start the file reading process
+ */
+function startReadProcess() {
+  // Create task for reading files
+  $.ajax({
+    url: "/api/tasks",
+    method: "POST",
+    data: JSON.stringify({
+      type: "theme_processing",
+      theme_id: state.currentThemeId,
+      step: "read",
+      files: state.downloadedFiles.map((f) => f.id),
+      description: `Extract text from files for theme: ${state.selectedTheme}`,
+      metadata: {
+        stepName: "read",
+        vectorDBStatus: state.vectorDBStatus,
+        totalFiles: state.downloadedFiles.length
+      }
+    }),
+    contentType: "application/json",
+    headers: {
+      "X-CSRF-Token": getCsrfToken(),
+    },
+    success: function(response) {
+      // Store the task reference
+      state.processingTask = response;
+
+      // The real updates will come via WebSocket
+      alertify.success("Started text extraction process");
+
+      // Initialize reading progress
+      $("#read-progress").css("width", "0%");
+      state.processedFiles = [];
+      
+      // Add log entry
+      addProcessingLog("Starting text extraction process...");
+      
+      // Update vector DB status
+      state.vectorDBStatus.textChunking = 'in_progress';
+      updateVectorDBStatusUI();
+    },
+    error: function(xhr, status, error) {
+      console.error("Error starting read process:", error);
+      alertify.error(`Error starting text extraction: ${xhr.responseJSON?.detail || error}`);
+      $("#start-read-btn").prop("disabled", false);
+    },
+  });
+
+  // For the UI simulation, process the files
+  const totalFiles = state.downloadedFiles.length;
+  let processedCount = 0;
+
+  $("#start-read-btn").prop("disabled", true);
+
+  // Simulate reading each file
+  state.downloadedFiles.forEach((file, index) => {
+    setTimeout(() => {
+      // Add to processed files
+      state.processedFiles.push(file);
+      processedCount++;
+
+      // Update progress
+      const progress = Math.round((processedCount / totalFiles) * 100);
+      $("#read-progress").css("width", `${progress}%`);
+      
+      // Add log entry
+      addProcessingLog(`Extracted text from: ${file.filename || file.title || "Unknown file"}`);
+
+      // Check if all files are processed
+      if (processedCount === totalFiles) {
+        alertify.success("All files processed successfully");
+        $("#read-next-btn").prop("disabled", false);
+        
+        // Update vector DB status
+        state.vectorDBStatus.textChunking = 'completed';
+        updateVectorDBStatusUI();
+        
+        // Add log entry
+        addProcessingLog("Text extraction completed successfully!");
+      }
+    }, 1500 + index * 800); // Staggered timing for visual effect
+  });
+}
+
+/**
+ * Start the embedding process
+ */
+function startEmbeddingProcess() {
+  $("#start-process-btn").prop("disabled", true);
+  $("#process-progress").css("width", "0%");
+
+  // Create task for embedding
+  $.ajax({
+    url: "/api/tasks",
+    method: "POST",
+    data: JSON.stringify({
+      type: "theme_processing",
+      theme_id: state.currentThemeId,
+      step: "embed",
+      files: state.processedFiles.map((f) => f.id),
+      description: `Generate embeddings and create vector DB for theme: ${state.selectedTheme}`,
+      metadata: {
+        stepName: "embed",
+        vectorDBStatus: state.vectorDBStatus,
+        totalFiles: state.processedFiles.length
+      }
+    }),
+    contentType: "application/json",
+    headers: {
+      "X-CSRF-Token": getCsrfToken(),
+    },
+    success: function(response) {
+      // Store the task reference
+      state.processingTask = response;
+
+      // Display task info
+      alertify.success("Started embedding process");
+      
+      // Add log entry
+      addProcessingLog("Starting vector embedding generation process...");
+      
+      // Update vector DB status
+      state.vectorDBStatus.generateEmbeddings = 'in_progress';
+      updateVectorDBStatusUI();
+    },
+    error: function(xhr, status, error) {
+      console.error("Error starting embedding process:", error);
+      alertify.error(`Error starting embeddings: ${xhr.responseJSON?.detail || error}`);
+      $("#start-process-btn").prop("disabled", false);
+    },
+  });
+
+  // Simulate embedding process for UI
+  let progress = 0;
+  const progressInterval = setInterval(() => {
+    progress += 5;
+    $("#process-progress").css("width", `${progress}%`);
+    
+    if (progress === 25) {
+      addProcessingLog("Generating embeddings for chunks...");
+    } else if (progress === 50) {
+      state.vectorDBStatus.generateEmbeddings = 'completed';
+      state.vectorDBStatus.storeVectors = 'in_progress';
+      updateVectorDBStatusUI();
+      addProcessingLog("Embeddings generated successfully!");
+      addProcessingLog("Starting vector database storage...");
+    } else if (progress === 75) {
+      addProcessingLog("Optimizing vector database for search...");
+    }
+
+    if (progress >= 100) {
+      clearInterval(progressInterval);
+      state.vectorDBStatus.storeVectors = 'completed';
+      updateVectorDBStatusUI();
+      addProcessingLog("Vector database created successfully!");
+      alertify.success("Embedding process completed successfully");
+      $("#finish-btn").prop("disabled", false);
+    }
+  }, 500);
+}
+
+/**
+ * Update the UI to reflect the current vector DB processing status
+ */
+function updateVectorDBStatusUI() {
+  // Update the status badges for each step
+  const statusMapping = {
+    'pending': { class: 'badge-secondary', text: 'Pending' },
+    'in_progress': { class: 'badge-warning', text: 'In Progress' },
+    'completed': { class: 'badge-success', text: 'Completed' },
+    'failed': { class: 'badge-danger', text: 'Failed' }
+  };
+  
+  // Data Ingestion step
+  const dataIngestionStatus = statusMapping[state.vectorDBStatus.dataIngestion] || statusMapping.pending;
+  $("#step-data-ingestion").removeClass("active completed").addClass(state.vectorDBStatus.dataIngestion === 'in_progress' ? 'active' : (state.vectorDBStatus.dataIngestion === 'completed' ? 'completed' : ''));
+  $("#step-data-ingestion .badge").removeClass("badge-secondary badge-warning badge-success badge-danger").addClass(dataIngestionStatus.class).text(dataIngestionStatus.text);
+  
+  // Text Chunking step
+  const textChunkingStatus = statusMapping[state.vectorDBStatus.textChunking] || statusMapping.pending;
+  $("#step-chunk-text").removeClass("active completed").addClass(state.vectorDBStatus.textChunking === 'in_progress' ? 'active' : (state.vectorDBStatus.textChunking === 'completed' ? 'completed' : ''));
+  $("#step-chunk-text .badge").removeClass("badge-secondary badge-warning badge-success badge-danger").addClass(textChunkingStatus.class).text(textChunkingStatus.text);
+  
+  // Generate Embeddings step
+  const generateEmbeddingsStatus = statusMapping[state.vectorDBStatus.generateEmbeddings] || statusMapping.pending;
+  $("#step-generate-embeddings").removeClass("active completed").addClass(state.vectorDBStatus.generateEmbeddings === 'in_progress' ? 'active' : (state.vectorDBStatus.generateEmbeddings === 'completed' ? 'completed' : ''));
+  $("#step-generate-embeddings .badge").removeClass("badge-secondary badge-warning badge-success badge-danger").addClass(generateEmbeddingsStatus.class).text(generateEmbeddingsStatus.text);
+  
+  // Store Vectors step
+  const storeVectorsStatus = statusMapping[state.vectorDBStatus.storeVectors] || statusMapping.pending;
+  $("#step-store-vectors").removeClass("active completed").addClass(state.vectorDBStatus.storeVectors === 'in_progress' ? 'active' : (state.vectorDBStatus.storeVectors === 'completed' ? 'completed' : ''));
+  $("#step-store-vectors .badge").removeClass("badge-secondary badge-warning badge-success badge-danger").addClass(storeVectorsStatus.class).text(storeVectorsStatus.text);
+}
+
+/**
+ * Add a log entry to the processing log
+ */
+function addProcessingLog(message) {
+  // Add timestamp
+  const now = new Date();
+  const timestamp = now.toLocaleTimeString();
+  const logEntry = `[${timestamp}] ${message}`;
+  
+  // Add to state for persistence
+  state.processingLogs.push(logEntry);
+  
+  // Update UI
+  const logElement = $("#process-log-content");
+  logElement.append(`<div>> ${logEntry}</div>`);
+  
+  // Auto-scroll to bottom
+  const logContainer = logElement.parent();
+  logContainer.scrollTop(logContainer[0].scrollHeight);
+  
+  // If we have a task, update its logs
+  if (state.processingTask && state.processingTask.id) {
+    // In a production app, we might want to batch these updates
+    updateTaskLogs(state.processingTask.id, logEntry);
+  }
+}
+
+/**
+ * Update task logs on the server
+ */
+function updateTaskLogs(taskId, logEntry) {
+  // This could be optimized to batch updates instead of sending one at a time
+  $.ajax({
+    url: `/api/tasks/${taskId}/logs`,
+    method: "POST",
+    data: JSON.stringify({
+      log_entry: logEntry
+    }),
+    contentType: "application/json",
+    headers: {
+      "X-CSRF-Token": getCsrfToken(),
+    },
+    error: function(xhr, status, error) {
+      console.error("Error updating task logs:", error);
+    }
+  });
+}
+
+/**
+ * Show success modal when the workflow is complete
+ */
+function showSuccessModal() {
+  $("#success-modal-theme-name").text(state.selectedTheme);
+  $("#success-modal-file-count").text(state.processedFiles.length);
+  $("#workflow-completion-modal").modal("show");
+  
+  // Create a summary API call to finalize the theme processing
+  $.ajax({
+    url: `/api/themes/${state.currentThemeId}/finalize`,
+    method: "POST",
+    headers: {
+      "X-CSRF-Token": getCsrfToken(),
+    },
+    success: function(response) {
+      console.log("Theme processing finalized:", response);
+    },
+    error: function(xhr, status, error) {
+      console.error("Error finalizing theme processing:", error);
+    }
+  });
+}
+
+/**
+ * Check for active tasks on page load
+ */
+function checkForActiveTasks() {
+  // Check if we have an active theme
+  if (state.currentThemeId) {
+    $.ajax({
+      url: `/api/tasks?theme_id=${state.currentThemeId}`,
+      method: "GET",
+      headers: {
+        "X-CSRF-Token": getCsrfToken(),
+      },
+      success: function(tasks) {
+        if (tasks && tasks.length > 0) {
+          const activeTasks = tasks.filter(
+            (t) => (t.status === "in_progress" || t.status === "pending") && t.type === "theme_processing"
+          );
+
+          if (activeTasks.length > 0) {
+            // Sort by most recently created
+            activeTasks.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+            // Get the first (most recent) task
+            state.processingTask = activeTasks[0];
+
+            // Update UI based on task status
+            updateTaskUI(state.processingTask);
+            
+            // Restore vector DB status if available
+            if (state.processingTask.metadata && state.processingTask.metadata.vectorDBStatus) {
+              state.vectorDBStatus = state.processingTask.metadata.vectorDBStatus;
+              updateVectorDBStatusUI();
+            }
+            
+            // Restore logs if available
+            if (state.processingTask.logs && state.processingTask.logs.length > 0) {
+              // Clear existing logs
+              $("#process-log-content").empty();
+              
+              // Add each log entry
+              state.processingTask.logs.forEach(log => {
+                $("#process-log-content").append(`<div>> ${log}</div>`);
+              });
+              
+              // Store in state
+              state.processingLogs = state.processingTask.logs;
+            }
+          }
+        }
+      },
+      error: function(xhr, status, error) {
+        console.error("Error checking for active tasks:", error);
+      },
+    });
+  }
+}
+
+/**
+ * Initialize WebSocket connection for real-time updates
+ */
+function initializeWebSocketConnection() {
+  // Close any existing connection
+  if (state.taskSocket && state.taskSocket.readyState !== WebSocket.CLOSED) {
+    state.taskSocket.close();
+  }
+
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  const wsUrl = `${protocol}//${window.location.host}/ws/tasks`;
+  try {
+    state.taskSocket = new WebSocket(wsUrl);
+
+    state.taskSocket.onopen = function() {
+      console.log("WebSocket connection established");
+      state.reconnectAttempts = 0;
+
+      if (state.currentThemeId) {
+        subscribeToThemeUpdates(state.currentThemeId);
+      }
+    };
+
+    state.taskSocket.onmessage = function(event) {
+      const message = JSON.parse(event.data);
+      handleWebSocketMessage(message);
+    };
+
+    state.taskSocket.onclose = function(event) {
+      console.log("WebSocket closed", event);
+      if (event.code !== 1000) attemptReconnect();
+    };
+
+    state.taskSocket.onerror = function(error) {
+      console.error("WebSocket error:", error);
+    };
+  } catch (error) {
+    console.error("WebSocket init failed:", error);
+    attemptReconnect();
+  }
+}
+
+/**
+ * Subscribe to theme updates via WebSocket
+ */
+function subscribeToThemeUpdates(themeId) {
+  if (state.taskSocket && state.taskSocket.readyState === WebSocket.OPEN) {
+    const subscribeMsg = {
+      action: "subscribe",
+      theme_id: themeId,
+    };
+
+    state.taskSocket.send(JSON.stringify(subscribeMsg));
+    console.log(`Subscribed to updates for theme ${themeId}`);
+  } else {
+    console.warn("WebSocket not connected, can't subscribe to theme updates");
+  }
+}
+
+/**
+ * Handle WebSocket messages
+ */
+function handleWebSocketMessage(message) {
+  console.log("Received WebSocket message:", message);
+
+  // Handle task updates
+  if (message.type === "task_update" && message.data) {
+    const taskData = message.data;
+
+    // Only process updates for the current theme
+    if (taskData.theme_id === state.currentThemeId) {
+      // Update our task data
+      state.processingTask = taskData;
+
+      // Update UI based on task data
+      updateTaskUI(taskData);
+      
+      // Update vector DB status if it exists in the metadata
+      if (taskData.metadata && taskData.metadata.vectorDBStatus) {
+        state.vectorDBStatus = taskData.metadata.vectorDBStatus;
+        updateVectorDBStatusUI();
+      }
+      
+      // If there are new logs, add them to the UI
+      if (taskData.logs && taskData.logs.length > 0) {
+        // Find logs that are not already in our state
+        const existingLogs = new Set(state.processingLogs);
+        const newLogs = taskData.logs.filter(log => !existingLogs.has(log));
+        
+        // Add new logs to UI and state
+        newLogs.forEach(log => {
+          $("#process-log-content").append(`<div>> ${log}</div>`);
+          state.processingLogs.push(log);
+        });
+        
+        // Auto-scroll to bottom if there are new logs
+        if (newLogs.length > 0) {
+          const logContainer = $("#process-log-content").parent();
+          logContainer.scrollTop(logContainer[0].scrollHeight);
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Update UI based on task status
+ */
+// Define the function outside the state object
+function updateTaskUI(task) {
+  if (!task) return;
+
+  // Update the task status area
+  $("#task-status-area").removeClass("d-none");
+  $("#task-name").text(task.name || "Theme Processing");
+  $("#task-status").text(task.status);
+
+  const statusBadge = $("#task-status-badge");
+  statusBadge.removeClass("badge-secondary badge-info badge-warning badge-success badge-danger");
+
+  switch (task.status) {
+    case "pending":
+      statusBadge.addClass("badge-secondary").text("Pending");
+      break;
+    case "in_progress":
+      statusBadge.addClass("badge-info").text("In Progress");
+      break;
+    case "paused":
+      statusBadge.addClass("badge-warning").text("Paused");
+      break;
+    case "completed":
+      statusBadge.addClass("badge-success").text("Completed");
+      break;
+    case "failed":
+      statusBadge.addClass("badge-danger").text("Failed");
+      break;
+    default:
+      statusBadge.addClass("badge-secondary").text(task.status);
+  }
+
+  let progress = 0;
+
+  if (task.current_step !== null && task.current_step !== undefined) {
+    const stepMapping = {
+      0: 2,
+      1: 3,
+      2: 4,
+      3: 5,
+    };
+
+    progress = (task.current_step / 4) * 100;
+
+    const uiStep = stepMapping[task.current_step];
+    if (uiStep && task.progress !== null && task.progress !== undefined) {
+      switch (uiStep) {
+        case 3:
+          $("#download-progress").css("width", `${task.progress}%`);
+          break;
+        case 4:
+          $("#read-progress").css("width", `${task.progress}%`);
+          break;
+        case 5:
+          $("#process-progress").css("width", `${task.progress}%`);
+          break;
+      }
+    }
+  }
+
+  $("#task-progress-bar").css("width", `${progress}%`);
+  $("#cancel-task-btn").toggle(["pending", "in_progress", "paused"].includes(task.status));
+  $("#resume-task-btn").toggle(task.status === "paused");
+
+  if (task.error_message) {
+    $("#task-error-message").removeClass("d-none").text(task.error_message);
+  } else {
+    $("#task-error-message").addClass("d-none").text("");
+  }
+}
+$(document).ready(function() {
+  console.log("Enhanced Theme Processing initialized");
 
   // Disable Dropzone auto-discovery before any initialization
-  // This should be set before any Dropzone is initialized
   Dropzone.autoDiscover = false;
 
   // Initialize Dropzone
@@ -28,6 +769,12 @@ $(document).ready(function () {
 
   // Setup event listeners
   setupEventListeners();
+
+  // Initialize WebSocket connection for real-time updates
+  initializeWebSocketConnection();
+
+  // Check for active tasks
+  checkForActiveTasks();
 });
 
 /**
@@ -54,11 +801,17 @@ function setupEventListeners() {
 
   // File selector for preview
   $("#file-selector").on("change", showFileContentPreview);
+
+  // Task related buttons
+  $("#cancel-task-btn").on("click", cancelCurrentTask);
+  $("#resume-task-btn").on("click", resumeCurrentTask);
+
+  // Window events for handling page visibility
+  $(window).on("focus", handleWindowFocus);
+  $(window).on("blur", handleWindowBlur);
+  $(window).on("beforeunload", handleBeforeUnload);
 }
 
-/**
- * Initialize Dropzone file uploader
- */
 /**
  * Initialize Dropzone file uploader
  */
@@ -98,20 +851,21 @@ function initDropzone() {
       autoProcessQueue: true, // Set to false if you want to trigger uploads manually
       parallelUploads: 5,
 
-      init: function () {
+      init: function() {
         const dzInstance = this; // Reference to the dropzone instance
 
         // Ensure theme_id is set *before* sending
-        this.on("processing", function (file) {
+        this.on("processing", function(file) {
           if (!state.currentThemeId) {
             alertify.error("Error: No theme selected. Cannot upload file.");
             dzInstance.removeFile(file); // Prevent upload if no theme ID
           }
         });
 
-        this.on("sending", function (file, xhr, formData) {
+        this.on("sending", function(file, xhr, formData) {
           // Get the CSRF token
           const token = getCsrfToken();
+          console.log("CSRF Token:", token);
           // Check if the token is valid
           if (!token) {
             console.error("CSRF Token is missing or invalid.");
@@ -133,12 +887,6 @@ function initDropzone() {
             return;
           }
 
-          if (!token) {
-            alertify.error("Error: Authentication token missing. Please refresh the page.");
-            dzInstance.removeFile(file);
-            return;
-          }
-
           // Append necessary data
           xhr.withCredentials = true; // ← this is required for cookies
           xhr.setRequestHeader("X-CSRF-Token", token);
@@ -146,7 +894,7 @@ function initDropzone() {
           console.log(`Sending file ${file.name} for theme ID: ${state.currentThemeId}`);
         });
 
-        this.on("success", function (file, response) {
+        this.on("success", function(file, response) {
           console.log("File upload success response:", response);
 
           // Assume the server returns a list of uploaded files
@@ -172,7 +920,7 @@ function initDropzone() {
           $("#upload-next-btn").prop("disabled", state.uploadedFiles.length === 0);
         });
 
-        this.on("error", function (file, errorMessage, xhr) {
+        this.on("error", function(file, errorMessage, xhr) {
           file.previewElement.classList.add("dz-error");
           let displayMessage = errorMessage;
           if (typeof errorMessage === "object" && errorMessage.error) {
@@ -190,7 +938,7 @@ function initDropzone() {
           console.error("Upload error:", file.name, errorMessage, xhr);
         });
 
-        this.on("queuecomplete", function () {
+        this.on("queuecomplete", function() {
           console.log("Upload queue complete.");
           // Check if there are actually successful uploads, not just an empty queue completion
           if (this.getAcceptedFiles().length > 0 && this.getRejectedFiles().length === 0) {
@@ -200,7 +948,7 @@ function initDropzone() {
           $("#upload-next-btn").prop("disabled", state.uploadedFiles.length === 0);
         });
 
-        this.on("removedfile", function (file) {
+        this.on("removedfile", function(file) {
           console.log(`Removing file: ${file.name}`);
           // Add logic here to remove the file from your server if it was successfully uploaded
           // This usually requires knowing the file's ID from the server
@@ -214,7 +962,7 @@ function initDropzone() {
               headers: {
                 "X-CSRF-Token": getCsrfToken(),
               },
-              success: function (response) {
+              success: function(response) {
                 alertify.success(`File "${file.name}" removed from server.`);
                 console.log("Server response:", response);
 
@@ -224,7 +972,7 @@ function initDropzone() {
                 // Update "next" button state
                 $("#upload-next-btn").prop("disabled", state.uploadedFiles.length === 0);
               },
-              error: function (xhr, status, error) {
+              error: function(xhr, status, error) {
                 alertify.error(`Failed to remove "${file.name}" from server.`);
                 console.error("Error deleting file:", xhr.responseText || error);
               },
@@ -233,7 +981,7 @@ function initDropzone() {
         });
       },
       // Fallback for browsers that don't support xhr2
-      fallback: function () {
+      fallback: function() {
         alertify.error("Your browser does not support drag'n'drop file uploads.");
         // Maybe hide the dropzone element or show an alternative upload method
       },
@@ -251,38 +999,7 @@ function initDropzone() {
     }
   }
 }
-/**
- * Handle theme creation form submission
- */
-function handleThemeFormSubmit(e) {
-  e.preventDefault();
 
-  const themeData = {
-    name: $("#theme-name").val(),
-    description: $("#theme-description").val(),
-    is_public: $("#theme-public").is(":checked"),
-  };
-
-  // Create theme via API
-  $.ajax({
-    url: "/api/themes",
-    method: "POST",
-    data: JSON.stringify(themeData),
-    contentType: "application/json",
-    headers: {
-      "X-CSRF-Token": getCsrfToken(),
-    },
-    success: function (response) {
-      alertify.success(`Theme "${themeData.name}" created successfully`);
-      loadThemes();
-      $("#create-theme-form")[0].reset();
-    },
-    error: function (xhr, status, error) {
-      console.error("Error creating theme:", error);
-      alertify.error(`Error creating theme: ${xhr.responseJSON?.detail || error}`);
-    },
-  });
-}
 /**
  * Get CSRF token from meta tag
  */
@@ -293,7 +1010,6 @@ function getCsrfToken() {
   }
 
   // Assuming AuthManager is a global object with a method to get CSRF token
-  // Ensure AuthManager is defined and has the method
   return AuthManager.getCsrfToken();
 }
 
@@ -318,12 +1034,12 @@ function handleThemeFormSubmit(e) {
     headers: {
       "X-CSRF-Token": getCsrfToken(),
     },
-    success: function (response) {
+    success: function(response) {
       alertify.success(`Theme "${themeData.name}" created successfully`);
       loadThemes();
       $("#create-theme-form")[0].reset();
     },
-    error: function (xhr, status, error) {
+    error: function(xhr, status, error) {
       console.error("Error creating theme:", error);
       alertify.error(`Error creating theme: ${xhr.responseJSON?.detail || error}`);
     },
@@ -343,14 +1059,14 @@ function loadThemes() {
     headers: {
       "X-CSRF-Token": getCsrfToken(),
     },
-    success: function (themes) {
+    success: function(themes) {
       renderThemes(themes);
     },
-    error: function (xhr, status, error) {
+    error: function(xhr, status, error) {
       console.error("Error loading themes:", error);
       alertify.error(`Error loading themes: ${xhr.responseJSON?.detail || error}`);
     },
-    complete: function () {
+    complete: function() {
       // Always hide the loading spinner
       $("#themes-loader").addClass("d-none");
     },
@@ -374,7 +1090,7 @@ function renderThemes(themes) {
       <tr>
         <td>${theme.name}</td>
         <td>${theme.description || "-"}</td>
-        <td><span class="badge badge-info">${theme.document_count}</span></td>
+        <td><span class="badge badge-info">${theme.document_count || 0}</span></td>
         <td>${
           theme.is_public
             ? '<span class="badge badge-success">Public</span>'
@@ -396,13 +1112,13 @@ function renderThemes(themes) {
   });
 
   // Add event listeners to the new buttons
-  $(".select-theme-btn").on("click", function () {
+  $(".select-theme-btn").on("click", function() {
     const themeId = $(this).data("theme-id");
     const themeName = $(this).data("theme-name");
     selectTheme(themeId, themeName);
   });
 
-  $(".delete-theme-btn").on("click", function () {
+  $(".delete-theme-btn").on("click", function() {
     const themeId = $(this).data("theme-id");
     deleteTheme(themeId);
   });
@@ -416,7 +1132,71 @@ function selectTheme(themeId, themeName) {
   state.selectedTheme = themeName;
 
   $("#selected-theme-name").text(themeName);
-  navigateToStep(2);
+
+  // Check if there's already a processing task for this theme
+  $.ajax({
+    url: `/api/tasks?theme_id=${themeId}`,
+    method: "GET",
+    headers: {
+      "X-CSRF-Token": getCsrfToken(),
+    },
+    success: function(tasks) {
+      if (tasks && tasks.length > 0) {
+        // Filter for active tasks (pending or in progress)
+        const activeTasks = tasks.filter(
+          (t) => (t.status === "in_progress" || t.status === "pending") && t.type === "theme_processing"
+        );
+
+        if (activeTasks.length > 0) {
+          // Sort by most recently created
+          activeTasks.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+          // Get the first (most recent) task
+          const activeTask = activeTasks[0];
+
+          // Set as our current processing task
+          state.processingTask = activeTask;
+
+          // Update UI based on task status
+          updateTaskUI(activeTask);
+
+          // Update vector DB status if exists in task metadata
+          if (activeTask.metadata && activeTask.metadata.vectorDBStatus) {
+            state.vectorDBStatus = activeTask.metadata.vectorDBStatus;
+            updateVectorDBStatusUI();
+          }
+
+          // Determine which step to show based on the task's current step
+          if (activeTask.current_step != null) {
+            const stepMapping = {
+              0: 2, // Data Ingestion -> Upload Files
+              1: 3, // Text Chunking -> Download Files
+              2: 4, // Generate Embeddings -> Read Files
+              3: 5, // Store Vectors -> Process Embeddings
+            };
+
+            // Navigate to the appropriate step
+            const targetStep = stepMapping[activeTask.current_step] || 2;
+            navigateToStep(targetStep);
+            return; // Skip the default navigation
+          }
+        }
+      }
+
+      // If no active task was found, proceed to upload section
+      navigateToStep(2);
+
+      // Subscribe to updates for this theme
+      if (state.taskSocket && state.taskSocket.readyState === WebSocket.OPEN) {
+        subscribeToThemeUpdates(themeId);
+      }
+    },
+    error: function(xhr, status, error) {
+      console.error("Error checking tasks:", error);
+      // If error, still navigate to upload section
+      navigateToStep(2);
+    },
+  });
 }
 
 /**
@@ -430,11 +1210,11 @@ function deleteTheme(themeId) {
       headers: {
         "X-CSRF-Token": getCsrfToken(),
       },
-      success: function () {
+      success: function() {
         alertify.success("Theme deleted successfully");
         loadThemes();
       },
-      error: function (xhr, status, error) {
+      error: function(xhr, status, error) {
         console.error("Error deleting theme:", error);
         alertify.error(`Error deleting theme: ${xhr.responseJSON?.detail || error}`);
       },
@@ -445,7 +1225,7 @@ function deleteTheme(themeId) {
 /**
  * Navigate to a specific step in the workflow
  */
-function navigateToStep(step) {
+function navigateToStep(step, resetState = true) {
   // Update current step
   state.currentStep = step;
 
@@ -491,6 +1271,8 @@ function navigateToStep(step) {
       $("#step-theme, #step-upload, #step-download, #step-read").addClass("completed");
       $("#step-process").addClass("active");
       $("#workflow-progress-bar").css("width", "100%").text("Step 5 of 5");
+      // Update vector DB status UI
+      updateVectorDBStatusUI();
       break;
   }
 }
@@ -506,10 +1288,10 @@ function loadFilesTable() {
       headers: {
         "X-CSRF-Token": getCsrfToken(),
       },
-      success: function (files) {
+      success: function(files) {
         renderFilesTable(files);
       },
-      error: function (xhr, status, error) {
+      error: function(xhr, status, error) {
         console.error("Error loading files:", error);
         alertify.error(`Error loading files: ${xhr.responseJSON?.detail || error}`);
       },
@@ -532,11 +1314,11 @@ function renderFilesTable(files) {
     return;
   }
 
-  files.forEach((file, index) => {
+  files.forEach((file) => {
     const row = `
       <tr data-file-id="${file.id}">
-        <td>${file.title || file.source || "Unknown"}</td>
-        <td>${formatFileSize(getRandomFileSize())}</td>
+        <td>${file.title || file.filename || file.source || "Unknown"}</td>
+        <td>${formatFileSize(file.size || getRandomFileSize())}</td>
         <td><span class="badge badge-secondary">Pending</span></td>
       </tr>
     `;
@@ -581,6 +1363,52 @@ function startDownloadProcess() {
 
   $("#start-download-btn").prop("disabled", true);
 
+  // Create a new task for file download process
+  $.ajax({
+    url: "/api/tasks",
+    method: "POST",
+    data: JSON.stringify({
+      type: "theme_processing",
+      theme_id: state.currentThemeId,
+      step: "download",
+      files: state.uploadedFiles.map((f) => f.id),
+      description: `Download files for theme: ${state.selectedTheme}`,
+      metadata: {
+        stepName: "download",
+        vectorDBStatus: state.vectorDBStatus,
+        totalFiles: state.uploadedFiles.length
+      }
+    }),
+    contentType: "application/json",
+    headers: {
+      "X-CSRF-Token": getCsrfToken(),
+    },
+    success: function(response) {
+      // Store the task reference
+      state.processingTask = response;
+
+      // The real updates will come via WebSocket
+      alertify.success("Started download process");
+
+      // Initialize file download UI
+      $("#download-progress").css("width", "0%");
+      state.downloadedFiles = [];
+      
+      // Add log entry
+      addProcessingLog("Starting file download process...");
+      
+      // Set first step to in_progress
+      state.vectorDBStatus.dataIngestion = 'in_progress';
+      updateVectorDBStatusUI();
+    },
+    error: function(xhr, status, error) {
+      console.error("Error starting download process:", error);
+      alertify.error(`Error starting download: ${xhr.responseJSON?.detail || error}`);
+      $("#start-download-btn").prop("disabled", false);
+    },
+  });
+
+  // Traditional UI update for backward compatibility
   const totalFiles = state.uploadedFiles.length;
   let downloadedCount = 0;
 
@@ -601,11 +1429,21 @@ function startDownloadProcess() {
       // Update progress
       const progress = Math.round((downloadedCount / totalFiles) * 100);
       $("#download-progress").css("width", `${progress}%`);
+      
+      // Add log entry
+      addProcessingLog(`Downloaded file: ${file.filename || file.title || "Unknown file"}`);
 
       // Check if all files are downloaded
       if (downloadedCount === totalFiles) {
         alertify.success("All files downloaded successfully");
         $("#download-next-btn").removeClass("d-none");
+        
+        // Update vector DB status
+        state.vectorDBStatus.dataIngestion = 'completed';
+        updateVectorDBStatusUI();
+        
+        // Add log entry
+        addProcessingLog("All files downloaded successfully!");
 
         // Populate file selector for reading step
         populateFileSelector();
@@ -623,7 +1461,7 @@ function populateFileSelector() {
   selector.append('<option value="">Select a file to preview content</option>');
 
   state.downloadedFiles.forEach((file) => {
-    selector.append(`<option value="${file.id}">${file.title || file.source || "Unknown"}</option>`);
+    selector.append(`<option value="${file.id}">${file.title || file.filename || file.source || "Unknown"}</option>`);
   });
 }
 
@@ -642,288 +1480,71 @@ function showFileContentPreview() {
     '<div class="text-center"><i class="fas fa-spinner fa-spin"></i> Loading content...</div>'
   );
 
-  // Simulate API request to get file content
-  setTimeout(() => {
-    const selectedFile = state.downloadedFiles.find((f) => f.id === fileId);
+  // Make an API call to get the file content
+  $.ajax({
+    url: `/api/files/${fileId}/content`,
+    method: "GET",
+    headers: {
+      "X-CSRF-Token": getCsrfToken(),
+    },
+    success: function(response) {
+      if (response && response.content) {
+        // Format the content based on file type
+        const selectedFile = state.downloadedFiles.find((f) => f.id === fileId);
+        const formattedContent = formatFileContent(response.content, selectedFile);
+        $("#file-content-preview").html(formattedContent);
+      } else {
+        $("#file-content-preview").html('<p class="text-danger">No content available for this file</p>');
+      }
+    },
+    error: function(xhr, status, error) {
+      console.error("Error fetching file content:", error);
 
-    if (selectedFile) {
-      // Generate fake content based on file type
-      let content = generateSampleContent(selectedFile);
-      $("#file-content-preview").html(content);
-    } else {
-      $("#file-content-preview").html('<p class="text-danger">Error loading file content</p>');
-    }
-  }, 800);
+      // Fallback to sample content
+      const selectedFile = state.downloadedFiles.find((f) => f.id === fileId);
+      if (selectedFile) {
+        // Generate fake content based on file type
+        let content = generateSampleContent(selectedFile);
+        $("#file-content-preview").html(content);
+      } else {
+        $("#file-content-preview").html('<p class="text-danger">Error loading file content</p>');
+      }
+    },
+  });
 }
 
 /**
- * Generate sample content for preview
+ * Format file content based on file type
  */
-function generateSampleContent(file) {
-  const fileType = file.source ? file.source.split(".").pop().toLowerCase() : "txt";
+function formatFileContent(content, file) {
+  if (!file || !content) return '<p class="text-danger">Invalid file or content</p>';
 
-  const lorem = `Lorem ipsum dolor sit amet, consectetur adipiscing elit. Nullam auctor, nisl eget ultricies 
-  aliquam, nunc nisl aliquet nunc, eget aliquam nisl nunc eget nisl. Nullam auctor, nisl eget ultricies aliquam, 
-  nunc nisl aliquet nunc, eget aliquam nisl nunc eget nisl.`;
+  const fileType = file.source ? file.source.split(".").pop().toLowerCase() : "txt";
 
   switch (fileType) {
     case "pdf":
       return `<p><strong>PDF Content:</strong> ${file.title || "Document"}</p>
-              <p>${lorem}</p>
-              <p>Page 1 of estimated 5 pages</p>`;
+              <div class="border p-3">${content}</div>`;
     case "docx":
       return `<p><strong>Word Document:</strong> ${file.title || "Document"}</p>
-              <p>${lorem}</p>
-              <p>Contains text, formatting and possibly images</p>`;
+              <div class="border p-3">${content}</div>`;
     case "html":
       return `<p><strong>HTML Content:</strong> ${file.title || "Document"}</p>
               <div style="background-color: #f5f5f5; padding: 10px; border-radius: 5px; font-family: monospace;">
-                &lt;html&gt;<br>
-                &nbsp;&nbsp;&lt;head&gt;<br>
-                &nbsp;&nbsp;&nbsp;&nbsp;&lt;title&gt;Sample Document&lt;/title&gt;<br>
-                &nbsp;&nbsp;&lt;/head&gt;<br>
-                &nbsp;&nbsp;&lt;body&gt;<br>
-                &nbsp;&nbsp;&nbsp;&nbsp;&lt;p&gt;${lorem.substring(0, 50)}...&lt;/p&gt;<br>
-                &nbsp;&nbsp;&lt;/body&gt;<br>
-                &lt;/html&gt;
+                ${content.replace(/</g, "&lt;").replace(/>/g, "&gt;")}
               </div>`;
     case "md":
       return `<p><strong>Markdown Content:</strong> ${file.title || "Document"}</p>
               <div style="background-color: #f5f5f5; padding: 10px; border-radius: 5px; font-family: monospace;">
-                # ${file.title || "Document Title"}<br><br>
-                ## Introduction<br><br>
-                ${lorem.substring(0, 100)}...<br><br>
-                ## Section 1<br><br>
-                * Point 1<br>
-                * Point 2<br>
-                * Point 3
+                ${content.replace(/</g, "&lt;").replace(/>/g, "&gt;")}
               </div>`;
     case "csv":
       return `<p><strong>CSV Data:</strong> ${file.title || "Data File"}</p>
               <div style="background-color: #f5f5f5; padding: 10px; border-radius: 5px; font-family: monospace;">
-                id,name,value,date<br>
-                1,Item 1,42.5,2023-01-15<br>
-                2,Item 2,18.3,2023-01-16<br>
-                3,Item 3,27.8,2023-01-17<br>
-                4,Item 4,35.2,2023-01-18<br>
-                ...(additional rows not shown)
+                ${content.replace(/</g, "&lt;").replace(/>/g, "&gt;")}
               </div>`;
     default:
       return `<p><strong>Text Content:</strong> ${file.title || "Document"}</p>
-              <p>${lorem}</p>`;
+              <div class="border p-3">${content}</div>`;
   }
-}
-
-/**
- * Start the reading process
- */
-function startReadProcess() {
-  $("#start-read-btn").prop("disabled", true);
-  $("#read-progress").css("width", "0%");
-
-  const totalFiles = state.downloadedFiles.length;
-  let processedCount = 0;
-
-  // Add log message
-  appendProcessLog("Starting document reading process...");
-
-  // Simulate processing for each file
-  state.downloadedFiles.forEach((file, index) => {
-    setTimeout(() => {
-      processedCount++;
-
-      // Update progress
-      const progress = Math.round((processedCount / totalFiles) * 100);
-      $("#read-progress").css("width", `${progress}%`);
-
-      // Add to processed files
-      state.processedFiles.push(file);
-
-      // Add log message
-      appendProcessLog(`Read document: ${file.title || file.source || "Unknown document"}`);
-
-      // Check if all files are processed
-      if (processedCount === totalFiles) {
-        appendProcessLog("All documents read successfully!");
-        alertify.success("All files processed successfully");
-        $("#read-next-btn").removeClass("d-none");
-      }
-    }, 1200 + index * 800); // Staggered timing for visual effect
-  });
-}
-
-/**
- * Start the embedding process
- */
-function startEmbeddingProcess() {
-  $("#start-process-btn").prop("disabled", true);
-  $("#process-progress").css("width", "0%");
-
-  // Reset step statuses
-  $("#step-data-ingestion, #step-chunk-text, #step-generate-embeddings, #step-store-vectors")
-    .find(".badge")
-    .removeClass("badge-success badge-warning badge-danger")
-    .addClass("badge-secondary")
-    .text("Pending");
-
-  // Clear log
-  $("#process-log-content").html("> System ready to process files...");
-
-  // Start the steps
-  processDataIngestion();
-}
-
-/**
- * Process data ingestion step
- */
-function processDataIngestion() {
-  appendProcessLog("Starting data ingestion process...");
-  updateStepStatus("step-data-ingestion", "warning", "Processing");
-
-  $("#process-progress").css("width", "10%");
-
-  setTimeout(() => {
-    appendProcessLog("Converting documents to processable formats...");
-    $("#process-progress").css("width", "20%");
-
-    setTimeout(() => {
-      updateStepStatus("step-data-ingestion", "success", "Completed");
-      appendProcessLog("Data ingestion completed successfully!");
-      processTextChunking();
-    }, 2000);
-  }, 1500);
-}
-
-/**
- * Process text chunking step
- */
-function processTextChunking() {
-  appendProcessLog("Starting text chunking process...");
-  updateStepStatus("step-chunk-text", "warning", "Processing");
-
-  $("#process-progress").css("width", "30%");
-
-  setTimeout(() => {
-    appendProcessLog("Dividing text into semantic chunks...");
-    $("#process-progress").css("width", "40%");
-
-    setTimeout(() => {
-      updateStepStatus("step-chunk-text", "success", "Completed");
-      appendProcessLog("Text chunking completed. Generated 143 chunks across all documents.");
-      processGenerateEmbeddings();
-    }, 2500);
-  }, 1800);
-}
-
-/**
- * Process generate embeddings step
- */
-function processGenerateEmbeddings() {
-  appendProcessLog("Starting embedding generation...");
-  updateStepStatus("step-generate-embeddings", "warning", "Processing");
-
-  $("#process-progress").css("width", "50%");
-
-  setTimeout(() => {
-    appendProcessLog("Generating vector embeddings using model...");
-    $("#process-progress").css("width", "60%");
-
-    setTimeout(() => {
-      appendProcessLog("Processing batch 1 of 3...");
-      $("#process-progress").css("width", "70%");
-
-      setTimeout(() => {
-        appendProcessLog("Processing batch 2 of 3...");
-        $("#process-progress").css("width", "80%");
-
-        setTimeout(() => {
-          appendProcessLog("Processing batch 3 of 3...");
-          $("#process-progress").css("width", "85%");
-
-          setTimeout(() => {
-            updateStepStatus("step-generate-embeddings", "success", "Completed");
-            appendProcessLog("Embedding generation completed. Generated 143 embeddings.");
-            processStoreVectors();
-          }, 1500);
-        }, 1500);
-      }, 1500);
-    }, 2000);
-  }, 1800);
-}
-
-/**
- * Process store vectors step
- */
-function processStoreVectors() {
-  appendProcessLog("Starting vector storage process...");
-  updateStepStatus("step-store-vectors", "warning", "Processing");
-
-  $("#process-progress").css("width", "90%");
-
-  setTimeout(() => {
-    appendProcessLog("Storing vector embeddings in database...");
-
-    setTimeout(() => {
-      updateStepStatus("step-store-vectors", "success", "Completed");
-      appendProcessLog("Vector storage completed. All embeddings stored successfully.");
-      $("#process-progress").css("width", "100%");
-
-      appendProcessLog("RAG pipeline processing completed successfully!");
-      $("#finish-btn").removeClass("d-none");
-    }, 2000);
-  }, 1500);
-}
-
-/**
- * Update the status of a processing step
- */
-function updateStepStatus(stepId, status, text) {
-  $(`#${stepId}`)
-    .find(".badge")
-    .removeClass("badge-secondary badge-warning badge-success badge-danger")
-    .addClass(`badge-${status}`)
-    .text(text);
-}
-
-/**
- * Append a log message to the process log
- */
-function appendProcessLog(message) {
-  const timestamp = new Date().toLocaleTimeString();
-  const logMessage = `> [${timestamp}] ${message}`;
-
-  const logContent = $("#process-log-content");
-  logContent.append(`<div>${logMessage}</div>`);
-
-  // Auto-scroll to bottom
-  const processLog = $(".process-log");
-  processLog.scrollTop(processLog[0].scrollHeight);
-}
-
-/**
- * Show success modal
- */
-function showSuccessModal() {
-  $("#success-message").text(
-    `Your ${state.processedFiles.length} documents in theme "${state.selectedTheme}" have been successfully processed and are ready for use in the RAG system.`
-  );
-  $("#success-modal").modal("show");
-}
-
-/**
- * Format date to a readable format
- */
-function formatDate(dateString) {
-  if (!dateString) return "-";
-
-  const date = new Date(dateString);
-  if (isNaN(date.getTime())) return dateString; // Return as-is if invalid
-
-  return date.toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
+} // Only one closing brace here

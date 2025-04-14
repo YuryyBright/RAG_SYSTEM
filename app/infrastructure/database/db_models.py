@@ -1,11 +1,14 @@
 # app/models/db_models.py
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean, LargeBinary, Text
+import json
+import uuid
+
+import user_agents
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean, LargeBinary, Text, Float
+from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.sql import func
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
-import uuid
-from sqlalchemy.ext.hybrid import hybrid_property
-import user_agents
+from sqlalchemy.types import JSON
 Base = declarative_base()
 
 
@@ -60,7 +63,7 @@ class User(Base):
     activities = relationship("UserActivity", back_populates="user", cascade="all, delete-orphan")
     # Add this relationship to User class
     themes = relationship("Theme", back_populates="owner", cascade="all, delete-orphan")
-
+    tasks = relationship("ProcessingTask", back_populates="user", cascade="all, delete-orphan")
 class UserActivity(Base):
     """
     Represents a record of user activities in the system.
@@ -225,7 +228,7 @@ class Theme(Base):
     owner = relationship("User", back_populates="themes")
     documents = relationship("ThemeDocument", back_populates="theme", cascade="all, delete-orphan")
     shared_with = relationship("ThemeShare", back_populates="theme", cascade="all, delete-orphan")
-
+    tasks = relationship("ProcessingTask", back_populates="theme", cascade="all, delete-orphan")
 # Junction table for theme-document relationship
 class ThemeDocument(Base):
     """
@@ -323,6 +326,71 @@ class Token(Base):
     is_revoked = Column(Boolean, default=False)  # ✅ new column
 
 
+# Modify in app/infrastructure/database/db_models.py
+
+class ProcessingTask(Base):
+    """
+    Database model for tracking processing tasks.
+
+    Allows for task persistence across server restarts and user sessions.
+    """
+    __tablename__ = "processing_tasks"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    theme_id = Column(String, ForeignKey("themes.id"), nullable=True)
+    task_type = Column(String, nullable=False)  # Using TaskType enum values
+    description = Column(String, nullable=True)
+    status = Column(String, nullable=False)  # Using TaskStatus enum values
+    progress = Column(Float, default=0.0)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    error_message = Column(Text, nullable=True)
+    logs = Column(Text, nullable=True)  # Serialized JSON list of log entries
+    task_metadata = Column(Text, nullable=True)  # Changed from 'metadata' to 'task_metadata'
+    steps = Column(Text, nullable=True)  # Serialized JSON array of steps
+    current_step = Column(Integer, default=0)
+
+    # Relationships
+    user = relationship("User", back_populates="tasks")
+    theme = relationship("Theme", back_populates="tasks")
+
+    @property
+    def logs_list(self):
+        """Deserialize logs from JSON string to list."""
+        if self.logs:
+            return json.loads(self.logs)
+        return []
+
+    @logs_list.setter
+    def logs_list(self, value):
+        """Serialize logs from list to JSON string."""
+        self.logs = json.dumps(value)
+
+    @property
+    def metadata_dict(self):
+        """Deserialize metadata from JSON string to dict."""
+        if self.task_metadata:  # Use task_metadata instead of metadata
+            return json.loads(self.task_metadata)
+        return {}
+
+    @metadata_dict.setter
+    def metadata_dict(self, value):
+        """Serialize metadata from dict to JSON string."""
+        self.task_metadata = json.dumps(value)  # Use task_metadata instead of metadata
+
+    @property
+    def steps_list(self):
+        """Deserialize steps from JSON string to list."""
+        if self.steps:
+            return json.loads(self.steps)
+        return []
+
+    @steps_list.setter
+    def steps_list(self, value):
+        """Serialize steps from list to JSON string."""
+        self.steps = json.dumps(value)
 
 class Session(Base):
     """

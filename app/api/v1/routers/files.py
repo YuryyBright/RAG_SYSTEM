@@ -29,47 +29,12 @@ router = APIRouter()
 file_manager = FileManager()
 
 
-# @router.post("/", response_model=FileProcessingResponse)
-# async def process_files(
-#         request: FileProcessingRequest,
-#         file_processing_use_case: FileProcessingUseCase = Depends(file_processing_use_case)
-# ):
-#     """
-#     Process files in a directory for the RAG system.
-#
-#     This endpoint:
-#     1. Reads different types of files
-#     2. Detects language
-#     3. Prepares text for the vector database
-#     4. Provides a detailed report of processing results
-#     """
-#     try:
-#         documents, report = await file_processing_use_case.process_directory(
-#             request.directory_path,
-#             recursive=request.recursive,
-#             metadata=request.additional_metadata
-#         )
-#
-#         return FileProcessingResponse(
-#             success=True,
-#             message=f"Successfully processed {len(documents)} documents",
-#             documents_count=len(documents),
-#             report=FileProcessingReport(
-#                 summary=ProcessedFileSummary(**report["summary"]),
-#                 details=report["details"],
-#                 recommendations=FileProcessingRecommendations(**report["recommendations"])
-#             )
-#         )
-#     except ValueError as e:
-#         raise HTTPException(status_code=400, detail=str(e))
-#     except Exception as e:
-#         raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
 @router.post("/", response_model=List[FileResponseSchema])
 async def upload_files(
-    theme_id: Optional[str] = Form(None),
-    files: Union[UploadFile, List[UploadFile]] = File(...),
-    current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_async_db)
+        theme_id: Optional[str] = Form(None),
+        files: Union[UploadFile, List[UploadFile]] = File(...),
+        current_user: User = Depends(get_current_active_user),
+        db: AsyncSession = Depends(get_async_db)
 ):
     """
     Upload one or multiple files and store metadata in the database.
@@ -103,6 +68,8 @@ async def upload_files(
     except Exception as e:
         await db.rollback()
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+
+
 @router.post("/process", response_model=FileProcessingResponse)
 async def process_files(
         request: FileProcessingRequest,
@@ -157,6 +124,69 @@ async def process_files(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"An error occurred during file processing: {str(e)}")
+
+
+@router.post("/vectorize", response_model=FileProcessingResponse)
+async def vectorize_files(
+        theme_id: str,
+        batch_size: int = 100,
+        current_user: User = Depends(get_current_active_user),
+        file_processing_use_case_: FileProcessingUseCase = Depends(file_processing_use_case),
+        db: Session = Depends(get_async_db)
+):
+    """
+    Generate embeddings and store in vector database for a given theme.
+
+    This endpoint:
+    1. Gets all processed files for a theme
+    2. Generates embeddings in batches
+    3. Stores the embeddings in the vector database
+    4. Provides a detailed report of the process
+    """
+    try:
+        # Verify theme exists and user has access
+        repo = FileRepository(db)
+        theme_files = await repo.get_files_by_theme_id(theme_id, current_user.id)
+
+        if not theme_files:
+            raise HTTPException(status_code=404, detail=f"No files found for theme ID: {theme_id}")
+
+        # Get document content from files
+        file_paths = [file.file_path for file in theme_files]
+
+        # Generate embeddings and store in vector DB
+        embedding_results, vectorization_report = await file_processing_use_case_.vectorize_files(
+            file_paths=file_paths,
+            theme_id=theme_id,
+            batch_size=batch_size
+        )
+
+        # Create the response
+        return FileProcessingResponse(
+            success=True,
+            message=f"Successfully vectorized {len(embedding_results)} documents for theme {theme_id}",
+            documents_count=len(embedding_results),
+            report=FileProcessingReport(
+                summary=ProcessedFileSummary(
+                    total_files=vectorization_report["summary"]["total_files"],
+                    successful=vectorization_report["summary"]["successful"],
+                    unreadable=vectorization_report["summary"]["unreadable"],
+                    language_detection_failures=vectorization_report["summary"]["language_detection_failures"],
+                    files_with_warnings=vectorization_report["summary"]["files_with_warnings"]
+                ),
+                details=vectorization_report["details"],
+                recommendations=FileProcessingRecommendations(
+                    files_to_review=vectorization_report["recommendations"]["files_to_review"],
+                    files_to_consider_removing=vectorization_report["recommendations"]["files_to_consider_removing"]
+                )
+            )
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"An error occurred during vectorization: {str(e)}")
+
+
 @router.get("/", response_model=List[FileResponseSchema])
 async def list_files(
         current_user: User = Depends(get_current_active_user),
@@ -196,9 +226,9 @@ async def get_file(
 
 @router.delete("/{file_id}")
 async def delete_file(
-    file_id: str,
-    current_user: User = Depends(get_current_active_user),
-    db: AsyncSession = Depends(get_async_db)
+        file_id: str,
+        current_user: User = Depends(get_current_active_user),
+        db: AsyncSession = Depends(get_async_db)
 ):
     """Delete a file using FileRepository and FileManager."""
     repo = FileRepository(db)
@@ -224,7 +254,6 @@ async def delete_file(
         raise HTTPException(status_code=500, detail=f"Failed to delete file: {str(e)}")
 
 
-
 @router.get("/public/{file_id}")
 async def get_public_file(
         file_id: str,
@@ -247,7 +276,6 @@ async def get_public_file(
     )
 
 
-
 @router.get("/supported-formats")
 async def get_supported_formats(
         current_user: User = Depends(get_current_active_user),
@@ -261,3 +289,28 @@ async def get_supported_formats(
         "supported_formats": supported_extensions,
         "count": len(supported_extensions)
     }
+
+
+@router.get("/theme/{theme_id}/vector-status")
+async def get_vectorization_status(
+        theme_id: str,
+        current_user: User = Depends(get_current_active_user),
+        db: Session = Depends(get_async_db),
+        file_processing_use_case_: FileProcessingUseCase = Depends(file_processing_use_case)
+):
+    """
+    Get the vectorization status for a theme.
+    """
+    try:
+        status = await file_processing_use_case_.get_vectorization_status(theme_id)
+        return {
+            "theme_id": theme_id,
+            "total_files": status["total_files"],
+            "vectorized_files": status["vectorized_files"],
+            "percent_complete": status["percent_complete"],
+            "status": status["status"],
+            "vector_db_info": status["vector_db_info"],
+            "last_updated": status["last_updated"]
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get vectorization status: {str(e)}")

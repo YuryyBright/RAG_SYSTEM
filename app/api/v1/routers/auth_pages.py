@@ -5,7 +5,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from starlette.status import HTTP_302_FOUND
 
-from adapters.auth.service import AuthService
 from api.v1.routers.auth import get_current_active_user
 from app.infrastructure.database.repository import get_async_db
 from utils.security import COOKIE_NAME

@@ -540,5 +540,6 @@
 </style>
 {% endblock %} {% block scripts %}
 <script src="{{ url_for('static', path='plugins/dropzone/min/dropzone.min.js') }}"></script>
-<script src="{{ url_for('static', path='dist/js/pages/theme-processing.js') }}"></script>
+<!--  -->
+<script type="module" src="{{ url_for('static', path='dist/js/pages/theme-processing/index.js') }}"></script>
 {% endblock %}

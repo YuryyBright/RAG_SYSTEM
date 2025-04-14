@@ -1,4 +1,4 @@
-# app/adapters/auth/service.py
+# app/adapters/auth/auth_service.py
 from datetime import datetime, timedelta
 from typing import Optional, Tuple, List, Dict, Any
 from fastapi import HTTPException
@@ -11,12 +11,11 @@ from app.infrastructure.database.repository.token_repository import TokenReposit
 from app.adapters.auth.security import JWTAuth
 from app.utils.logger_util import get_logger
 from app.utils.security import generate_session_id, generate_csrf_token
-from app.config import settings
+
 from infrastructure.database.repository.activity_repository import ActivityRepository
 from infrastructure.database.repository.session_repository import SessionRepository
 from fastapi import Request
 
-from utils.security import clear_auth_cookies
 
 # Configure logger
 logger = get_logger(__name__)
@@ -263,7 +262,6 @@ class AuthService:
                 logger.info(f"Token successfully revoked for user: {user_id}")
             else:
                 logger.warning(f"Token revocation failed for user: {user_id}")
-
             return success
         except Exception as e:
             logger.error(f"Error during token revocation: {e}")
@@ -334,7 +332,7 @@ class AuthService:
             logger.error(f"Error creating session: {e}")
             return None, None, None
 
-    # Update in validate_session method in service.py
+    # Update in validate_session method in auth_service.py
 
     async def validate_session(self, session_id: str) -> Optional[Dict[str, Any]]:
         """
@@ -352,6 +350,7 @@ class AuthService:
         """
         try:
             # Retrieve session from database
+
             session = await self.session_repo.get_session(session_id)
 
             if not session:

@@ -37,11 +37,14 @@ class ThemeUpdate(BaseModel):
 
 class ThemeResponse(ThemeBase):
     """Schema for theme responses."""
-    id: str = Field(..., description="Unique identifier for the theme")
-    owner_id: str = Field(..., description="ID of the user who owns the theme")
-    created_at: datetime = Field(..., description="Timestamp when the theme was created")
-    updated_at: Optional[datetime] = Field(None, description="Timestamp when the theme was last updated")
-    document_count: int = Field(0, description="Number of documents in the theme")
+    id: str
+    name: str
+    description: Optional[str] = None
+    is_public: bool
+    owner_id: str
+    document_count: int = 0
+    created_at: str
+    updated_at: Optional[str] = None
 
     class Config:
         orm_mode = True

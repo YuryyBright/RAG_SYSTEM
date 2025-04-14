@@ -7,9 +7,9 @@ from typing import Optional, Union
 
 from app.infrastructure.database.repository import get_async_db
 from app.infrastructure.database.db_models import User
-from app.adapters.auth.service import AuthService
 from app.utils.logger_util import get_logger
 from app.utils.security import COOKIE_NAME, CSRF_COOKIE_NAME, clear_auth_cookies
+from core.services.auth_service import AuthService
 
 # Configure logger
 logger = get_logger(__name__)

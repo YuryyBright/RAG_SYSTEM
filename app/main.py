@@ -15,12 +15,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import RedirectResponse
 from starlette.status import HTTP_302_FOUND
 
-from adapters.auth.service import AuthService
+
 from api.v1.routers import auth, documents, queries, files, pages, auth_pages, dashboard_pages, admin_pages, user_api, \
-    theme
+    theme, task_pages, tasks
+from api.websockets import task_updates
+from api.websockets.task_updates import handle_task_websocket
 
 from app.config import settings
 from app.api.middlewares import setup_middlewares
+from core.services.auth_service import AuthService
 from infrastructure.database.repository import get_async_db
 from utils.logger_util import get_logger
 from utils.security import COOKIE_NAME, set_csrf_cookie, CSRF_COOKIE_NAME
@@ -59,6 +62,14 @@ app.include_router(dashboard_pages.router, prefix="/dashboard", tags=["Dashboard
 app.include_router(admin_pages.router, prefix="/admin", tags=["Admin Pages"])
 api_router.include_router(user_api.router, prefix="/user", tags=["User"])
 api_router.include_router(theme.router, prefix="/themes", tags=["Themes"])
+
+api_router.include_router(tasks.router,prefix="/tasks",tags=["Tasks"])
+api_router.include_router(task_updates.router)
+# Add page routes
+api_router.include_router(task_pages.router,prefix="")
+
+# Add WebSocket endpoint
+api_router.add_websocket_route("/ws/tasks", handle_task_websocket)
 app.include_router(api_router)
 
 # Serve static files from ./static directory if it exists
