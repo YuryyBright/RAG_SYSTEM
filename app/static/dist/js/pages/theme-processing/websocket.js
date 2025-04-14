@@ -7,6 +7,20 @@ import { state } from "./state.js";
 import { updateTaskUI } from "./ui.js";
 
 /**
+ * Wait until WebSocket is connected before executing a callback
+ * @param {function} callback - Function to run once the socket is connected
+ * @param {number} interval - Interval in ms to check connection (default: 100ms)
+ */
+export function waitForSocketConnection(callback, interval = 100) {
+  if (state.taskSocket && state.taskSocket.readyState === WebSocket.OPEN) {
+    callback();
+  } else {
+    setTimeout(() => {
+      waitForSocketConnection(callback, interval);
+    }, interval);
+  }
+}
+/**
  * Initialize WebSocket connection for real-time updates
  */
 export function initializeWebSocketConnection() {
@@ -77,21 +91,17 @@ export function attemptReconnect() {
  * @param {string} themeId - ID of the theme to subscribe to updates for
  */
 
-// Fix the subscription function in websocket.js
 export function subscribeToThemeUpdates(themeId) {
-  if (state.taskSocket && state.taskSocket.readyState === WebSocket.OPEN) {
+  // Use the waitForSocketConnection helper to ensure connection is ready
+  waitForSocketConnection(() => {
     const subscribeMsg = {
-      command: "subscribe", // Change from "action" to "command" to match server expectations
+      command: "subscribe",
       theme_id: themeId,
     };
 
     state.taskSocket.send(JSON.stringify(subscribeMsg));
     console.log(`Subscribed to updates for theme ${themeId}`);
-  } else {
-    console.warn("WebSocket not connected, can't subscribe to theme updates");
-    // Queue the subscription for when the connection is ready
-    state.pendingSubscription = themeId;
-  }
+  });
 }
 
 /**

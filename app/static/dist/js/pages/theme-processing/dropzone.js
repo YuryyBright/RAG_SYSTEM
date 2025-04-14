@@ -4,14 +4,16 @@
  */
 
 // Import state and utilities
-import { state } from "./state.js";
+import { state, restoreWorkflowState, saveWorkflowState } from "./state.js";
 import { getCsrfToken } from "./utils.js";
-import { saveWorkflowState } from "./ui.js";
 
 /**
  * Initialize Dropzone file uploader
  */
 export function initDropzone() {
+  // First, try to load state from localStorage
+  restoreWorkflowState();
+
   // Check if the element exists before trying to initialize Dropzone
   const dropzoneElement = $("#file-upload-form")[0];
 
@@ -217,8 +219,13 @@ export function initDropzone() {
  * Restore previously uploaded files to the Dropzone UI
  * @param {Dropzone} dropzoneInstance - The Dropzone instance
  */
+/**
+ * Restore previously uploaded files to the Dropzone UI
+ * @param {Dropzone} dropzoneInstance - The Dropzone instance
+ */
 function restorePreviousUploads(dropzoneInstance) {
-  if (!state.uploadedFiles || !state.uploadedFiles.length) {
+  // More robust check for array existence and content
+  if (!Array.isArray(state.uploadedFiles) || state.uploadedFiles.length === 0) {
     console.log("No previously uploaded files to restore");
     return;
   }
@@ -237,8 +244,8 @@ function restorePreviousUploads(dropzoneInstance) {
     // Add the mock file to Dropzone
     dropzoneInstance.emit("addedfile", mockFile);
 
-    // Set the file as 'success' and add the file ID
-    dropzoneInstance.emit("success", mockFile);
+    // Pass the fileData as second parameter to match the success handler's expectations
+    // dropzoneInstance.emit("success", mockFile, fileData); // This is optional and can be used to simulate a successful upload
     dropzoneInstance.emit("complete", mockFile);
 
     // Add a CSS class to indicate it's a restored file
@@ -251,22 +258,65 @@ function restorePreviousUploads(dropzoneInstance) {
     // Add file type icon or thumbnail if available
     const thumbnailElement = mockFile.previewElement.querySelector(".dz-image");
     if (thumbnailElement) {
-      // You could add file type icons based on file extension
+      // Get file extension and determine icon
       const fileExtension = (fileData.filename || "").split(".").pop().toLowerCase();
       let iconClass = "fas fa-file"; // Default icon
 
-      if (fileExtension === "pdf") iconClass = "fas fa-file-pdf";
-      else if (["doc", "docx"].includes(fileExtension)) iconClass = "fas fa-file-word";
-      else if (["csv", "xls", "xlsx"].includes(fileExtension)) iconClass = "fas fa-file-excel";
-      else if (["txt", "md"].includes(fileExtension)) iconClass = "fas fa-file-alt";
-      else if (["html", "htm"].includes(fileExtension)) iconClass = "fas fa-file-code";
+      // More comprehensive file type detection
+      switch (fileExtension) {
+        case "pdf":
+          iconClass = "fas fa-file-pdf";
+          break;
+        case "doc":
+        case "docx":
+          iconClass = "fas fa-file-word";
+          break;
+        case "csv":
+        case "xls":
+        case "xlsx":
+          iconClass = "fas fa-file-excel";
+          break;
+        case "txt":
+        case "md":
+          iconClass = "fas fa-file-alt";
+          break;
+        case "html":
+        case "htm":
+          iconClass = "fas fa-file-code";
+          break;
+        default:
+          iconClass = "fas fa-file";
+      }
 
       thumbnailElement.innerHTML = `<i class="${iconClass}" style="font-size: 2rem; margin-top: 1rem;"></i>`;
+    }
+
+    // Add file size display
+    const fileSizeElement = mockFile.previewElement.querySelector(".dz-size");
+    if (fileSizeElement && fileData.size) {
+      // Format file size for display
+      const formattedSize = formatFileSize(fileData.size);
+      fileSizeElement.innerHTML = `<span><strong>Size:</strong> ${formattedSize}</span>`;
     }
   });
 
   // Update next button state
   $("#upload-next-btn").prop("disabled", state.uploadedFiles.length === 0);
+}
+
+/**
+ * Format file size into human-readable format
+ * @param {number} bytes - File size in bytes
+ * @returns {string} - Formatted file size with units
+ */
+function formatFileSize(bytes) {
+  if (bytes === 0) return "0 Bytes";
+
+  const k = 1024;
+  const sizes = ["Bytes", "KB", "MB", "GB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
 }
 
 // Disable Dropzone auto-discovery

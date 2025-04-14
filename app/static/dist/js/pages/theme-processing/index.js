@@ -1,26 +1,24 @@
 import { initDropzone, disableDropzoneAutoDiscover } from "./dropzone.js";
 import { loadThemes } from "./theme.js";
 import { setupEventListeners } from "./ui.js";
-import { restoreWorkflowState } from "./ui.js";
 import { navigateToStep } from "./ui.js";
 import { initializeWebSocketConnection } from "./websocket.js";
 import { checkForActiveTasks } from "./task.js";
-import { initFileUpload } from "./file-upload.js";
-
+import { state } from "./state.js";
+import { restoreWorkflowState } from "./state.js";
 $(document).ready(() => {
   console.log("Theme Processor Initialized");
-  Dropzone.autoDiscover = false;
+
   // Disable Dropzone auto-discovery before anything else
   disableDropzoneAutoDiscover();
+
   setupEventListeners();
+
   // Initialize WebSocket connection for real-time updates
   initializeWebSocketConnection();
   initDropzone();
 
   loadThemes();
-
-  // Initialize file upload functionality
-  initFileUpload();
 
   // Try to restore saved workflow state
   const stateRestored = restoreWorkflowState();
