@@ -7,6 +7,233 @@
 import { state } from "./state.js";
 
 /**
+ * Save current workflow state to localStorage
+ */
+export function saveWorkflowState() {
+  // Store important state variables
+  const workflowState = {
+    currentStep: state.currentStep,
+    currentThemeId: state.currentThemeId,
+    selectedTheme: state.selectedTheme,
+    processingTask: state.processingTask,
+    vectorDBStatus: state.vectorDBStatus,
+    processingLogs: state.processingLogs,
+
+    // These are the important lines for file persistence
+    // Save only the necessary data from uploadedFiles to avoid oversized localStorage
+    uploadedFiles: state.uploadedFiles.map((file) => ({
+      id: file.id,
+      filename: file.filename || file.title || file.source || "Unknown file",
+      size: file.size || 0,
+      type: file.type || file.mime_type || "application/octet-stream",
+      source: file.source || "",
+    })),
+
+    // Remove the actual File objects from dropZoneFiles to avoid oversized localStorage
+    dropZoneFiles: (state.dropZoneFiles || []).map((file) => ({
+      name: file.name,
+      size: file.size,
+      // Don't save the actual file object
+    })),
+  };
+
+  try {
+    localStorage.setItem("workflowState", JSON.stringify(workflowState));
+    console.log("Workflow state saved successfully");
+  } catch (e) {
+    // Handle potential localStorage quota errors
+    console.error("Failed to save workflow state:", e);
+
+    if (e.name === "QuotaExceededError" || e.toString().includes("exceeded")) {
+      console.warn("LocalStorage quota exceeded. Saving minimal state.");
+      // Save minimal state without large objects
+      const minimalState = {
+        currentStep: state.currentStep,
+        currentThemeId: state.currentThemeId,
+        selectedTheme: state.selectedTheme,
+        // Just save IDs of uploaded files
+        uploadedFileIds: state.uploadedFiles.map((file) => file.id),
+      };
+      try {
+        localStorage.setItem("workflowState", JSON.stringify(minimalState));
+      } catch (e2) {
+        console.error("Failed to save even minimal state:", e2);
+        alertify.error("Unable to save your progress locally. Files may not persist if you leave this page.");
+      }
+    }
+  }
+}
+/**
+ * Restore workflow state from localStorage
+ */
+export function restoreWorkflowState() {
+  try {
+    const savedState = localStorage.getItem("workflowState");
+    if (savedState) {
+      const parsedState = JSON.parse(savedState);
+
+      // Restore theme information
+      if (parsedState.currentThemeId) {
+        state.currentThemeId = parsedState.currentThemeId;
+        state.selectedTheme = parsedState.selectedTheme;
+        $("#selected-theme-name").text(parsedState.selectedTheme || "");
+      }
+
+      // Restore task information if available
+      if (parsedState.processingTask) {
+        state.processingTask = parsedState.processingTask;
+        updateTaskUI(parsedState.processingTask);
+      }
+
+      // Restore vector DB status if available
+      if (parsedState.vectorDBStatus) {
+        state.vectorDBStatus = parsedState.vectorDBStatus;
+        updateVectorDBStatusUI();
+      }
+
+      // Restore logs if available
+      if (parsedState.processingLogs && parsedState.processingLogs.length > 0) {
+        state.processingLogs = parsedState.processingLogs;
+        $("#process-log-content").empty();
+        state.processingLogs.forEach((log) => {
+          $("#process-log-content").append(`<div>> ${log}</div>`);
+        });
+      }
+
+      // Restore dropZoneFiles if available
+      if (parsedState.dropZoneFiles && parsedState.dropZoneFiles.length > 0) {
+        state.dropZoneFiles = parsedState.dropZoneFiles;
+        restoreDropZoneFiles();
+      }
+
+      // Restore uploaded files if available
+      if (parsedState.uploadedFiles && parsedState.uploadedFiles.length > 0) {
+        state.uploadedFiles = parsedState.uploadedFiles;
+        // Enable the next button if there are files
+        $("#upload-next-btn").prop("disabled", state.uploadedFiles.length === 0);
+      }
+
+      // Navigate to the saved step (if there is one)
+      if (parsedState.currentStep) {
+        navigateToStep(parsedState.currentStep, false);
+        return true;
+      }
+    }
+    return false;
+  } catch (error) {
+    console.error("Error restoring workflow state:", error);
+    return false;
+  }
+}
+/**
+ * Restore files to the drop zone UI from saved state
+ */
+/**
+ * Fetch file data from server using IDs
+ */
+function fetchFileDataFromIds(themeId, fileIds) {
+  if (!themeId || !fileIds || !fileIds.length) return;
+
+  $.ajax({
+    url: `/api/themes/${themeId}/documents`,
+    method: "GET",
+    headers: {
+      "X-CSRF-Token": getCsrfToken(),
+    },
+    success: function (files) {
+      // Filter to get only the files we want by ID
+      const matchingFiles = files.filter((file) => fileIds.includes(file.id));
+      if (matchingFiles.length > 0) {
+        state.uploadedFiles = matchingFiles;
+        $("#upload-next-btn").prop("disabled", false);
+        console.log(`Restored ${matchingFiles.length} files from server`);
+      }
+    },
+    error: function (xhr, status, error) {
+      console.error("Error fetching files by ID:", error);
+    },
+  });
+}
+
+/**
+ * Fetch all files for a theme
+ */
+function fetchAllThemeFiles(themeId) {
+  if (!themeId) return;
+
+  $.ajax({
+    url: `/api/themes/${themeId}/documents`,
+    method: "GET",
+    headers: {
+      "X-CSRF-Token": getCsrfToken(),
+    },
+    success: function (files) {
+      if (files.length > 0) {
+        state.uploadedFiles = files;
+        $("#upload-next-btn").prop("disabled", false);
+        console.log(`Fetched ${files.length} files for theme ${themeId}`);
+      }
+    },
+    error: function (xhr, status, error) {
+      console.error("Error fetching theme files:", error);
+    },
+  });
+}
+
+export function restoreDropZoneFiles() {
+  if (!state.dropZoneFiles || state.dropZoneFiles.length === 0) return;
+
+  const $filesList = $("#upload-files-list");
+  $filesList.empty();
+
+  state.dropZoneFiles.forEach((file) => {
+    // Create a file item element
+    const fileItem = `
+      <div class="file-item mb-2 p-2 border rounded" data-file-id="${file.id || ""}">
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <i class="fas fa-file mr-2"></i>
+            <span class="file-name">${file.name}</span>
+            <span class="badge badge-info ml-2">${formatFileSize(file.size)}</span>
+          </div>
+          <button class="btn btn-sm btn-danger remove-file-btn">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+      </div>
+    `;
+    $filesList.append(fileItem);
+  });
+
+  // Add event listeners to remove buttons
+  $(".remove-file-btn").on("click", function (e) {
+    e.preventDefault();
+    const $fileItem = $(this).closest(".file-item");
+    const fileId = $fileItem.data("file-id");
+
+    // Remove from UI
+    $fileItem.remove();
+
+    // Remove from state
+    if (fileId) {
+      state.dropZoneFiles = state.dropZoneFiles.filter((file) => file.id !== fileId);
+    } else {
+      const fileName = $fileItem.find(".file-name").text();
+      state.dropZoneFiles = state.dropZoneFiles.filter((file) => file.name !== fileName);
+    }
+
+    // Update next button state
+    $("#upload-next-btn").prop("disabled", state.dropZoneFiles.length === 0);
+
+    // Save the updated state
+    saveWorkflowState();
+  });
+
+  // Update next button state
+  $("#upload-next-btn").prop("disabled", state.dropZoneFiles.length === 0);
+}
+
+/**
  * Navigate to a specific step in the workflow
  */
 export function navigateToStep(step, resetState = true) {
@@ -32,7 +259,12 @@ export function navigateToStep(step, resetState = true) {
       $("#step-theme").addClass("completed");
       $("#step-upload").addClass("active");
       $("#workflow-progress-bar").css("width", "40%").text("Step 2 of 5");
-      $("#upload-next-btn").prop("disabled", state.uploadedFiles.length === 0);
+      $("#upload-next-btn").prop("disabled", state.uploadedFiles.length === 0 && state.dropZoneFiles.length === 0);
+
+      // Restore dropzone files if they exist
+      if (state.dropZoneFiles && state.dropZoneFiles.length > 0) {
+        restoreDropZoneFiles();
+      }
       break;
 
     case 3: // Download
@@ -59,7 +291,14 @@ export function navigateToStep(step, resetState = true) {
       updateVectorDBStatusUI();
       break;
   }
+
+  // Save the current state to localStorage
+  saveWorkflowState();
 }
+
+/**
+ * Update the UI to reflect the current vector DB processing status
+ */
 
 /**
  * Update the UI to reflect the current vector DB processing status

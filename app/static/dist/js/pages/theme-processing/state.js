@@ -4,27 +4,42 @@
  */
 
 // Global state object that's shared across modules
+// Application state object
 export const state = {
+  // Current workflow step (1-5)
   currentStep: 1,
-  selectedTheme: null,
-  uploadedFiles: [],
-  downloadedFiles: [],
-  processedFiles: [],
+
+  // Theme-related state
   currentThemeId: null,
+  selectedTheme: "",
+
+  // File-related state
+  uploadedFiles: [], // Files uploaded to the theme
+  downloadedFiles: [], // Files downloaded from the server
+  processedFiles: [], // Files that have been processed
+
+  // Task-related state
   processingTask: null,
+  processingLogs: [],
+
+  // WebSocket-related state
   taskSocket: null,
   reconnectAttempts: 0,
   maxReconnectAttempts: 5,
-  reconnectDelay: 3000,
-  dropzone: null,
+  reconnectDelay: 2000,
+  pendingSubscription: null,
+  subscribedThemeId: null,
+
+  // Vector DB status
   vectorDBStatus: {
     dataIngestion: "pending",
     textChunking: "pending",
     generateEmbeddings: "pending",
     storeVectors: "pending",
   },
-  vectorDBProgress: 0,
-  processingLogs: [],
+
+  // File upload related state - added for drop zone persistence
+  dropZoneFiles: [], // Files currently shown in the drop zone
 };
 
 /**

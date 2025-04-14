@@ -4,52 +4,12 @@ import logging
 from abc import ABC, abstractmethod
 import numpy as np
 
+from core.interfaces.embedding import EmbeddingInterface
 from utils.logger_util import get_logger
 
 logger = get_logger(__name__)
 
-
-class EmbeddingServiceInterface(ABC):
-    """Abstract interface for embedding service implementations."""
-
-    @abstractmethod
-    async def get_embeddings(self, texts: List[str]) -> List[List[float]]:
-        """
-        Generate embeddings for a list of texts.
-
-        Args:
-            texts: List of text strings to embed
-
-        Returns:
-            List of embedding vectors (as lists of floats)
-        """
-        pass
-
-    @abstractmethod
-    async def get_embedding(self, text: str) -> List[float]:
-        """
-        Generate embedding for a single text.
-
-        Args:
-            text: Text string to embed
-
-        Returns:
-            Embedding vector as a list of floats
-        """
-        pass
-
-    @abstractmethod
-    def get_dimensions(self) -> int:
-        """
-        Get the dimensionality of the embeddings.
-
-        Returns:
-            Number of dimensions in the embedding vectors
-        """
-        pass
-
-
-class EmbeddingService(EmbeddingServiceInterface):
+class EmbeddingService(EmbeddingInterface):
     """Service for generating embeddings from text."""
 
     def __init__(self, model_name: str = "default", dimensions: int = 768):

@@ -122,15 +122,6 @@ async def get_task_update_manager():
     return task_update_manager
 
 
-# async def get_cookie_or_token(
-#         websocket: WebSocket,
-#         session: Annotated[Union[str, None], Cookie()] = None,
-#         token: Annotated[Union[str, None], Query()] = None,
-# ):
-#     if session is None and token is None:
-#         raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION)
-#     return session or token
-#     # This function is used to extract the session or token from the WebSocket request.
 
 @router.websocket("/ws/tasks")
 async def handle_task_websocket(
@@ -196,6 +187,7 @@ async def handle_task_websocket(
 
             # Handle different commands from the client
             if command == "subscribe":
+                logger.info('User subscribe to task updates')
                 theme_id = data.get("theme_id")
                 if theme_id is not None:
                     # Subscribe the user to the given theme
@@ -233,7 +225,20 @@ async def handle_task_websocket(
                         "type": "task_update",
                         "data": task.to_dict()  # or however you serialize your task
                     })
-
+            elif command == "get_task_status":
+                task_id = data.get("task_id")
+                if task_id:
+                    task = await task_repository.get_by_id(task_id)
+                    if task and task.user_id == current_user.id:
+                        await websocket.send_json({
+                            "type": "task_status",
+                            "data": task.to_dict()
+                        })
+                    else:
+                        await websocket.send_json({
+                            "type": "error",
+                            "message": "Task not found or access denied"
+                        })
             # You can add more commands as needed...
 
     except WebSocketDisconnect:

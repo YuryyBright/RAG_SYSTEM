@@ -32,6 +32,16 @@ export function handleThemeFormSubmit(e) {
     },
     success: function (response) {
       alertify.success(`Theme "${themeData.name}" created successfully`);
+        // Store the newly created theme ID in the state
+      state.currentThemeId = response.id;
+      state.selectedTheme = response.name;
+       // Update the UI to show the selected theme
+      $("#selected-theme-name").text(response.name);
+
+      // Subscribe to updates for this theme
+      if (state.taskSocket && state.taskSocket.readyState === WebSocket.OPEN) {
+        subscribeToThemeUpdates(response.id);
+      }
       loadThemes();
       $("#create-theme-form")[0].reset();
     },

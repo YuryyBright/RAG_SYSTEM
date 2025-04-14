@@ -230,7 +230,64 @@ async def get_task(
 
     return await _to_domain_task(db_task)
 
+@router.post("/{task_id}/resume")
+async def resume_task(
+    task_id: str,
+    db: AsyncSession = Depends(get_async_db),
+    task_repository: TaskRepository = Depends(get_task_repository),
+):
+    """
+    Resume a paused task and mark it as in_progress again.
 
+    Parameters:
+    - task_id: ID of the task to resume
+
+    Returns:
+    - JSON confirmation response
+    """
+    db_task = await task_repository.get_by_id(task_id)
+    if not db_task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    if db_task.status != TaskStatusEnum.PAUSED:
+        raise HTTPException(status_code=400, detail="Only paused tasks can be resumed")
+
+    domain_task = await _to_domain_task(db_task)
+    domain_task.status = TaskStatusEnum.IN_PROGRESS
+    await task_repository.update(domain_task)
+
+    return {"status": "success", "message": f"Task {task_id} resumed"}
+
+@router.post("/embed-step", response_model=dict)
+async def start_embed_step(
+    task_id: str,
+    background_tasks: BackgroundTasks,
+    db: AsyncSession = Depends(get_async_db),
+    task_repository: TaskRepository = Depends(get_task_repository),
+):
+    """
+    Start the embedding step for a task.
+
+    Parameters:
+    - task_id: Task ID to update and begin embedding
+
+    Returns:
+    - JSON message
+    """
+    db_task = await task_repository.get_by_id(task_id)
+    if not db_task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    domain_task = await _to_domain_task(db_task)
+    domain_task.current_step = 2  # 2 = embed
+    domain_task.status = TaskStatusEnum.IN_PROGRESS
+
+    await task_repository.update(domain_task)
+
+    # ✅ You can add background job logic here if using RQ/Celery
+    # background_tasks.add_task(embed_worker.process, task_id=task_id)
+
+    return {"status": "success", "message": "Embedding process started."}
 @router.post("/{task_id}/cancel")
 async def cancel_task(
     task_id: str,

@@ -10,6 +10,7 @@ class TaskStatusEnum(str, enum.Enum):
     Represents the operational state of a task.
     """
     PENDING = "pending"
+    PAUSED = 'paused'
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
     FAILED = "failed"

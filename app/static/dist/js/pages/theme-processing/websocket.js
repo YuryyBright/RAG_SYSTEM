@@ -24,7 +24,12 @@ export function initializeWebSocketConnection() {
       console.log("WebSocket connection established");
       state.reconnectAttempts = 0;
 
-      if (state.currentThemeId) {
+      // Process any pending subscription
+      if (state.pendingSubscription) {
+        subscribeToThemeUpdates(state.pendingSubscription);
+        state.pendingSubscription = null;
+      } else if (state.currentThemeId) {
+        // Subscribe to the current theme if available
         subscribeToThemeUpdates(state.currentThemeId);
       }
     };
@@ -71,10 +76,12 @@ export function attemptReconnect() {
  * Subscribe to theme updates via WebSocket
  * @param {string} themeId - ID of the theme to subscribe to updates for
  */
+
+// Fix the subscription function in websocket.js
 export function subscribeToThemeUpdates(themeId) {
   if (state.taskSocket && state.taskSocket.readyState === WebSocket.OPEN) {
     const subscribeMsg = {
-      action: "subscribe",
+      command: "subscribe", // Change from "action" to "command" to match server expectations
       theme_id: themeId,
     };
 
@@ -82,6 +89,8 @@ export function subscribeToThemeUpdates(themeId) {
     console.log(`Subscribed to updates for theme ${themeId}`);
   } else {
     console.warn("WebSocket not connected, can't subscribe to theme updates");
+    // Queue the subscription for when the connection is ready
+    state.pendingSubscription = themeId;
   }
 }
 
@@ -91,6 +100,16 @@ export function subscribeToThemeUpdates(themeId) {
  */
 export function handleWebSocketMessage(message) {
   console.log("Received WebSocket message:", message);
+
+  // Handle subscription confirmation
+  if (message.type === "subscription") {
+    console.log(`Subscription status: ${message.status} for theme ${message.theme_id}`);
+
+    // If subscription was successful, store the subscribed theme
+    if (message.status === "success") {
+      state.subscribedThemeId = message.theme_id;
+    }
+  }
 
   // Handle task updates
   if (message.type === "task_update" && message.data) {
@@ -116,12 +135,13 @@ export function handleWebSocketMessage(message) {
       // If there are new logs, add them to the UI
       if (taskData.logs && taskData.logs.length > 0) {
         // Find logs that are not already in our state
-        const existingLogs = new Set(state.processingLogs);
+        const existingLogs = new Set(state.processingLogs || []);
         const newLogs = taskData.logs.filter((log) => !existingLogs.has(log));
 
         // Add new logs to UI and state
         newLogs.forEach((log) => {
           $("#process-log-content").append(`<div>> ${log}</div>`);
+          state.processingLogs = state.processingLogs || [];
           state.processingLogs.push(log);
         });
 
@@ -134,7 +154,6 @@ export function handleWebSocketMessage(message) {
     }
   }
 }
-
 /**
  * Handle page visibility change to manage WebSocket connection
  */
