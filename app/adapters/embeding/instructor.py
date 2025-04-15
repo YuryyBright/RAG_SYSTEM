@@ -53,7 +53,11 @@ class InstructorEmbedding(EmbeddingInterface):
             raise FileNotFoundError(f"Model not found at path: {self.model_name}")
 
         logger.info(f"✅ Loading model from local path: {self.model_name}")
-        self.model = SentenceTransformer(self.model_name, device=self.device)
+        self.model = SentenceTransformer(self.model_name)
+        # Manually move model if needed
+        if self.device:
+            logger.info(f"⚙️ Moving model to device: {self.device}")
+            self.model = self.model.to(self.device)
         self.model.set_pooling_include_prompt(False)
     async def embed_documents(self, documents: List[Document]) -> List[Document]:
         """

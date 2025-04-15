@@ -168,16 +168,25 @@ def get_document_store(
 
 # === Use Cases ===
 
+# def get_theme_use_case_p(
+#     theme_repository: ThemeRepositoryInterface = Depends(get_theme_repository),
+#     document_store: DocumentStoreInterface = Depends(get_document_store)
+# ) -> ThemeUseCase:
+#     """Provides the ThemeUseCase with repository + store dependencies."""
+#     return ThemeUseCase(
+#         theme_repository=theme_repository,
+#         document_store=document_store
+#     )
+
 def get_theme_use_case(
     theme_repository: ThemeRepositoryInterface = Depends(get_theme_repository),
-    document_store: DocumentStoreInterface = Depends(get_document_store)
+    # document_store: DocumentStoreInterface = Depends(get_document_store)
 ) -> ThemeUseCase:
     """Provides the ThemeUseCase with repository + store dependencies."""
     return ThemeUseCase(
         theme_repository=theme_repository,
-        document_store=document_store
+        document_store=None,
     )
-
 
 
 

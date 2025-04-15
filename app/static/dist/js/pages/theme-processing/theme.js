@@ -4,7 +4,7 @@
  */
 
 // Import state and utilities
-import { state } from "./state.js";
+import { state, saveWorkflowState } from "./state.js";
 import { getCsrfToken } from "./utils.js";
 import { navigateToStep, updateTaskUI } from "./ui.js";
 import { subscribeToThemeUpdates } from "./websocket.js";
@@ -32,16 +32,22 @@ export function handleThemeFormSubmit(e) {
     },
     success: function (response) {
       alertify.success(`Theme "${themeData.name}" created successfully`);
-        // Store the newly created theme ID in the state
+
+      // Store the newly created theme ID in the state
       state.currentThemeId = response.id;
       state.selectedTheme = response.name;
-       // Update the UI to show the selected theme
+
+      // Update the UI to show the selected theme
       $("#selected-theme-name").text(response.name);
+
+      // Create an initial processing task for this theme
+      createInitialThemeTask(response.id);
 
       // Subscribe to updates for this theme
       if (state.taskSocket && state.taskSocket.readyState === WebSocket.OPEN) {
         subscribeToThemeUpdates(response.id);
       }
+
       loadThemes();
       $("#create-theme-form")[0].reset();
     },
@@ -51,7 +57,54 @@ export function handleThemeFormSubmit(e) {
     },
   });
 }
+/**
+ * Create an initial task for a newly created theme
+ */
+function createInitialThemeTask(themeId) {
+  if (!themeId) return;
 
+  const taskData = {
+    type: "theme_processing",
+    theme_id: themeId,
+    description: `Initial processing task for theme ${themeId}`,
+    step: "upload", // Initial step
+    files: [],
+    metadata: {
+      vectorDBStatus: {
+        dataIngestion: "pending",
+        textChunking: "pending",
+        generateEmbeddings: "pending",
+        storeVectors: "pending",
+      },
+    },
+  };
+
+  $.ajax({
+    url: "/api/tasks",
+    method: "POST",
+    data: JSON.stringify(taskData),
+    contentType: "application/json",
+    headers: {
+      "X-CSRF-Token": getCsrfToken(),
+    },
+    success: function (taskResponse) {
+      console.log("Initial theme task created:", taskResponse);
+
+      // Store the task in our state
+      state.processingTask = taskResponse;
+
+      // Update the UI to reflect the task
+      updateTaskUI(taskResponse);
+
+      // Save to workflow state
+      saveWorkflowState();
+    },
+    error: function (xhr, status, error) {
+      console.error("Error creating initial task:", error);
+      alertify.error(`Error initializing theme process: ${xhr.responseJSON?.detail || error}`);
+    },
+  });
+}
 /**
  * Load themes from the API
  */
