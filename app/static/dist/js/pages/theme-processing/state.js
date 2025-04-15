@@ -3,7 +3,7 @@
  * Integrated UI navigation, updates and state management for theme processing workflow
  */
 import { updateVectorDBStatusUI } from "./vectorDB.js";
-import { navigateToStep } from "./ui.js";
+import { navigateToStep, updateTaskUI } from "./ui.js";
 // Global state object that's shared across modules
 export const state = {
   // Current workflow step (1-5)
@@ -104,7 +104,7 @@ export function saveWorkflowState() {
 
   try {
     localStorage.setItem("workflowState", JSON.stringify(stateToPersist));
-    console.log("Workflow state saved successfully");
+    // console.log("Workflow state saved successfully");
   } catch (e) {
     // Handle potential localStorage quota errors
     console.error("Failed to save workflow state:", e);
@@ -136,6 +136,7 @@ export function saveWorkflowState() {
 export function restoreWorkflowState() {
   try {
     const savedState = localStorage.getItem("workflowState");
+    console.log("Retrieved state from localStorage:", savedState);
     if (!savedState) return false;
 
     const parsedState = JSON.parse(savedState);
@@ -189,7 +190,7 @@ export function restoreWorkflowState() {
       navigateToStep(parsedState.currentStep, false);
       return true;
     }
-
+    console.log("Workflow state restored successfully:", parsedState);
     return true;
   } catch (error) {
     console.error("Error restoring workflow state:", error);

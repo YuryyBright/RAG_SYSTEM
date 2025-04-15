@@ -49,46 +49,32 @@ class TaskRepository:
 
     async def create(
         self,
-        *,
-        user_id: str,
-        theme_id: Optional[str],
-        task_type: str,
-        description: str,
-        status: str,
-        progress: float,
-        created_at,
-        started_at,
-        completed_at,
-        error_message: Optional[str],
-        logs: List[Dict[str, Any]],
-        task_metadata: Dict[str, Any],
-        steps: List[Dict[str, Any]],
-        current_step: int
+        task
     ) -> ProcessingTask:
         """
         Create a new processing task record in the database, using raw data
         rather than a domain `Task` object.
         """
-        task = ProcessingTask(
-            user_id=user_id,
-            theme_id=theme_id,
-            task_type=task_type,
-            description=description,
-            status=status,
-            progress=progress,
-            created_at=created_at,
-            started_at=started_at,
-            completed_at=completed_at,
-            error_message=error_message,
-            logs=json.dumps(logs),                # store as JSON
-            task_metadata=json.dumps(task_metadata),
-            steps=json.dumps(steps),
-            current_step=current_step,
+        db_task = ProcessingTask(
+            task_type=task.type.value,
+            user_id=task.user_id,
+            theme_id=task.theme_id,
+            description=task.description,
+            status=task.status.value,
+            progress=task.progress,
+            created_at=task.created_at,
+            started_at=task.started_at,
+            completed_at=task.completed_at,
+            error_message=task.error_message,
+            logs=json.dumps(task.logs),
+            task_metadata=json.dumps(task.metadata),
+            steps=json.dumps(task.steps),
+            current_step=task.current_step
         )
-        self.db.add(task)
+        self.db.add(db_task)
         await self.db.commit()
-        await self.db.refresh(task)
-        return task
+        await self.db.refresh(db_task)
+        return db_task
 
     async def update(
         self,

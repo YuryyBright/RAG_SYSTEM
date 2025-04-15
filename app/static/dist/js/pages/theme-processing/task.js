@@ -166,5 +166,39 @@ export function handleBeforeUnload(e) {
     return message;
   }
 }
+export function refreshTaskStatus(taskId) {
+  if (!taskId) return;
+  $.ajax({
+    url: `/api/tasks/${taskId}`,
+    method: "GET",
+    headers: {
+      "X-CSRF-Token": getCsrfToken(),
+    },
+    success: function (task) {
+      state.processingTask = task;
+      updateTaskUI(task);
+
+      if (task.metadata && task.metadata.vectorDBStatus) {
+        state.vectorDBStatus = task.metadata.vectorDBStatus;
+        updateVectorDBStatusUI();
+      }
+
+      if (task.logs && task.logs.length > 0) {
+        const existingLogs = new Set(state.processingLogs || []);
+        const newLogs = task.logs.filter((log) => !existingLogs.has(log));
+        newLogs.forEach((log) => {
+          $("#process-log-content").append(`<div>> ${log}</div>`);
+          state.processingLogs.push(log);
+        });
+
+        const logContainer = $("#process-log-content").parent();
+        logContainer.scrollTop(logContainer[0].scrollHeight);
+      }
+    },
+    error: function (xhr, status, error) {
+      console.error("Failed to refresh task status:", error);
+    },
+  });
+}
 
 import { updateVectorDBStatusUI } from "./vectorDB.js";
