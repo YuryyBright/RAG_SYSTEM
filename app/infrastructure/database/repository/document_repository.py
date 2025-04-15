@@ -78,6 +78,9 @@ class DocumentRepository:
         Document
             The created Document object.
         """
+
+        if "owner_id" not in kwargs or "content" not in kwargs:
+            raise ValueError("Both 'owner_id' and 'content' are required.")
         doc = Document(**kwargs)
         self.db.add(doc)
         await self.db.commit()

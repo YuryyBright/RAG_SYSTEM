@@ -229,7 +229,8 @@ class Theme(Base):
     # Relationships
     owner = relationship("User", back_populates="themes")
     documents = relationship("ThemeDocument", back_populates="theme", cascade="all, delete-orphan")
-    files = relationship("ThemeFile", back_populates="theme", cascade="all, delete-orphan")
+    files = relationship("ThemeFile", back_populates="theme", cascade="all, delete-orphan", passive_deletes=True)
+
     shared_with = relationship("ThemeShare", back_populates="theme", cascade="all, delete-orphan")
     tasks = relationship("ProcessingTask", back_populates="theme", cascade="all, delete-orphan")
 
@@ -288,8 +289,8 @@ class ThemeFile(Base):
     """
     __tablename__ = "theme_files"
 
-    theme_id = Column(String, ForeignKey("themes.id"), primary_key=True)
-    file_id = Column(String, ForeignKey("files.id"), primary_key=True)
+    theme_id = Column(String, ForeignKey("themes.id", ondelete="CASCADE"), primary_key=True)
+    file_id = Column(String, ForeignKey("files.id", ondelete="CASCADE"), primary_key=True)
     added_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # Relationships

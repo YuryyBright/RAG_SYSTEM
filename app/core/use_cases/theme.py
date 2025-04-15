@@ -201,8 +201,9 @@ class ThemeUseCase:
 
         files = []
         for file_id in file_ids:
-            document = await self.document_store.get_document(file_id)
-            if document:
-                files.append(document)
+            file = await self.document_store.get_document(file_id)
+            if file:
+                files.append(file)
 
         return files
+

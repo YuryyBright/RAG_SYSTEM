@@ -422,7 +422,7 @@ async def get_theme_files(
             )
 
         # Get documents first to get their IDs
-        documents = await theme_use_case.get_theme_fies(theme_id)
+        documents = await theme_use_case.get_theme_files(theme_id)
 
         # Create a list to hold file data
         files = []
