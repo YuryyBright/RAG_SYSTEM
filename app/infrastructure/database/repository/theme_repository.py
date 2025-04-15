@@ -137,7 +137,8 @@ class ThemeRepository(ThemeRepositoryInterface):
 
     async def delete_theme(self, theme_id: str) -> bool:
         """
-        Delete a theme and all of its document associations.
+        Delete a theme and all of its document and file associations,
+        including the actual File records.
 
         Args:
             theme_id (str): ID of the theme to delete.
@@ -146,12 +147,31 @@ class ThemeRepository(ThemeRepositoryInterface):
             bool: True if deletion succeeded, False otherwise.
         """
         try:
+            # Delete theme-document links
             await self.db.execute(
                 delete(ThemeDocument).where(ThemeDocument.theme_id == theme_id)
             )
+
+            # Fetch and delete theme-file links and actual file records
+            file_ids_result = await self.db.execute(
+                select(ThemeFile.file_id).where(ThemeFile.theme_id == theme_id)
+            )
+            file_ids = list(file_ids_result.scalars())
+
+            if file_ids:
+                await self.db.execute(
+                    delete(File).where(File.id.in_(file_ids))
+                )
+
+            await self.db.execute(
+                delete(ThemeFile).where(ThemeFile.theme_id == theme_id)
+            )
+
+            # Delete the theme itself
             result = await self.db.execute(
                 delete(Theme).where(Theme.id == theme_id)
             )
+
             await self.db.commit()
             return result.rowcount > 0
         except SQLAlchemyError as e:
