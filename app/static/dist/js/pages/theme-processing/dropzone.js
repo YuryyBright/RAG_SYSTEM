@@ -4,14 +4,16 @@
  */
 
 // Import state and utilities
-import { state } from "./state.js";
+import { state, restoreWorkflowState, saveWorkflowState } from "./state.js";
 import { getCsrfToken } from "./utils.js";
-import { saveWorkflowState } from "./ui.js";
 
 /**
  * Initialize Dropzone file uploader
  */
 export function initDropzone() {
+  // First, try to load state from localStorage
+  restoreWorkflowState();
+
   // Check if the element exists before trying to initialize Dropzone
   const dropzoneElement = $("#file-upload-form")[0];
 
@@ -214,13 +216,151 @@ export function initDropzone() {
 }
 
 /**
+ * Fetch files and documents for a theme from the server and add them to Dropzone
+ * @param {string} themeId - The ID of the theme
+ * @param {Dropzone} dropzoneInstance - The Dropzone instance
+ */
+function fetchThemeFiles(themeId, dropzoneInstance) {
+  console.log(`Fetching files for theme ID: ${themeId}`);
+
+  // First try to fetch from /files endpoint
+  $.ajax({
+    url: `/api/themes/${themeId}/files`,
+    method: "GET",
+    headers: {
+      "X-CSRF-Token": getCsrfToken(),
+    },
+    success: function (files) {
+      console.log(`Retrieved ${files.length} files for theme ID: ${themeId}`);
+      processFiles(files, dropzoneInstance);
+    },
+    error: function (xhr, status, error) {
+      console.error("Error fetching theme files:", xhr.responseText || error);
+
+      // Fallback to documents endpoint if files endpoint fails
+      console.log("Falling back to documents endpoint...");
+      $.ajax({
+        url: `/api/themes/${themeId}/files`,
+        method: "GET",
+        headers: {
+          "X-CSRF-Token": getCsrfToken(),
+        },
+        success: function (documents) {
+          console.log(`Retrieved ${documents.length} documents for theme ID: ${themeId}`);
+          processFiles(documents, dropzoneInstance);
+        },
+        error: function (xhr, status, error) {
+          console.error("Error fetching theme documents:", xhr.responseText || error);
+          alertify.error("Failed to fetch files from the server");
+        },
+      });
+    },
+  });
+}
+
+/**
+ * Process files data and add them to Dropzone
+ * @param {Array} files - Array of file data objects
+ * @param {Dropzone} dropzoneInstance - The Dropzone instance
+ */
+function processFiles(files, dropzoneInstance) {
+  if (files.length > 0) {
+    // Update state with the fetched files
+    state.uploadedFiles = files;
+
+    // Save to localStorage
+    saveWorkflowState();
+
+    // Add each file to the Dropzone UI
+    files.forEach((fileData) => {
+      // Create a mock file object that Dropzone can use
+      const mockFile = {
+        name: fileData.filename || fileData.title || fileData.source || "Unknown file",
+        size: fileData.size || 0,
+        status: "success",
+        accepted: true,
+      };
+
+      // Add the mock file to Dropzone
+      dropzoneInstance.emit("addedfile", mockFile);
+      dropzoneInstance.emit("complete", mockFile);
+
+      // Add CSS classes to indicate it's a restored file
+      mockFile.previewElement.classList.add("dz-success");
+      mockFile.previewElement.classList.add("dz-restored");
+      mockFile.previewElement.classList.add("dz-server-fetched");
+
+      // Set the file ID as a data attribute for later reference
+      mockFile.previewElement.setAttribute("data-file-id", fileData.id);
+
+      // Add file type icon or thumbnail if available
+      const thumbnailElement = mockFile.previewElement.querySelector(".dz-image");
+      if (thumbnailElement) {
+        // Get filename from either filename or title property
+        const fileName = fileData.filename || fileData.title || "";
+        const fileExtension = fileName.split(".").pop().toLowerCase();
+        let iconClass = "fas fa-file"; // Default icon
+
+        // Map file extensions to icons
+        switch (fileExtension) {
+          case "pdf":
+            iconClass = "fas fa-file-pdf";
+            break;
+          case "doc":
+          case "docx":
+            iconClass = "fas fa-file-word";
+            break;
+          case "csv":
+          case "xls":
+          case "xlsx":
+            iconClass = "fas fa-file-excel";
+            break;
+          case "txt":
+          case "md":
+            iconClass = "fas fa-file-alt";
+            break;
+          case "html":
+          case "htm":
+            iconClass = "fas fa-file-code";
+            break;
+          default:
+            iconClass = "fas fa-file";
+        }
+
+        thumbnailElement.innerHTML = `<i class="${iconClass}" style="font-size: 2rem; margin-top: 1rem;"></i>`;
+      }
+
+      // Add file size display if available
+      const fileSizeElement = mockFile.previewElement.querySelector(".dz-size");
+      if (fileSizeElement && fileData.size) {
+        const formattedSize = formatFileSize(fileData.size);
+        fileSizeElement.innerHTML = `<span><strong>Size:</strong> ${formattedSize}</span>`;
+      }
+    });
+
+    // Update next button state
+    $("#upload-next-btn").prop("disabled", false);
+
+    alertify.success(`Loaded ${files.length} files from theme`);
+  } else {
+    console.log("No files found for this theme");
+    $("#upload-next-btn").prop("disabled", true);
+  }
+}
+/**
  * Restore previously uploaded files to the Dropzone UI
  * @param {Dropzone} dropzoneInstance - The Dropzone instance
  */
 function restorePreviousUploads(dropzoneInstance) {
-  if (!state.uploadedFiles || !state.uploadedFiles.length) {
-    console.log("No previously uploaded files to restore");
-    return;
+  // More robust check for array existence and content
+  if (!Array.isArray(state.uploadedFiles) || state.uploadedFiles.length === 0) {
+    // Only proceed to fetch if we have a theme ID
+    if (state.currentThemeId) {
+      fetchThemeFiles(state.currentThemeId, dropzoneInstance);
+    } else {
+      console.log("No previously uploaded files to restore");
+      return;
+    }
   }
 
   console.log(`Restoring ${state.uploadedFiles.length} previously uploaded files to Dropzone UI`);
@@ -237,8 +377,8 @@ function restorePreviousUploads(dropzoneInstance) {
     // Add the mock file to Dropzone
     dropzoneInstance.emit("addedfile", mockFile);
 
-    // Set the file as 'success' and add the file ID
-    dropzoneInstance.emit("success", mockFile);
+    // Pass the fileData as second parameter to match the success handler's expectations
+    // dropzoneInstance.emit("success", mockFile, fileData); // This is optional and can be used to simulate a successful upload
     dropzoneInstance.emit("complete", mockFile);
 
     // Add a CSS class to indicate it's a restored file
@@ -251,22 +391,65 @@ function restorePreviousUploads(dropzoneInstance) {
     // Add file type icon or thumbnail if available
     const thumbnailElement = mockFile.previewElement.querySelector(".dz-image");
     if (thumbnailElement) {
-      // You could add file type icons based on file extension
+      // Get file extension and determine icon
       const fileExtension = (fileData.filename || "").split(".").pop().toLowerCase();
       let iconClass = "fas fa-file"; // Default icon
 
-      if (fileExtension === "pdf") iconClass = "fas fa-file-pdf";
-      else if (["doc", "docx"].includes(fileExtension)) iconClass = "fas fa-file-word";
-      else if (["csv", "xls", "xlsx"].includes(fileExtension)) iconClass = "fas fa-file-excel";
-      else if (["txt", "md"].includes(fileExtension)) iconClass = "fas fa-file-alt";
-      else if (["html", "htm"].includes(fileExtension)) iconClass = "fas fa-file-code";
+      // More comprehensive file type detection
+      switch (fileExtension) {
+        case "pdf":
+          iconClass = "fas fa-file-pdf";
+          break;
+        case "doc":
+        case "docx":
+          iconClass = "fas fa-file-word";
+          break;
+        case "csv":
+        case "xls":
+        case "xlsx":
+          iconClass = "fas fa-file-excel";
+          break;
+        case "txt":
+        case "md":
+          iconClass = "fas fa-file-alt";
+          break;
+        case "html":
+        case "htm":
+          iconClass = "fas fa-file-code";
+          break;
+        default:
+          iconClass = "fas fa-file";
+      }
 
       thumbnailElement.innerHTML = `<i class="${iconClass}" style="font-size: 2rem; margin-top: 1rem;"></i>`;
+    }
+
+    // Add file size display
+    const fileSizeElement = mockFile.previewElement.querySelector(".dz-size");
+    if (fileSizeElement && fileData.size) {
+      // Format file size for display
+      const formattedSize = formatFileSize(fileData.size);
+      fileSizeElement.innerHTML = `<span><strong>Size:</strong> ${formattedSize}</span>`;
     }
   });
 
   // Update next button state
   $("#upload-next-btn").prop("disabled", state.uploadedFiles.length === 0);
+}
+
+/**
+ * Format file size into human-readable format
+ * @param {number} bytes - File size in bytes
+ * @returns {string} - Formatted file size with units
+ */
+function formatFileSize(bytes) {
+  if (bytes === 0) return "0 Bytes";
+
+  const k = 1024;
+  const sizes = ["Bytes", "KB", "MB", "GB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
 }
 
 // Disable Dropzone auto-discovery

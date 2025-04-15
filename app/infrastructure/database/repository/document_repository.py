@@ -78,6 +78,9 @@ class DocumentRepository:
         Document
             The created Document object.
         """
+
+        if "owner_id" not in kwargs or "content" not in kwargs:
+            raise ValueError("Both 'owner_id' and 'content' are required.")
         doc = Document(**kwargs)
         self.db.add(doc)
         await self.db.commit()
@@ -109,6 +112,25 @@ class DocumentRepository:
         logger.info(f"Deleted document: {document_id}")
         return True
 
+    async def get_by_file_id(self, file_id: str) -> List[Document]:
+        """
+        Retrieve all documents that originated from a specific file.
+
+        Parameters
+        ----------
+        file_id : str
+            The ID of the source file.
+
+        Returns
+        -------
+        List[Document]
+            Documents linked to the specified file.
+        """
+        result = await self.db.execute(
+            select(Document).where(Document.file_id == file_id)
+        )
+        return result.scalars().all()
+
     async def get_all(self) -> List[Document]:
         """
         Retrieve all documents from the database.
@@ -120,3 +142,19 @@ class DocumentRepository:
         """
         result = await self.db.execute(select(Document))
         return result.scalars().all()
+
+    async def delete_by_file_id(self, file_id: str) -> int:
+        """
+        Delete all documents linked to a file.
+
+        Returns
+        -------
+        int: Number of documents deleted.
+        """
+        documents = await self.get_by_file_id(file_id)
+        count = len(documents)
+        for doc in documents:
+            await self.db.delete(doc)
+        await self.db.commit()
+        logger.info(f"Deleted {count} document(s) for file: {file_id}")
+        return count

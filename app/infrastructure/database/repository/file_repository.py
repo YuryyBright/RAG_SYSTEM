@@ -66,6 +66,32 @@ class FileRepository:
         result = await self.db.execute(select(File).where(File.owner_id == owner_id))
         return result.scalars().all()
 
+    async def link_file_to_theme(self, file_id: str, theme_id: str) -> None:
+        """
+        Link a file to a theme by creating an association in the database.
+
+        Parameters
+        ----------
+        file_id : str
+            The unique identifier of the file to link.
+        theme_id : str
+            The unique identifier of the theme to link the file to.
+
+        Returns
+        -------
+        None
+
+        Notes
+        -----
+        This method creates a new record in the `ThemeFile` table to establish
+        the relationship between the file and the theme.
+        """
+        from app.infrastructure.database.db_models import ThemeFile
+
+        link = ThemeFile(file_id=file_id, theme_id=theme_id)
+        self.db.add(link)
+        await self.db.commit()
+
     async def create_file(
         self,
         filename: str,

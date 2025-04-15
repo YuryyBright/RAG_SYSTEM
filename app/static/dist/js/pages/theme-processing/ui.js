@@ -1,133 +1,8 @@
 /**
- * ui.js
- * Handles UI navigation, updates, and DOM interactions for the theme processing workflow
+ * ui-state.js
+ * Integrated UI navigation, updates and state management for theme processing workflow
  */
 
-// Import state from state.js
-import { state } from "./state.js";
-
-/**
- * Save current workflow state to localStorage
- */
-export function saveWorkflowState() {
-  // Store important state variables
-  const workflowState = {
-    currentStep: state.currentStep,
-    currentThemeId: state.currentThemeId,
-    selectedTheme: state.selectedTheme,
-    processingTask: state.processingTask,
-    vectorDBStatus: state.vectorDBStatus,
-    processingLogs: state.processingLogs,
-
-    // These are the important lines for file persistence
-    // Save only the necessary data from uploadedFiles to avoid oversized localStorage
-    uploadedFiles: state.uploadedFiles.map((file) => ({
-      id: file.id,
-      filename: file.filename || file.title || file.source || "Unknown file",
-      size: file.size || 0,
-      type: file.type || file.mime_type || "application/octet-stream",
-      source: file.source || "",
-    })),
-
-    // Remove the actual File objects from dropZoneFiles to avoid oversized localStorage
-    dropZoneFiles: (state.dropZoneFiles || []).map((file) => ({
-      name: file.name,
-      size: file.size,
-      // Don't save the actual file object
-    })),
-  };
-
-  try {
-    localStorage.setItem("workflowState", JSON.stringify(workflowState));
-    console.log("Workflow state saved successfully");
-  } catch (e) {
-    // Handle potential localStorage quota errors
-    console.error("Failed to save workflow state:", e);
-
-    if (e.name === "QuotaExceededError" || e.toString().includes("exceeded")) {
-      console.warn("LocalStorage quota exceeded. Saving minimal state.");
-      // Save minimal state without large objects
-      const minimalState = {
-        currentStep: state.currentStep,
-        currentThemeId: state.currentThemeId,
-        selectedTheme: state.selectedTheme,
-        // Just save IDs of uploaded files
-        uploadedFileIds: state.uploadedFiles.map((file) => file.id),
-      };
-      try {
-        localStorage.setItem("workflowState", JSON.stringify(minimalState));
-      } catch (e2) {
-        console.error("Failed to save even minimal state:", e2);
-        alertify.error("Unable to save your progress locally. Files may not persist if you leave this page.");
-      }
-    }
-  }
-}
-/**
- * Restore workflow state from localStorage
- */
-export function restoreWorkflowState() {
-  try {
-    const savedState = localStorage.getItem("workflowState");
-    if (savedState) {
-      const parsedState = JSON.parse(savedState);
-
-      // Restore theme information
-      if (parsedState.currentThemeId) {
-        state.currentThemeId = parsedState.currentThemeId;
-        state.selectedTheme = parsedState.selectedTheme;
-        $("#selected-theme-name").text(parsedState.selectedTheme || "");
-      }
-
-      // Restore task information if available
-      if (parsedState.processingTask) {
-        state.processingTask = parsedState.processingTask;
-        updateTaskUI(parsedState.processingTask);
-      }
-
-      // Restore vector DB status if available
-      if (parsedState.vectorDBStatus) {
-        state.vectorDBStatus = parsedState.vectorDBStatus;
-        updateVectorDBStatusUI();
-      }
-
-      // Restore logs if available
-      if (parsedState.processingLogs && parsedState.processingLogs.length > 0) {
-        state.processingLogs = parsedState.processingLogs;
-        $("#process-log-content").empty();
-        state.processingLogs.forEach((log) => {
-          $("#process-log-content").append(`<div>> ${log}</div>`);
-        });
-      }
-
-      // Restore dropZoneFiles if available
-      if (parsedState.dropZoneFiles && parsedState.dropZoneFiles.length > 0) {
-        state.dropZoneFiles = parsedState.dropZoneFiles;
-        restoreDropZoneFiles();
-      }
-
-      // Restore uploaded files if available
-      if (parsedState.uploadedFiles && parsedState.uploadedFiles.length > 0) {
-        state.uploadedFiles = parsedState.uploadedFiles;
-        // Enable the next button if there are files
-        $("#upload-next-btn").prop("disabled", state.uploadedFiles.length === 0);
-      }
-
-      // Navigate to the saved step (if there is one)
-      if (parsedState.currentStep) {
-        navigateToStep(parsedState.currentStep, false);
-        return true;
-      }
-    }
-    return false;
-  } catch (error) {
-    console.error("Error restoring workflow state:", error);
-    return false;
-  }
-}
-/**
- * Restore files to the drop zone UI from saved state
- */
 /**
  * Fetch file data from server using IDs
  */
@@ -158,7 +33,7 @@ function fetchFileDataFromIds(themeId, fileIds) {
 /**
  * Fetch all files for a theme
  */
-function fetchAllThemeFiles(themeId) {
+export function fetchAllThemeFiles(themeId) {
   if (!themeId) return;
 
   $.ajax({
@@ -180,6 +55,9 @@ function fetchAllThemeFiles(themeId) {
   });
 }
 
+/**
+ * Restore files to the drop zone UI from saved state
+ */
 export function restoreDropZoneFiles() {
   if (!state.dropZoneFiles || state.dropZoneFiles.length === 0) return;
 
@@ -236,7 +114,7 @@ export function restoreDropZoneFiles() {
 /**
  * Navigate to a specific step in the workflow
  */
-export function navigateToStep(step, resetState = true) {
+export function navigateToStep(step, saveState = true) {
   // Update current step
   state.currentStep = step;
 
@@ -292,13 +170,11 @@ export function navigateToStep(step, resetState = true) {
       break;
   }
 
-  // Save the current state to localStorage
-  saveWorkflowState();
+  // Save the current state to localStorage if requested
+  if (saveState) {
+    saveWorkflowState();
+  }
 }
-
-/**
- * Update the UI to reflect the current vector DB processing status
- */
 
 /**
  * Update the UI to reflect the current vector DB processing status
@@ -448,6 +324,10 @@ export function updateTaskUI(task) {
   } else {
     $("#task-error-message").addClass("d-none").text("");
   }
+
+  // Update state and save
+  state.processingTask = task;
+  saveWorkflowState();
 }
 
 /**
@@ -527,6 +407,23 @@ function renderFilesTable(files) {
 
   // Store files for later use
   state.uploadedFiles = files;
+  saveWorkflowState();
+}
+
+/**
+ * Add a log message to the processing logs
+ */
+export function addLogMessage(message) {
+  state.processingLogs.push(message);
+  $("#process-log-content").append(`<div>> ${message}</div>`);
+
+  // Auto-scroll to bottom of log
+  const logContainer = document.getElementById("process-log-content");
+  if (logContainer) {
+    logContainer.scrollTop = logContainer.scrollHeight;
+  }
+
+  saveWorkflowState();
 }
 
 /**
@@ -573,3 +470,4 @@ import { showFileContentPreview } from "./file-preview.js";
 import { cancelCurrentTask, resumeCurrentTask } from "./task.js";
 import { handleWindowFocus, handleWindowBlur, handleBeforeUnload } from "./websocket.js";
 import { getCsrfToken, formatFileSize, getRandomFileSize } from "./utils.js";
+import { saveWorkflowState, state, restoreWorkflowState } from "./state.js";

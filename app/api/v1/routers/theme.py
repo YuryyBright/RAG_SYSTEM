@@ -395,3 +395,58 @@ async def get_theme_documents(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to retrieve theme documents: {str(e)}"
         )
+
+
+@router.get("/{theme_id}/files", response_model=List[dict])
+async def get_theme_files(
+        theme_id: str,
+        user: dict = Depends(get_current_active_user),
+        theme_use_case: ThemeUseCase = Depends(get_theme_use_case),
+):
+    """
+    Get all files associated with a theme.
+    """
+    try:
+        # Check if theme exists and user has access to it
+        existing_theme = await theme_use_case.get_theme(theme_id)
+        if not existing_theme:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Theme not found"
+            )
+
+        if existing_theme.owner_id != user.id and not existing_theme.is_public:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You don't have access to this theme"
+            )
+
+        # Get documents first to get their IDs
+        documents = await theme_use_case.get_theme_files(theme_id)
+
+        # Create a list to hold file data
+        files = []
+
+        # Process each document to extract file info
+        for doc in documents:
+            # Extract relevant file information
+            file_info = {
+                "id": doc.id,
+                "filename": doc.metadata.get("filename", doc.metadata.get("title", "Untitled")),
+                "title": doc.metadata.get("title", "Untitled"),
+                "source": doc.metadata.get("source", "Unknown"),
+                "size": doc.metadata.get("size", 0),
+                "created_at": doc.created_at,
+                "updated_at": doc.updated_at
+            }
+
+            files.append(file_info)
+
+        return files
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve theme files: {str(e)}"
+        )
