@@ -62,7 +62,9 @@ async def upload_files(
                 theme_id=theme_id
             )
             saved_files.append(file_record)
-
+            # Associate with theme (many-to-many relationship)
+            if theme_id:
+                await repo.link_file_to_theme(file_record.id, theme_id)
         return saved_files
 
     except Exception as e:

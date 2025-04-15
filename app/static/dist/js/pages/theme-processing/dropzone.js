@@ -216,9 +216,48 @@ export function initDropzone() {
 }
 
 /**
- * Restore previously uploaded files to the Dropzone UI
+ * Fetch files and documents for a theme from the server and add them to Dropzone
+ * @param {string} themeId - The ID of the theme
  * @param {Dropzone} dropzoneInstance - The Dropzone instance
  */
+function fetchThemeFiles(themeId, dropzoneInstance) {
+  console.log(`Fetching files for theme ID: ${themeId}`);
+
+  // First try to fetch from /files endpoint
+  $.ajax({
+    url: `/api/themes/${themeId}/files`,
+    method: "GET",
+    headers: {
+      "X-CSRF-Token": getCsrfToken(),
+    },
+    success: function (files) {
+      console.log(`Retrieved ${files.length} files for theme ID: ${themeId}`);
+      processFiles(files, dropzoneInstance);
+    },
+    error: function (xhr, status, error) {
+      console.error("Error fetching theme files:", xhr.responseText || error);
+
+      // Fallback to documents endpoint if files endpoint fails
+      console.log("Falling back to documents endpoint...");
+      $.ajax({
+        url: `/api/themes/${themeId}/documents`,
+        method: "GET",
+        headers: {
+          "X-CSRF-Token": getCsrfToken(),
+        },
+        success: function (documents) {
+          console.log(`Retrieved ${documents.length} documents for theme ID: ${themeId}`);
+          processFiles(documents, dropzoneInstance);
+        },
+        error: function (xhr, status, error) {
+          console.error("Error fetching theme documents:", xhr.responseText || error);
+          alertify.error("Failed to fetch files from the server");
+        },
+      });
+    },
+  });
+}
+
 /**
  * Restore previously uploaded files to the Dropzone UI
  * @param {Dropzone} dropzoneInstance - The Dropzone instance
@@ -226,8 +265,13 @@ export function initDropzone() {
 function restorePreviousUploads(dropzoneInstance) {
   // More robust check for array existence and content
   if (!Array.isArray(state.uploadedFiles) || state.uploadedFiles.length === 0) {
-    console.log("No previously uploaded files to restore");
-    return;
+    // Only proceed to fetch if we have a theme ID
+    if (state.currentThemeId) {
+      fetchThemeFiles(state.currentThemeId, dropzoneInstance);
+    } else {
+      console.log("No previously uploaded files to restore");
+      return;
+    }
   }
 
   console.log(`Restoring ${state.uploadedFiles.length} previously uploaded files to Dropzone UI`);

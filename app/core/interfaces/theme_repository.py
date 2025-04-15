@@ -136,3 +136,44 @@ class ThemeRepositoryInterface(ABC):
             int: count of document.
         """
         pass
+
+    @abstractmethod
+    async def add_file_to_theme(self, theme_id: str, file_id: str) -> bool:
+        """
+        Associate a file with a theme.
+
+        Args:
+            theme_id (str): ID of the theme.
+            file_id (str): ID of the file to associate.
+
+        Returns:
+            bool: True if the file was successfully associated, False otherwise.
+        """
+        pass
+
+    @abstractmethod
+    async def remove_file_from_theme(self, theme_id: str, file_id: str) -> bool:
+        """
+        Remove the association between a file and a theme.
+
+        Args:
+            theme_id (str): ID of the theme.
+            file_id (str): ID of the file to disassociate.
+
+        Returns:
+            bool: True if the file was successfully disassociated, False otherwise.
+        """
+        pass
+
+    @abstractmethod
+    async def get_theme_files(self, theme_id: str) -> List[Any]:
+        """
+        Retrieve all files associated with a theme.
+
+        Args:
+            theme_id (str): ID of the theme.
+
+        Returns:
+            List[Any]: List of files associated with the theme.
+        """
+        pass

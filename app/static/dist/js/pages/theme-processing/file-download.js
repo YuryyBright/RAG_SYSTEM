@@ -182,3 +182,108 @@ function formatFileSize(bytes) {
 
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
 }
+
+/**
+ * Fetch documents for a theme from the server and add them to Dropzone
+ * @param {string} themeId - The ID of the theme
+ * @param {Dropzone} dropzoneInstance - The Dropzone instance
+ */
+function fetchThemeDocuments(themeId, dropzoneInstance) {
+  console.log(`Fetching documents for theme ID: ${themeId}`);
+
+  $.ajax({
+    url: `/api/themes/${themeId}/documents`,
+    method: "GET",
+    headers: {
+      "X-CSRF-Token": getCsrfToken(),
+    },
+    success: function (documents) {
+      console.log(`Retrieved ${documents.length} documents for theme ID: ${themeId}`);
+
+      if (documents.length > 0) {
+        // Update state with the fetched documents
+        state.uploadedFiles = documents;
+
+        // Save to localStorage
+        saveWorkflowState();
+
+        // Add each document to the Dropzone UI
+        documents.forEach((fileData) => {
+          // Create a mock file object that Dropzone can use
+          const mockFile = {
+            name: fileData.title || fileData.source || "Unknown file",
+            size: fileData.size || 0,
+            status: "success",
+            accepted: true,
+          };
+
+          // Add the mock file to Dropzone
+          dropzoneInstance.emit("addedfile", mockFile);
+          dropzoneInstance.emit("complete", mockFile);
+
+          // Add a CSS class to indicate it's a restored file
+          mockFile.previewElement.classList.add("dz-success");
+          mockFile.previewElement.classList.add("dz-restored");
+          mockFile.previewElement.classList.add("dz-server-fetched");
+
+          // Set the file ID as a data attribute for later reference
+          mockFile.previewElement.setAttribute("data-file-id", fileData.id);
+
+          // Add file type icon or thumbnail if available
+          const thumbnailElement = mockFile.previewElement.querySelector(".dz-image");
+          if (thumbnailElement) {
+            const fileExtension = (fileData.title || "").split(".").pop().toLowerCase();
+            let iconClass = "fas fa-file"; // Default icon
+
+            // Map file extensions to icons
+            switch (fileExtension) {
+              case "pdf":
+                iconClass = "fas fa-file-pdf";
+                break;
+              case "doc":
+              case "docx":
+                iconClass = "fas fa-file-word";
+                break;
+              case "csv":
+              case "xls":
+              case "xlsx":
+                iconClass = "fas fa-file-excel";
+                break;
+              case "txt":
+              case "md":
+                iconClass = "fas fa-file-alt";
+                break;
+              case "html":
+              case "htm":
+                iconClass = "fas fa-file-code";
+                break;
+              default:
+                iconClass = "fas fa-file";
+            }
+
+            thumbnailElement.innerHTML = `<i class="${iconClass}" style="font-size: 2rem; margin-top: 1rem;"></i>`;
+          }
+
+          // Add file size display if available
+          const fileSizeElement = mockFile.previewElement.querySelector(".dz-size");
+          if (fileSizeElement && fileData.size) {
+            const formattedSize = formatFileSize(fileData.size);
+            fileSizeElement.innerHTML = `<span><strong>Size:</strong> ${formattedSize}</span>`;
+          }
+        });
+
+        // Update next button state
+        $("#upload-next-btn").prop("disabled", false);
+
+        alertify.success(`Loaded ${documents.length} documents from theme`);
+      } else {
+        console.log("No documents found for this theme");
+        $("#upload-next-btn").prop("disabled", true);
+      }
+    },
+    error: function (xhr, status, error) {
+      console.error("Error fetching theme documents:", xhr.responseText || error);
+      alertify.error("Failed to fetch documents from the server");
+    },
+  });
+}

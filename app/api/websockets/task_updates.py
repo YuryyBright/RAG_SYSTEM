@@ -1,4 +1,5 @@
 # app/api/websockets/task_updates.py
+import datetime
 import json
 from typing import Dict, List, Optional, Set, Annotated, Union
 import asyncio
@@ -197,7 +198,15 @@ async def handle_task_websocket(
                         "status": "success",
                         "theme_id": theme_id
                     })
-
+                    # Handle different commands from the client
+            if command == "ping":
+                logger.info('User ping socket connection')
+                # Subscribe the user to the given theme
+                await websocket.send_json({
+                    "type": "ping",
+                    "status": "success",
+                    "timestamp": datetime.datetime.utcnow().isoformat()
+                })
             elif command == "unsubscribe":
                 theme_id = data.get("theme_id")
                 if theme_id is not None:

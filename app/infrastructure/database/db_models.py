@@ -133,6 +133,7 @@ class File(Base):
 
     # Relationships
     owner = relationship("User", back_populates="files")
+    themes = relationship("ThemeFile", back_populates="file", cascade="all, delete-orphan")
 
 
 class Document(Base):
@@ -227,8 +228,11 @@ class Theme(Base):
     # Relationships
     owner = relationship("User", back_populates="themes")
     documents = relationship("ThemeDocument", back_populates="theme", cascade="all, delete-orphan")
+    files = relationship("ThemeFile", back_populates="theme", cascade="all, delete-orphan")
     shared_with = relationship("ThemeShare", back_populates="theme", cascade="all, delete-orphan")
     tasks = relationship("ProcessingTask", back_populates="theme", cascade="all, delete-orphan")
+
+
 # Junction table for theme-document relationship
 class ThemeDocument(Base):
     """
@@ -259,6 +263,38 @@ class ThemeDocument(Base):
     # Relationships
     theme = relationship("Theme", back_populates="documents")
     document = relationship("Document")
+
+
+class ThemeFile(Base):
+    """
+    Junction table linking themes to files.
+
+    This table establishes a many-to-many relationship between themes and files,
+    allowing a file to belong to multiple themes and a theme to contain multiple files.
+
+    Attributes
+    ----------
+    theme_id : str
+        The ID of the theme to which the file is linked.
+    file_id : str
+        The ID of the file linked to the theme.
+    added_at : datetime
+        The timestamp when the file was added to the theme.
+    theme : Theme
+        The theme associated with this link (relationship).
+    file : File
+        The file associated with this link (relationship).
+    """
+    __tablename__ = "theme_files"
+
+    theme_id = Column(String, ForeignKey("themes.id"), primary_key=True)
+    file_id = Column(String, ForeignKey("files.id"), primary_key=True)
+    added_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # Relationships
+    theme = relationship("Theme", back_populates="files")
+    file = relationship("File", back_populates="themes")
+
 
 class ThemeShare(Base):
     """

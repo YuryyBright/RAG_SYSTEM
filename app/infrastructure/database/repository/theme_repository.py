@@ -9,7 +9,7 @@ from sqlalchemy.orm import selectinload
 from app.infrastructure.database.db_models import Theme, ThemeDocument, Document
 from app.utils.logger_util import get_logger
 from core.interfaces.theme_repository import ThemeRepositoryInterface
-
+from app.infrastructure.database.db_models import File, ThemeFile
 logger = get_logger(__name__)
 
 class ThemeRepository(ThemeRepositoryInterface):
@@ -270,3 +270,98 @@ class ThemeRepository(ThemeRepositoryInterface):
         except SQLAlchemyError as e:
             logger.error(f"Error counting documents for theme {theme_id}: {e}")
             return 0
+
+    async def add_file_to_theme(self, theme_id: str, file_id: str) -> bool:
+        """
+        Associate a file with a theme.
+
+        Args:
+            theme_id (str): ID of the theme.
+            file_id (str): ID of the file to associate.
+
+        Returns:
+            bool: True if successfully associated, False otherwise.
+        """
+
+        try:
+            # Verify file exists
+            result = await self.db.execute(
+                select(File).where(File.id == file_id)
+            )
+            if not result.scalar_one_or_none():
+                return False
+
+            # Check if already associated
+            existing = await self.db.execute(
+                select(ThemeFile).where(
+                    and_(
+                        ThemeFile.theme_id == theme_id,
+                        ThemeFile.file_id == file_id
+                    )
+                )
+            )
+            if existing.scalar_one_or_none():
+                return True
+
+            # Add new association
+            link = ThemeFile(
+                theme_id=theme_id,
+                file_id=file_id
+            )
+            self.db.add(link)
+            await self.db.commit()
+            return True
+        except SQLAlchemyError as e:
+            logger.error(f"Error linking file {file_id} to theme {theme_id}: {e}")
+            await self.db.rollback()
+            return False
+
+    async def remove_file_from_theme(self, theme_id: str, file_id: str) -> bool:
+        """
+        Remove the association between a file and a theme.
+
+        Args:
+            theme_id (str): ID of the theme.
+            file_id (str): ID of the file to disassociate.
+
+        Returns:
+            bool: True if disassociation succeeded, False otherwise.
+        """
+
+        try:
+            stmt = delete(ThemeFile).where(
+                and_(
+                    ThemeFile.theme_id == theme_id,
+                    ThemeFile.file_id == file_id
+                )
+            )
+            result = await self.db.execute(stmt)
+            await self.db.commit()
+            return result.rowcount > 0
+        except SQLAlchemyError as e:
+            logger.error(f"Error unlinking file {file_id} from theme {theme_id}: {e}")
+            await self.db.rollback()
+            return False
+
+    async def get_theme_files(self, theme_id: str) -> List[Any]:
+        """
+        Retrieve File objects associated with a theme.
+
+        Args:
+            theme_id (str): ID of the theme.
+
+        Returns:
+            List[File]: List of associated File objects.
+        """
+        from app.infrastructure.database.db_models import File, ThemeFile
+
+        try:
+            result = await self.db.execute(
+                select(File)
+                .join(ThemeFile, ThemeFile.file_id == File.id)
+                .where(ThemeFile.theme_id == theme_id)
+            )
+            return list(result.scalars())
+        except SQLAlchemyError as e:
+            logger.error(f"Error fetching files for theme {theme_id}: {e}")
+            return []

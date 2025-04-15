@@ -35,9 +35,15 @@ export function initializeWebSocketConnection() {
     state.taskSocket = new WebSocket(wsUrl);
 
     state.taskSocket.onopen = function () {
-      console.log("WebSocket connection established");
-      state.reconnectAttempts = 0;
-
+      //   state.reconnectAttempts = 0;
+      //   // ✅ Safe to send after socket is open
+      //   const testMessage = {
+      //     command: "ping", // not "action"
+      //     message: "Test WebSocket message",
+      //     timestamp: new Date().toISOString(),
+      //   };
+      //   state.taskSocket.send(JSON.stringify(testMessage));
+      //   console.log("Test message sent to server:", testMessage);
       // Process any pending subscription
       if (state.pendingSubscription) {
         subscribeToThemeUpdates(state.pendingSubscription);
@@ -88,20 +94,40 @@ export function attemptReconnect() {
 
 /**
  * Subscribe to theme updates via WebSocket
- * @param {string} themeId - ID of the theme to subscribe to updates for
+ * Avoids redundant subscriptions and assumes socket is ready when called
+ * @param {string} themeId
  */
-
 export function subscribeToThemeUpdates(themeId) {
-  // Use the waitForSocketConnection helper to ensure connection is ready
-  waitForSocketConnection(() => {
-    const subscribeMsg = {
-      command: "subscribe",
-      theme_id: themeId,
-    };
+  if (!themeId) {
+    console.warn("No theme ID provided for subscription.");
+    return;
+  }
 
-    state.taskSocket.send(JSON.stringify(subscribeMsg));
-    console.log(`Subscribed to updates for theme ${themeId}`);
-  });
+  // Avoid duplicate subscription
+  if (state.subscribedThemeId === themeId) {
+    console.log(`Already subscribed to theme ${themeId}`);
+    return;
+  }
+
+  // Optionally unsubscribe previous
+  if (state.subscribedThemeId && state.subscribedThemeId !== themeId) {
+    const unsubscribeMsg = {
+      command: "unsubscribe",
+      theme_id: state.subscribedThemeId,
+    };
+    state.taskSocket.send(JSON.stringify(unsubscribeMsg));
+    console.log(`Unsubscribed from theme ${state.subscribedThemeId}`);
+  }
+
+  // Now send the subscription
+  const subscribeMsg = {
+    command: "subscribe",
+    theme_id: themeId,
+  };
+
+  state.taskSocket.send(JSON.stringify(subscribeMsg));
+  state.subscribedThemeId = themeId; // optimistic update
+  console.log(`Subscribed to theme ${themeId}`);
 }
 
 /**

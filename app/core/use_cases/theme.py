@@ -186,3 +186,23 @@ class ThemeUseCase:
                 documents.append(document)
 
         return documents
+
+    async def get_theme_files(self, theme_id: str) -> List[Document]:
+        """
+        Get the files associated with a theme.
+
+        Args:
+            theme_id: ID of the theme
+
+        Returns:
+            List[Files]: List of document entities
+        """
+        file_ids = await self.theme_repository.get_theme_files(theme_id)
+
+        files = []
+        for file_id in file_ids:
+            document = await self.document_store.get_document(file_id)
+            if document:
+                files.append(document)
+
+        return files
