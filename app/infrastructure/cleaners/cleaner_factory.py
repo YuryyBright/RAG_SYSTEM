@@ -1,7 +1,7 @@
 # app/infrastructure/cleaners/cleaner_factory.py
 from typing import Dict, Type
 
-from .base_cleaner import BaseCleaner
+from .base_cleaner import BaseCleaner, DefaultTextCleaner # Import the concrete class
 from .markdown_cleaner import MarkdownCleaner
 from .html_cleaner import HtmlCleaner
 
@@ -41,7 +41,7 @@ class CleanerFactory:
             return cleaner_class()
         else:
             # Default to plain text with no special cleaning
-            return BaseCleaner()
+            return DefaultTextCleaner() # Return the concrete implementation
 
     @classmethod
     def register_cleaner(cls, format_type: str, cleaner_class: Type[BaseCleaner]) -> None:

@@ -160,8 +160,9 @@ class Document(Base):
     id = Column(String, primary_key=True, default=generate_uuid)
     content = Column(Text, nullable=False)
     embedding = Column(Vector(768)) # Store embedding as binary
-    file_id = Column(String, ForeignKey("files.id"), nullable=True)
+    file_id = Column(String, ForeignKey("files.id"), nullable=False)
     owner_id = Column(String, ForeignKey("users.id"), nullable=False)
+    theme_id = Column(String, ForeignKey("themes.id"), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
@@ -169,6 +170,7 @@ class Document(Base):
     owner = relationship("User", back_populates="documents")
     document_metadata = relationship("DocumentMetadata", back_populates="document", cascade="all, delete-orphan")
     file = relationship("File", backref="documents", lazy="selectin")
+    theme = relationship("Theme", back_populates="direct_documents", lazy="selectin")
 
 class DocumentMetadata(Base):
     """Metadata for Document.
@@ -234,6 +236,7 @@ class Theme(Base):
 
     shared_with = relationship("ThemeShare", back_populates="theme", cascade="all, delete-orphan")
     tasks = relationship("ProcessingTask", back_populates="theme", cascade="all, delete-orphan")
+    direct_documents = relationship("Document", back_populates="theme", lazy="selectin")
 
 
 # Junction table for theme-document relationship

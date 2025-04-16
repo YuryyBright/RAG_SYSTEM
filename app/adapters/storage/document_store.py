@@ -70,6 +70,8 @@ class DocumentStore(DocumentStoreInterface):
             content=document.content,
             embedding=document.embedding,
             owner_id=document.owner_id,
+            file_id=document.file_id,
+            theme_id=document.theme_id,
             metadata=document.metadata
         )
 
@@ -105,7 +107,7 @@ class DocumentStore(DocumentStoreInterface):
 
         # Fall back to database if not in cache
         if not document:
-            db_document = await self.document_repository.get_document(document_id)
+            db_document = await self.document_repository.get_by_id(document_id)
             if db_document:
                 document = Document(
                     id=db_document.id,
@@ -121,12 +123,14 @@ class DocumentStore(DocumentStoreInterface):
 
         return document
 
-    async def get_documents(self, document_ids: List[str]) -> List[Document]:
+    async def get_documents(self, document_ids: List[str], owner_id, theme_id) -> List[Document]:
         """
         Get multiple documents by their IDs (Interface method).
 
         Args:
             document_ids: List of document IDs to retrieve
+            owner_id: Owner ID
+            theme_id: Theme ID
 
         Returns:
             List[Document]: List of found documents
@@ -137,7 +141,7 @@ class DocumentStore(DocumentStoreInterface):
 
         # First try from disk cache
         for doc_id in document_ids:
-            doc = self._load_document_from_disk(doc_id)
+            doc = self._load_document_from_disk(doc_id, owner_id, theme_id)
             if doc:
                 documents.append(doc)
             else:
@@ -152,7 +156,7 @@ class DocumentStore(DocumentStoreInterface):
             except (AttributeError, NotImplementedError):
                 # Fallback if get_documents is not implemented in repository
                 for doc_id in missing_ids:
-                    db_doc = await self.document_repository.get_document(doc_id)
+                    db_doc = await self.document_repository.get_by_id(doc_id)
                     if db_doc:
                         db_documents.append(db_doc)
 
@@ -360,7 +364,12 @@ class DocumentStore(DocumentStoreInterface):
 
     def _save_document_to_disk(self, document_id: str, document: Document) -> None:
         """Save document to disk for faster retrieval."""
-        file_path = self.storage_path / f"{document_id}.json"
+
+        # Construct file path
+        file_path = self.storage_path / document.owner_id / document.theme_id / f"{document.id}.json"
+
+        # Create directory if it doesn't exist
+        file_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Convert document to serializable dict
         doc_dict = {
@@ -370,51 +379,60 @@ class DocumentStore(DocumentStoreInterface):
             "metadata": document.metadata,
             "created_at": document.created_at.isoformat() if document.created_at else None,
             "updated_at": document.updated_at.isoformat() if document.updated_at else None,
-
-            # Store embedding separately or skip if very large
             "has_embedding": document.embedding is not None
         }
 
+        # Write JSON file
         with open(file_path, "w") as f:
             json.dump(doc_dict, f)
 
-        # Store embedding separately if present (can be large)
+        # Store embedding separately if present
         if document.embedding is not None:
-            embedding_path = self.storage_path / f"{document_id}.embedding"
+            embedding_path = self.storage_path / document.owner_id / document.theme_id / f"{document.id}.embedding"
+            embedding_path.parent.mkdir(parents=True, exist_ok=True)  # Ensure directory exists
             with open(embedding_path, "wb") as f:
                 np.save(f, np.array(document.embedding))
 
-    def _load_document_from_disk(self, document_id: str) -> Optional[Document]:
-        """Load document from disk cache."""
-        file_path = self.storage_path / f"{document_id}.json"
+    def _load_document_from_disk(self, document_id: str, owner_id: str, theme_id: str) -> Document:
+        """Load document from disk."""
 
+        # Construct file path
+        file_path = Path(self.storage_path) / owner_id / theme_id / f"{document_id}.json"
+
+        # Check if file exists
         if not file_path.exists():
             return None
 
-        try:
-            with open(file_path, "r") as f:
-                doc_dict = json.load(f)
+        # Load document data
+        with open(file_path, "r") as f:
+            doc_dict = json.load(f)
 
-            # Load embedding if available
-            embedding = None
-            embedding_path = self.storage_path / f"{document_id}.embedding"
-            if embedding_path.exists() and doc_dict.get("has_embedding", False):
+        # Load embedding if available
+        embedding = None
+        if doc_dict.get("has_embedding", False):
+            embedding_path = Path(self.storage_path) / owner_id / theme_id / f"{document_id}.embedding"
+            if embedding_path.exists():
                 with open(embedding_path, "rb") as f:
-                    # Convert the numpy array to a list when loading
                     embedding = np.load(f).tolist()
 
-            return Document(
-                id=doc_dict["id"],
-                content=doc_dict["content"],
-                embedding=embedding,
-                owner_id=doc_dict["owner_id"],
-                metadata=doc_dict.get("metadata", {}),
-                created_at=doc_dict["created_at"],
-                updated_at=doc_dict["updated_at"]
-            )
-        except Exception:
-            # If there's any error reading the file, return None
-            return None
+        # Create Document object
+        document = Document(
+            id=doc_dict["id"],
+            content=doc_dict["content"],
+            owner_id=doc_dict["owner_id"],
+            metadata=doc_dict["metadata"],
+            embedding=embedding
+        )
+
+        if doc_dict.get("created_at"):
+            from datetime import datetime
+            document.created_at = datetime.fromisoformat(doc_dict["created_at"])
+
+        if doc_dict.get("updated_at"):
+            from datetime import datetime
+            document.updated_at = datetime.fromisoformat(doc_dict["updated_at"])
+
+        return document
 
     def _delete_document_from_disk(self, document_id: str) -> None:
         """Delete document from disk cache."""

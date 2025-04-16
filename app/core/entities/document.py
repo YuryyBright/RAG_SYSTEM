@@ -31,6 +31,7 @@ class Document:
             updated_at: str = None,
             source: str = None,
             owner_id: str = None,
+            theme_id: str = None,
             file_id: str = None,
     ):
         """
@@ -56,6 +57,7 @@ class Document:
         self.source = source
         self.owner_id = owner_id
         self.file_id = file_id
+        self.theme_id = theme_id
 
     def to_dict(self) -> Dict[str, Any]:
         """
@@ -74,6 +76,7 @@ class Document:
             "source": self.source,
             'owner_id': self.owner_id,
             'file_id': self.file_id,
+            'theme_id': self.theme_id,
         }
 
     @classmethod
@@ -95,6 +98,10 @@ class Document:
             created_at=data.get("created_at"),
             updated_at=data.get("updated_at"),
             source=data.get("source"),
+            owner_id=data.get("owner_id"),
+            theme_id=data.get("theme_id"),
+            file_id=data.get("file_id"),
+
         )
 
     def __repr__(self) -> str:

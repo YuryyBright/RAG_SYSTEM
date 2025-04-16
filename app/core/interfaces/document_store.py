@@ -39,7 +39,9 @@ class DocumentStoreInterface(ABC):
         pass
 
     @abstractmethod
-    async def get_documents(self, filter_criteria: Dict[str, Any] = None) -> List[Document]:
+    @abstractmethod
+    async def get_documents(self, document_ids: List[str], owner_id: str, theme_id: str) -> List[Document]:
+
         """
         Retrieve multiple documents from the document store based on filter criteria.
 
@@ -156,4 +158,13 @@ class DocumentStoreInterface(ABC):
         """
         return None
 
+    @abstractmethod
+    async def search_documents(
+            self, query: str, limit: int = 5, owner_id: Optional[str] = None
+    ) -> List[Document]:
+        pass
+
+    @abstractmethod
+    async def count_documents(self, filter_criteria: Dict[str, Any] = None) -> int:
+        pass
 

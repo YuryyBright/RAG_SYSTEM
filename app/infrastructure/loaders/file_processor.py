@@ -17,6 +17,7 @@ from utils.logger_util import get_logger
 from .readers.reader_factory import ReaderFactory
 from .readers.base_reader import BaseReader
 from infrastructure.cleaners.cleaner_factory import CleanerFactory
+from infrastructure.cleaners.base_cleaner import BaseCleaner  # Import BaseCleaner
 
 logger = get_logger(__name__)
 
@@ -98,7 +99,6 @@ class FileProcessor:
                     doc = await self._convert_to_document(processed_file, file_path)
                     if doc:  # Only add valid documents
                         documents.append(doc)
-
                     has_warnings = False
 
                     # Check for language detection failures
@@ -259,7 +259,8 @@ class FileProcessor:
                     content=pf.content,
                     metadata=meta,
                     file_id=file_record.id,
-                    owner_id=file_record.owner_id
+                    owner_id=file_record.owner_id,
+                    theme_id=file_record.theme_id
                 )
             logger.warning(f"File not found in database: {str(file_path)}")
             return None
@@ -340,5 +341,3 @@ class FileProcessor:
             warnings.append(f"Language detection issue: {metadata['language_error']}")
         if metadata.get("error"):
             warnings.append(f"Processing error: {metadata['error']}")
-
-        return warnings
