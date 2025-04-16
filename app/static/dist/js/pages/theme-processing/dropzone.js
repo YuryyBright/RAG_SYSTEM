@@ -90,7 +90,7 @@ export function initDropzone() {
           }
 
           // Update URL with the correct theme ID endpoint
-          this.options.url = `/api/themes/${state.currentThemeId}/documents`;
+          // this.options.url = `/api/themes/${state.currentThemeId}/files`;
 
           // Append necessary data
           xhr.withCredentials = true; // ← this is required for cookies

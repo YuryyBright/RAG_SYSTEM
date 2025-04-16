@@ -59,6 +59,7 @@ class InstructorEmbedding(EmbeddingInterface):
             logger.info(f"⚙️ Moving model to device: {self.device}")
             self.model = self.model.to(self.device)
         self.model.set_pooling_include_prompt(False)
+
     async def embed_documents(self, documents: List[Document]) -> List[Document]:
         """
         Generate embeddings for a list of documents using the INSTRUCTOR model.
@@ -103,3 +104,34 @@ class InstructorEmbedding(EmbeddingInterface):
         embedding = self.model.encode(instruction_pair)
 
         return embedding[0].tolist()
+
+    async def embed_text(self, text: str) -> List[float]:
+        """
+        Generate an embedding for a text string using the INSTRUCTOR model.
+
+        Args:
+            text (str): The text string to be embedded.
+
+        Returns:
+            List[float]: A list of floats representing the embedding of the text.
+        """
+        # Create instruction pair for the text
+        instruction_pair = [[self.instruction, text]]
+
+        # Generate embedding
+        embedding = self.model.encode(instruction_pair)
+
+        return embedding[0].tolist()
+
+    async def get_embedding(self, text: str) -> List[float]:
+        """
+        Get a single embedding using the embed_query logic.
+        Alias method for interface compatibility.
+
+        Args:
+            text (str): The text to embed.
+
+        Returns:
+            List[float]: The generated embedding.
+        """
+        return await self.embed_query(text)

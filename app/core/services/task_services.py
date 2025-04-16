@@ -201,13 +201,12 @@ class TaskManager:
         if not db_model:
             return None
 
-        # Convert DB model back to domain Task
         domain_task = Task(
             task_type=TaskTypeEnum(db_model.task_type),
             user_id=db_model.user_id,
             theme_id=db_model.theme_id,
             description=db_model.description,
-            metadata=db_model.task_metadata  # or json.loads(...)
+            metadata=json.loads(db_model.task_metadata or '{}')
         )
         domain_task.id = db_model.id
         domain_task.status = TaskStatusEnum(db_model.status)
@@ -216,8 +215,8 @@ class TaskManager:
         domain_task.started_at = db_model.started_at
         domain_task.completed_at = db_model.completed_at
         domain_task.error_message = db_model.error_message
-        domain_task.logs = db_model.task_metadata
-        domain_task.steps = db_model.task_metadata
+        domain_task.logs = json.loads(db_model.logs or '[]')  # ✅ fixed
+        domain_task.steps = json.loads(db_model.steps or '[]')  # ✅ fixed
         domain_task.current_step = db_model.current_step
         return domain_task
 

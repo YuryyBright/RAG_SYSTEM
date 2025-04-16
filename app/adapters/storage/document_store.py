@@ -6,8 +6,8 @@ import uuid
 
 from app.core.entities.document import Document
 from app.core.interfaces.document_store import DocumentStoreInterface
-from app.core.interfaces.embedding import EmbeddingInterface
 from app.infrastructure.database.repository.document_repository import DocumentRepository
+from core.services.embedding_service import EmbeddingService
 
 
 class DocumentStore(DocumentStoreInterface):
@@ -29,7 +29,7 @@ class DocumentStore(DocumentStoreInterface):
     def __init__(
             self,
             document_repository: DocumentRepository,
-            embedding_service: EmbeddingInterface,
+            embedding_service: EmbeddingService,
             storage_path: Path
     ):
         self.document_repository = document_repository
@@ -63,7 +63,7 @@ class DocumentStore(DocumentStoreInterface):
         """
         # Generate embedding if not already present
         if document.embedding is None:
-            document.embedding = await self.embedding_service.embed_text(document.content)
+            document.embedding = await self.embedding_service.get_embedding(document.content)
 
         # Save to database
         doc_id = await self.document_repository.create_document(
@@ -145,29 +145,31 @@ class DocumentStore(DocumentStoreInterface):
 
         # Get any missing documents from database
         if missing_ids:
-            # This assumes document_repository has a get_documents method
-            # If not, you'll need to fetch them one by one
+            # First, try with get_documents if the repository implements it
+            db_documents = []
             try:
                 db_documents = await self.document_repository.get_documents(missing_ids)
-                for db_doc in db_documents:
-                    document = Document(
-                        id=db_doc.id,
-                        content=db_doc.content,
-                        embedding=db_doc.embedding,
-                        owner_id=db_doc.owner_id,
-                        metadata=self._extract_metadata(db_doc),
-                        created_at=db_doc.created_at,
-                        updated_at=db_doc.updated_at
-                    )
-                    documents.append(document)
-                    # Save to disk cache for future retrievals
-                    self._save_document_to_disk(db_doc.id, document)
-            except AttributeError:
+            except (AttributeError, NotImplementedError):
                 # Fallback if get_documents is not implemented in repository
                 for doc_id in missing_ids:
-                    doc = await self.get_document(doc_id)
-                    if doc:
-                        documents.append(doc)
+                    db_doc = await self.document_repository.get_document(doc_id)
+                    if db_doc:
+                        db_documents.append(db_doc)
+
+            # Process found database documents
+            for db_doc in db_documents:
+                document = Document(
+                    id=db_doc.id,
+                    content=db_doc.content,
+                    embedding=db_doc.embedding,
+                    owner_id=db_doc.owner_id,
+                    metadata=self._extract_metadata(db_doc),
+                    created_at=db_doc.created_at,
+                    updated_at=db_doc.updated_at
+                )
+                documents.append(document)
+                # Save to disk cache for future retrievals
+                self._save_document_to_disk(db_doc.id, document)
 
         return documents
 
@@ -181,16 +183,22 @@ class DocumentStore(DocumentStoreInterface):
         Returns:
             List[Document]: List of documents
         """
+        results = []
+
+        # First try with get_all_documents if it exists
         try:
-            # First try with get_all_documents if it exists
             results = await self.document_repository.get_all_documents(owner_id=owner_id)
-        except AttributeError:
+        except (AttributeError, NotImplementedError):
             # Fallback to search without query if repository doesn't have get_all_documents
-            results = await self.document_repository.search_similar(
-                embedding=None,  # Some repositories might handle None as "get all"
-                limit=1000,  # Reasonable limit to prevent excessive data retrieval
-                owner_id=owner_id
-            )
+            try:
+                results = await self.document_repository.search_similar(
+                    embedding=None,  # Some repositories might handle None as "get all"
+                    limit=1000,  # Reasonable limit to prevent excessive data retrieval
+                    owner_id=owner_id
+                )
+            except (AttributeError, NotImplementedError):
+                # If neither method is implemented, log it (or handle as appropriate)
+                return []
 
         documents = []
         for result in results:
@@ -311,6 +319,45 @@ class DocumentStore(DocumentStoreInterface):
 
         return updated
 
+    async def count_documents(self, filter_criteria: Dict[str, Any] = None) -> int:
+        """
+        Count documents matching the filter criteria.
+
+        Args:
+            filter_criteria: Dictionary of criteria to filter documents
+
+        Returns:
+            int: Count of matching documents
+        """
+        try:
+            return await self.document_repository.count_documents(filter_criteria)
+        except (AttributeError, NotImplementedError):
+            # Fallback to counting manually if the repository doesn't implement count_documents
+            try:
+                # Get all documents and filter manually
+                all_docs = await self.get_all()
+
+                if not filter_criteria:
+                    return len(all_docs)
+
+                # Filter documents based on criteria
+                count = 0
+                for doc in all_docs:
+                    matches = True
+                    for key, value in filter_criteria.items():
+                        if key == "owner_id" and doc.owner_id != value:
+                            matches = False
+                            break
+                        if key in doc.metadata and doc.metadata[key] != value:
+                            matches = False
+                            break
+                    if matches:
+                        count += 1
+                return count
+            except Exception:
+                # If all else fails, return 0
+                return 0
+
     def _save_document_to_disk(self, document_id: str, document: Document) -> None:
         """Save document to disk for faster retrieval."""
         file_path = self.storage_path / f"{document_id}.json"
@@ -381,7 +428,17 @@ class DocumentStore(DocumentStoreInterface):
 
     def _extract_metadata(self, db_document) -> Dict[str, Any]:
         """Extract metadata from database document model."""
+        # First check if document already has metadata as a dictionary
+        if hasattr(db_document, "metadata") and isinstance(db_document.metadata, dict):
+            return db_document.metadata.copy()
+
+        # Otherwise try to extract from document_metadata list of key-value pairs
         metadata = {}
-        for meta_item in getattr(db_document, "document_metadata", []):
-            metadata[meta_item.key] = meta_item.value
+        try:
+            for meta_item in getattr(db_document, "document_metadata", []):
+                metadata[meta_item.key] = meta_item.value
+        except (AttributeError, TypeError):
+            # If document doesn't have expected structure, return empty dict
+            pass
+
         return metadata

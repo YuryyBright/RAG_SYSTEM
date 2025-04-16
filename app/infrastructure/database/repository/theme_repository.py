@@ -373,7 +373,6 @@ class ThemeRepository(ThemeRepositoryInterface):
         Returns:
             List[File]: List of associated File objects.
         """
-        from app.infrastructure.database.db_models import File, ThemeFile
 
         try:
             result = await self.db.execute(

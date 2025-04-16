@@ -6,84 +6,51 @@ from datetime import datetime
 from adapters.storage.document_store import DocumentStore
 from app.core.entities.document import Document
 from app.adapters.storage.file_manager import FileManager
+from core.services.chunking_service import ChunkingService
 from core.services.embedding_service import EmbeddingService
-from core.services.vector_index_services import VectorIndex
+from core.services.vector_index_services import VectorIndexService
+from infrastructure.loaders.file_processor import FileProcessor
 from utils.logger_util import get_logger
 
-loggrer = get_logger(__name__)
+logger = get_logger(__name__)
 
 
-class FileProcessor:
-    """Handles the processing of different file types into text documents."""
-
-    def __init__(self):
-        self.supported_extensions = [
-            "pdf", "txt", "docx", "doc", "html", "htm", "md", "markdown",
-            "csv", "json", "xml", "pptx", "xlsx", "xls", "rtf", "odt"
-        ]
-
-    async def process_file(self, file_path: str) -> Tuple[str, Dict[str, Any]]:
-        """Process a file and return its text content and metadata."""
-        if not os.path.exists(file_path):
-            raise ValueError(f"File not found: {file_path}")
-
-        file_extension = os.path.splitext(file_path)[1].lower().replace(".", "")
-
-        if file_extension not in self.supported_extensions:
-            raise ValueError(f"Unsupported file type: {file_extension}")
-
-        # Determine appropriate loader based on file extension
-        content, metadata = await self._load_file_content(file_path, file_extension)
-
-        # Add file metadata
-        file_stat = os.stat(file_path)
-        metadata.update({
-            "source": file_path,
-            "file_type": file_extension,
-            "file_size": file_stat.st_size,
-            "last_modified": datetime.fromtimestamp(file_stat.st_mtime).isoformat(),
-            "created": datetime.fromtimestamp(file_stat.st_ctime).isoformat(),
-        })
-
-        return content, metadata
-
-    async def _load_file_content(self, file_path: str, file_extension: str) -> Tuple[str, Dict[str, Any]]:
-        """Load content from a file based on its extension."""
-        # This would use different loaders from your infrastructure
-        # For now, we'll use a simple text loader for demonstration
-        if file_extension in ["txt", "md", "markdown"]:
-            with open(file_path, "r", encoding="utf-8") as file:
-                content = file.read()
-            return content, {"mime_type": "text/plain"}
-
-        # For PDF, DOCX, etc. we would use specialized loaders
-        # In a real implementation, you would import and use them:
-        # e.g., from app.infrastructure.loaders.pdf_loader import PDFLoader
-
-        # For now, we'll simulate successful loading
-        with open(file_path, "rb") as file:
-            # Just read the first 1000 bytes to check if file is readable
-            file.read(1000)
-
-        return f"Simulated content for {file_path}", {"mime_type": f"application/{file_extension}"}
 
 
 class FileProcessingUseCase:
-    """Use case for processing files for the RAG system."""
+    """
+    Use case for processing, chunking, and vectorizing files in the RAG system.
+    """
 
     def __init__(
             self,
             file_processor: FileProcessor,
+            chunking_service: ChunkingService,
             embedding_service: EmbeddingService,
             document_store: DocumentStore,
-            vector_index: VectorIndex,
-            file_manager: FileManager
+            vector_index: VectorIndexService,
     ):
+        """
+        Initialize the FileProcessingUseCase with required services.
+
+        Parameters
+        ----------
+        file_processor : FileProcessor
+            Responsible for reading/parsing files.
+        chunking_service : ChunkingService
+            Responsible for splitting text content into smaller chunks.
+        embedding_service : EmbeddingService
+            Responsible for generating vector embeddings for text chunks.
+        document_store : DocumentStore
+            Responsible for persisting documents and associated metadata.
+        vector_index : VectorIndexService
+            Responsible for storing/retrieving vectors and performing similarity searches.
+        """
         self.file_processor = file_processor
+        self.chunking_service = chunking_service
         self.embedding_service = embedding_service
         self.document_store = document_store
         self.vector_index = vector_index
-        self.file_manager = file_manager
 
     async def process_directory(
             self,
@@ -223,6 +190,127 @@ class FileProcessingUseCase:
                     })
 
         return documents, report
+
+    async def process_and_vectorize_directory(
+            self,
+            directory_path: str,
+            recursive: bool = True,
+            metadata: Dict[str, Any] = None,
+            theme_id: str = None,
+            chunk_size: int = 1000,
+            chunk_overlap: int = 200,
+    ) -> Dict[str, Any]:
+        """
+        Process all files in a directory:
+           1) Reads each file in 'directory_path'
+           2) Chunks the text
+           3) Stores each chunk as a separate document
+           4) Embeds each chunk
+           5) Stores embeddings in the vector index
+           6) Returns a consolidated report
+
+        Parameters
+        ----------
+        directory_path : str
+            Path to the directory containing files to process.
+        recursive : bool
+            Whether to process files in subdirectories.
+        metadata : Dict[str, Any], optional
+            Additional metadata to attach to documents.
+        theme_id : str, optional
+            Theme identifier, if you group documents under certain themes.
+        chunk_size : int, optional
+            Maximum size (in characters) of each text chunk (default 1000).
+        chunk_overlap : int, optional
+            Overlap (in characters) between consecutive text chunks (default 200).
+
+        Returns
+        -------
+        Dict[str, Any]
+            A report detailing how many files were processed, how many chunks
+            were created, and any warnings or errors encountered.
+        """
+        if not os.path.isdir(directory_path):
+            raise ValueError(f"Directory not found: {directory_path}")
+
+        # Step 1: Read directory and produce raw documents
+        #   (Each file is read fully as a single "Document" in memory)
+        #   The existing file_processor already returns
+        #   (documents, report) describing success/failures.
+        logger.info(f"Processing {directory_path}")
+        documents, base_report = await self.file_processor.process_directory(
+            directory_path=directory_path,
+            recursive=recursive,
+            metadata=metadata,
+        )
+
+        # We'll extend that `base_report` to track chunking and embedding steps:
+        extended_report = {
+            "summary": {
+                "total_files": base_report["summary"]["total_files"],
+                "successful_files": base_report["summary"]["successful"],
+                "unreadable_files": base_report["summary"]["unreadable"],
+                "language_detection_failures": base_report["summary"]["language_detection_failures"],
+                "files_with_warnings": base_report["summary"]["files_with_warnings"],
+                "total_chunks_created": 0,
+                "chunks_vectorized": 0
+            },
+            "details": base_report["details"],
+            "recommendations": base_report["recommendations"],
+        }
+
+        # Step 2: Chunk, store, and embed each document
+        total_chunks_created = 0
+        chunks_vectorized = 0
+
+        # We'll accumulate IDs for vector insertion
+        vectors_to_add = []
+        vector_ids = []
+
+        for doc in documents:
+            text = doc.content
+            # Use chunking service to split text
+            chunks = self.chunking_service.chunk_text(
+                text=text,
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap
+            )
+            total_chunks_created += len(chunks)
+
+            # For each chunk, we treat it as a separate document
+            # so that each chunk has its own embedding
+            for chunk in chunks:
+                # Create a Document object for the chunk
+                chunk_doc = Document(
+                    content=chunk,
+                    owner_id = doc.owner_id or doc.metadata.get("owner_id"),
+                    metadata={
+                        **doc.metadata,  # copy original metadata
+                        "theme_id": theme_id,
+                        "parent_doc_id": doc.id,
+                    }
+                )
+                logger.info(f"Processing chunk {chunk_doc} of {len(chunks)}")
+                # Store the chunk in the document store to get a doc_id
+                doc_id = await self.document_store.store_document(chunk_doc)
+
+                # We'll collect text for embedding
+                vectors_to_add.append(chunk)
+                vector_ids.append(doc_id)
+
+        # Step 3: Embed all chunks in one or more batches
+        if vectors_to_add:
+            embeddings = await self.embedding_service.get_embeddings(vectors_to_add)
+            # Now store them in the vector index:
+            await self.vector_index.add_vectors(embeddings, vector_ids)
+            chunks_vectorized = len(vectors_to_add)
+
+        # Update the extended report
+        extended_report["summary"]["total_chunks_created"] = total_chunks_created
+        extended_report["summary"]["chunks_vectorized"] = chunks_vectorized
+
+        return extended_report
+
 
     async def analyze_document_quality(self, documents: List[Document]) -> Dict[str, Any]:
         """

@@ -4,6 +4,7 @@ import logging
 from abc import ABC, abstractmethod
 import numpy as np
 
+from core.entities.document import Document
 from core.interfaces.embedding import EmbeddingInterface
 from utils.logger_util import get_logger
 
@@ -109,3 +110,36 @@ class EmbeddingService(EmbeddingInterface):
             raise ValueError("Batch size must be at least 1")
         self.batch_size = batch_size
         logger.debug(f"Embedding batch size set to {batch_size}")
+
+    async def embed_documents(self, documents: List[Document]) -> List[Document]:
+        """
+        Generate embeddings for a list of documents.
+
+        Args:
+            documents (List[Document]): A list of Document objects to embed.
+
+        Returns:
+            List[Document]: The same list with updated embedding fields.
+        """
+        if not documents:
+            return []
+
+        texts = [doc.content for doc in documents]
+        embeddings = await self.get_embeddings(texts)
+
+        for doc, embedding in zip(documents, embeddings):
+            doc.embedding = embedding
+
+        return documents
+
+    async def embed_query(self, query: str) -> List[float]:
+        """
+        Generate an embedding for a query string.
+
+        Args:
+            query (str): The query string to be embedded.
+
+        Returns:
+            List[float]: Embedding vector for the query.
+        """
+        return await self.get_embedding(query)

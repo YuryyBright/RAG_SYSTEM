@@ -3,6 +3,16 @@
 /**
  * Handles authentication token storage, retrieval, and session management
  */
+// === Timer & Retry Constants ===
+const TOKEN_EXPIRY_THRESHOLD = 5 * 60 * 1000; // 5 minutes
+const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000; // 24 hours in ms
+const SESSION_EXPIRY_24_HOURS = 24 * 60 * 60 * 1000; // 24 hours in ms
+const MINUTES_DIVISOR = 24 * 60 * 60 * 1000; // 24 hours in ms
+const INITIAL_RETRY_DELAY = 24 * 60 * 60 * 1000; // 24 hours in ms
+const CSRF_RETRY_DELAY = 24 * 60 * 60 * 1000; // 24 hours in ms
+const SESSION_RETRY_DELAY = 24 * 60 * 60 * 1000; // 24 hours in ms
+const SESSION_VALIDATOR_INTERVAL = 24 * 60 * 60 * 1000; // 24 hours in ms
+const DEFAULT_SESSION_EXPIRY = 24 * 60 * 60 * 1000; // 24 hours in ms
 const AuthManager = {
   // Timer references
   sessionRefreshTimer: null,
@@ -79,10 +89,10 @@ const AuthManager = {
     const timeUntilExpiry = expiryDate.getTime() - now.getTime();
 
     // If token expires in more than 5 minutes, set timer to refresh at 80% of lifetime
-    if (timeUntilExpiry > 300000) {
+    if (timeUntilExpiry > TOKEN_EXPIRY_THRESHOLD) {
       const refreshTime = timeUntilExpiry * 0.8;
       this.sessionRefreshTimer = setTimeout(() => this.refreshToken(), refreshTime);
-      console.log(`Token refresh scheduled in ${Math.round(refreshTime / 60000)} minutes`);
+      console.log(`Token refresh scheduled in ${Math.round(refreshTime / 600000)} minutes`);
     }
     // If expiring soon but still valid, refresh now
     else if (timeUntilExpiry > 0) {
@@ -112,19 +122,12 @@ const AuthManager = {
     const timeUntilExpiry = expiryDate.getTime() - now.getTime();
 
     // If session expires in more than 5 minutes, set timer to refresh at 80% of lifetime
-    if (timeUntilExpiry > 300000) {
+    if (timeUntilExpiry > TOKEN_EXPIRY_THRESHOLD) {
       const refreshTime = timeUntilExpiry * 0.8;
       this.sessionRefreshTimer = setTimeout(() => this.refreshSession(), refreshTime);
-      console.log(`Session refresh scheduled in ${Math.round(refreshTime / 60000)} minutes`);
-    }
-    // If expiring soon but still valid, refresh now
-    else if (timeUntilExpiry > 0) {
-      console.log("Session expiring soon, refreshing now");
+    } else if (timeUntilExpiry > 0) {
       this.refreshSession();
-    }
-    // If already expired, force re-authentication
-    else {
-      console.log("Session expired, redirecting to login");
+    } else {
       this.handleSessionExpiration();
     }
   },
@@ -156,7 +159,7 @@ const AuthManager = {
         } else if (this.currentRetries < this.maxRetries) {
           // Try again after a delay if it's a server error
           this.currentRetries++;
-          const retryDelay = 10000 * this.currentRetries; // Increasing backoff
+          const retryDelay = INITIAL_RETRY_DELAY * this.currentRetries; // Increasing backoff
           console.log(`Retry ${this.currentRetries}/${this.maxRetries} in ${retryDelay / 1000}s`);
           setTimeout(() => this.refreshToken(), retryDelay);
         } else {
@@ -197,7 +200,7 @@ const AuthManager = {
         } else if (this.currentRetries < this.maxRetries) {
           // Try again after a delay if it's a server error
           this.currentRetries++;
-          const retryDelay = 10000 * this.currentRetries; // Increasing backoff
+          const retryDelay = INITIAL_RETRY_DELAY * this.currentRetries; // Increasing backoff
           console.log(`Retry ${this.currentRetries}/${this.maxRetries} in ${retryDelay / 1000}s`);
           setTimeout(() => this.refreshSession(), retryDelay);
         } else {
@@ -211,7 +214,7 @@ const AuthManager = {
    * Setup server session validator that checks periodically
    * This ensures we detect server-side session deletions even when frontends don't know
    */
-  setupSessionValidator: function (interval = 300000) {
+  setupSessionValidator: function (interval = SESSION_VALIDATOR_INTERVAL) {
     // 5 minutes by default
     // Clear any existing validator
     if (this.sessionValidatorTimer) {
@@ -268,7 +271,7 @@ const AuthManager = {
           this.handleSessionExpiration();
         } else {
           // Server error but not auth-related, try one more time later
-          setTimeout(() => this.verifyServerSession(), 30000);
+          setTimeout(() => this.verifyServerSession(), SESSION_RETRY_DELAY);
         }
 
         // Propagate the error
@@ -318,7 +321,7 @@ const AuthManager = {
           this.handleSessionExpiration();
         } else if (this.currentRetries < this.maxRetries) {
           // Try again after a delay
-          setTimeout(() => this.refreshCsrfToken(), 15000);
+          setTimeout(() => this.refreshCsrfToken(), CSRF_RETRY_DELAY);
         } else {
           this.verifyServerSession();
         }
@@ -556,7 +559,11 @@ const AuthManager = {
     this.removeToken();
     this.removeUserData();
 
-    // Clear refresh timers
+    if (this.tokenRefreshTimer) {
+      clearTimeout(this.tokenRefreshTimer);
+      this.tokenRefreshTimer = null;
+    }
+
     if (this.sessionRefreshTimer) {
       clearTimeout(this.sessionRefreshTimer);
       this.sessionRefreshTimer = null;
@@ -565,6 +572,11 @@ const AuthManager = {
     if (this.csrfRefreshTimer) {
       clearTimeout(this.csrfRefreshTimer);
       this.csrfRefreshTimer = null;
+    }
+
+    if (this.sessionValidatorTimer) {
+      clearInterval(this.sessionValidatorTimer);
+      this.sessionValidatorTimer = null;
     }
   },
 
@@ -611,7 +623,7 @@ const AuthManager = {
             userId: userData.id,
             username: userData.username,
             // Set a short expiry since we don't know the real one
-            expiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+            expiresAt: new Date(Date.now() + DEFAULT_SESSION_EXPIRY).toISOString(),
           };
           sessionStorage.setItem("userData", JSON.stringify(storedUserData));
         }

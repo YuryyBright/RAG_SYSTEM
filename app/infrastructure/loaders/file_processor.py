@@ -9,9 +9,11 @@ from pathlib import Path
 from dataclasses import asdict
 from langdetect import detect
 from langdetect.lang_detect_exception import LangDetectException
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.entities.document import Document
 from core.entities.processed_file import ProcessedFile
+from infrastructure.database.repository.file_repository import FileRepository
 from utils.logger_util import get_logger
 
 logger = get_logger(__name__)
@@ -26,12 +28,12 @@ class FileProcessor:
     unreadable files and language detection failures.
     """
 
-    def __init__(self):
-        self.supported_extensions = [
-            ".txt", ".md", ".json", ".html", ".csv", ".pdf",
-            ".docx", ".xlsx", ".pptx", ".rtf", ".xml", ".yaml", ".yml"
-        ]
+    def __init__(self, file_repository: FileRepository):
 
+        self.supported_extensions = {
+            "txt", "md", "markdown", "html", "htm", "pdf", "doc", "docx",
+            "csv", "xls", "xlsx", "json", "xml", "ppt", "pptx"
+        }
         self.successful_files = []
         self.unreadable_files = []
         self.language_detection_failures = []
@@ -53,7 +55,7 @@ class FileProcessor:
             ".yaml": self._read_yaml_file,
             ".yml": self._read_yaml_file,
         }
-
+        self.file_repository = file_repository
     async def process_directory(
             self,
             directory_path: str,
@@ -104,11 +106,11 @@ class FileProcessor:
                 continue
 
             try:
-                processed_file = await self._process_file(file_path, metadata)
+                processed_file = await self.process_file(file_path, metadata)
 
                 # Handle the processed file based on its status
                 if processed_file.is_readable:
-                    doc = self._convert_to_document(processed_file)
+                    doc = await self._convert_to_document(processed_file, file_path)
                     documents.append(doc)
 
                     has_warnings = False
@@ -128,7 +130,7 @@ class FileProcessor:
                         self.successful_files.append(processed_file)
                 else:
                     self.unreadable_files.append(processed_file)
-
+                logger.info(f"Finished processing file {file_path}")
             except Exception as e:
                 logger.error(f"Failed to process {file_path}: {e}")
                 # Create a processed file record for the failure
@@ -149,7 +151,7 @@ class FileProcessor:
         report = self._generate_enhanced_report()
         return documents, report
 
-    async def _process_file(self, file_path: Path, metadata: Optional[Dict[str, Any]] = None) -> ProcessedFile:
+    async def process_file(self, file_path: Path, metadata: Optional[Dict[str, Any]] = None) -> ProcessedFile:
         """
         Process a single file: read content and detect language.
 
@@ -231,7 +233,7 @@ class FileProcessor:
             metadata=meta
         )
 
-    def _convert_to_document(self, pf: ProcessedFile) -> Document:
+    async def _convert_to_document(self, pf: ProcessedFile, file_path) -> Document:
         """
         Convert a ProcessedFile to a Document for vector database storage.
 
@@ -256,7 +258,16 @@ class FileProcessor:
         if not pf.is_language_detected:
             meta["language_detection_failed"] = True
 
-        return Document(id=pf.id, content=pf.content, metadata=meta)
+        # Fetch file from DB using path
+        try:
+            file_record = await self.file_repository.get_file_by_path((str(file_path)))
+            if file_record:
+                return Document(id=pf.id, content=pf.content, metadata=meta, file_id=file_record.id, owner_id=file_record.owner_id)
+            raise "File not found"
+        except Exception as e:
+            logger.warning(f"Failed to fetch file from DB for path {meta.get('source')}: {e}")
+
+
 
     def _generate_enhanced_report(self) -> Dict[str, Any]:
         """

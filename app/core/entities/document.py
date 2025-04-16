@@ -30,7 +30,8 @@ class Document:
             created_at: str = None,
             updated_at: str = None,
             source: str = None,
-            user_id: str = None
+            owner_id: str = None,
+            file_id: str = None,
     ):
         """
         Initialize a new Document.
@@ -43,8 +44,8 @@ class Document:
             created_at (str, optional): Creation timestamp. Defaults to None.
             updated_at (str, optional): Update timestamp. Defaults to None.
             source (str, optional): Source of the document. Defaults to None.
-            user_id (str, optional): User ID. Defaults to None.
-            user_id (str, optional): User ID. Defaults to None.
+            owner_id (str, optional): User ID. Defaults to None.
+
         """
         self.id = id if id is not None else str(uuid.uuid4())
         self.content = content
@@ -53,8 +54,8 @@ class Document:
         self.created_at = created_at
         self.updated_at = updated_at
         self.source = source
-        self.user_id = user_id
-        self.owner_id = user_id
+        self.owner_id = owner_id
+        self.file_id = file_id
 
     def to_dict(self) -> Dict[str, Any]:
         """
@@ -71,7 +72,8 @@ class Document:
             "created_at": self.created_at,
             "updated_at": self.updated_at,
             "source": self.source,
-            "user_id": self.user_id
+            'owner_id': self.owner_id,
+            'file_id': self.file_id,
         }
 
     @classmethod
@@ -93,7 +95,6 @@ class Document:
             created_at=data.get("created_at"),
             updated_at=data.get("updated_at"),
             source=data.get("source"),
-            user_id=data.get("user_id")
         )
 
     def __repr__(self) -> str:

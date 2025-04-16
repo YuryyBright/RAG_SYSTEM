@@ -1,111 +1,328 @@
 /**
  * file-download.js
- * Handles functions related to downloading files for theme processing
+ * Handles functions related to downloading multiple files for theme processing
  */
 
 import { state } from "./state.js";
 import { addProcessingLog, getCsrfToken } from "./utils.js";
 import { updateVectorDBStatusUI } from "./vectorDB.js";
 import { populateFileSelector } from "./file-preview.js";
+import { startFileProcessing } from "./file-processing.js";
+import { saveWorkflowState } from "./state.js";
+import { navigateToStep } from "./ui.js";
+/**
+ * Configuration options for parallel downloads
+ */
+const DOWNLOAD_CONFIG = {
+  maxConcurrentDownloads: 3, // Maximum number of concurrent downloads
+  retryAttempts: 2, // Number of retry attempts for failed downloads
+  retryDelay: 1000, // Delay between retry attempts (ms)
+};
 
 /**
- * Start the file download process
+ * Start the file download process with parallel downloads
+ */
+// export function startDownloadProcess() {
+//   if (state.uploadedFiles.length === 0) {
+//     alertify.error("No files to download");
+//     return;
+//   }
+
+//   $("#start-download-btn").prop("disabled", true);
+
+//   // Initialize download tracking state
+//   state.downloadStatus = {
+//     totalFiles: state.uploadedFiles.length,
+//     completedFiles: 0,
+//     failedFiles: 0,
+//     inProgressFiles: 0,
+//     queue: [...state.uploadedFiles],
+//     activeDownloads: new Map(),
+//     retryMap: new Map()
+//   };
+
+//   // Reset download array
+//   state.downloadedFiles = [];
+
+//   // Create a new task for file download process
+//   $.ajax({
+//     url: "/api/tasks",
+//     method: "POST",
+//     data: JSON.stringify({
+//       type: "theme_processing",
+//       theme_id: state.currentThemeId,
+//       step: "download",
+//       files: state.uploadedFiles.map((f) => f.id),
+//       description: `Download files for theme: ${state.selectedTheme}`,
+//       metadata: {
+//         stepName: "download",
+//         vectorDBStatus: state.vectorDBStatus,
+//         totalFiles: state.uploadedFiles.length,
+//         parallelDownloads: true
+//       },
+//     }),
+//     contentType: "application/json",
+//     headers: {
+//       "X-CSRF-Token": getCsrfToken(),
+//     },
+//     success: function (response) {
+//       // Store the task reference
+//       state.processingTask = response;
+
+//       // Initialize file download UI
+//       $("#download-progress").css("width", "0%");
+
+//       // Add log entry
+//       addProcessingLog("Starting parallel file download process...");
+
+//       // Set first step to in_progress
+//       state.vectorDBStatus.dataIngestion = "in_progress";
+//       updateVectorDBStatusUI();
+
+//       // Start the parallel download process
+//       processDownloadQueue();
+
+//       alertify.success("Started download process");
+//     },
+//     error: function (xhr, status, error) {
+//       console.error("Error starting download process:", error);
+//       alertify.error(`Error starting download: ${xhr.responseJSON?.detail || error}`);
+//       $("#start-download-btn").prop("disabled", false);
+//     },
+//   });
+// }
+/**
+ * Start the download process and immediately jump to processing
  */
 export function startDownloadProcess() {
-  if (state.uploadedFiles.length === 0) {
-    alertify.error("No files to download");
+  // Change button text to indicate processing is starting
+  $("#start-download-btn").text("Starting Processing Files").prop("disabled", true);
+  if (!state.currentThemeId) {
+    alertify.error("No theme selected");
+    $("#start-download-btn").text("Start Download").prop("disabled", false);
     return;
   }
 
-  $("#start-download-btn").prop("disabled", true);
-
-  // Create a new task for file download process
+  // Create a task for tracking
   $.ajax({
     url: "/api/tasks",
     method: "POST",
+    headers: {
+      "X-CSRF-Token": getCsrfToken(),
+      "Content-Type": "application/json",
+    },
     data: JSON.stringify({
       type: "theme_processing",
       theme_id: state.currentThemeId,
       step: "download",
-      files: state.uploadedFiles.map((f) => f.id),
-      description: `Download files for theme: ${state.selectedTheme}`,
+      description: `Processing theme: ${state.selectedTheme}`,
       metadata: {
         stepName: "download",
-        vectorDBStatus: state.vectorDBStatus,
-        totalFiles: state.uploadedFiles.length,
       },
     }),
-    contentType: "application/json",
-    headers: {
-      "X-CSRF-Token": getCsrfToken(),
-    },
-    success: function (response) {
-      // Store the task reference
-      state.processingTask = response;
+    success: function (task) {
+      state.processingTask = task;
+      saveWorkflowState();
 
-      // The real updates will come via WebSocket
-      alertify.success("Started download process");
+      // Skip directly to step 5 (processing)
+      navigateToStep(5);
 
-      // Initialize file download UI
-      $("#download-progress").css("width", "0%");
-      state.downloadedFiles = [];
+      // Mark download and read steps as completed in the background
+      state.downloadStatus = "completed";
+      state.vectorDBStatus.dataIngestion = "completed";
 
-      // Add log entry
-      addProcessingLog("Starting file download process...");
-
-      // Set first step to in_progress
-      state.vectorDBStatus.dataIngestion = "in_progress";
-      updateVectorDBStatusUI();
+      // Start file processing immediately
+      startFileProcessing();
     },
     error: function (xhr, status, error) {
-      console.error("Error starting download process:", error);
-      alertify.error(`Error starting download: ${xhr.responseJSON?.detail || error}`);
-      $("#start-download-btn").prop("disabled", false);
+      alertify.error("Failed to create task: " + (xhr.responseJSON?.detail || error));
+      $("#start-download-btn").text("Start Download").prop("disabled", false);
     },
   });
+}
+/**
+ * Process the download queue and manage parallel downloads
+ */
+function processDownloadQueue() {
+  const status = state.downloadStatus;
 
-  // Traditional UI update for backward compatibility
-  const totalFiles = state.uploadedFiles.length;
-  let downloadedCount = 0;
+  // Check if we're done with all downloads
+  if (status.completedFiles + status.failedFiles === status.totalFiles) {
+    finishDownloadProcess();
+    return;
+  }
 
-  // Simulate downloading each file (in a real app this would be an API call)
-  state.uploadedFiles.forEach((file, index) => {
-    const rowElement = $(`#files-table tbody tr[data-file-id="${file.id}"]`);
-    rowElement.find("td:last-child span").removeClass("badge-secondary").addClass("badge-warning").text("Downloading");
+  // Start new downloads if we haven't reached the max concurrent limit
+  while (status.inProgressFiles < DOWNLOAD_CONFIG.maxConcurrentDownloads && status.queue.length > 0) {
+    const file = status.queue.shift();
+    downloadFile(file);
+    status.inProgressFiles++;
+  }
+}
 
-    // Simulate API request to download the file
-    setTimeout(() => {
-      // Mark as downloaded
-      rowElement.find("td:last-child span").removeClass("badge-warning").addClass("badge-success").text("Downloaded");
-      downloadedCount++;
+/**
+ * Download an individual file
+ * @param {Object} file - The file object to download
+ */
+function downloadFile(file) {
+  const rowElement = $(`#files-table tbody tr[data-file-id="${file.id}"]`);
+  rowElement.find("td:last-child span").removeClass("badge-secondary").addClass("badge-warning").text("Downloading");
 
-      // Add to downloaded files
-      state.downloadedFiles.push(file);
-
-      // Update progress
-      const progress = Math.round((downloadedCount / totalFiles) * 100);
-      $("#download-progress").css("width", `${progress}%`);
-
-      // Add log entry
-      addProcessingLog(`Downloaded file: ${file.filename || file.title || "Unknown file"}`);
-
-      // Check if all files are downloaded
-      if (downloadedCount === totalFiles) {
-        alertify.success("All files downloaded successfully");
-        $("#download-next-btn").removeClass("d-none");
-
-        // Update vector DB status
-        state.vectorDBStatus.dataIngestion = "completed";
-        updateVectorDBStatusUI();
-
-        // Add log entry
-        addProcessingLog("All files downloaded successfully!");
-
-        // Populate file selector for reading step
-        populateFileSelector();
-      }
-    }, 1000 + index * 500); // Staggered timing for visual effect
+  // Track the start of this download
+  state.downloadStatus.activeDownloads.set(file.id, {
+    startTime: Date.now(),
+    file: file,
   });
+
+  // Simulate API call to download the file (in a real system, this would be an actual XHR request)
+  const downloadPromise = new Promise((resolve, reject) => {
+    // Simulate server download request with some randomness for realism
+    setTimeout(() => {
+      // 90% success rate for demonstration
+      if (Math.random() > 0.1) {
+        resolve(file);
+      } else {
+        reject(new Error("Network error during download"));
+      }
+    }, 1000 + Math.random() * 2000); // Random time between 1-3 seconds
+  });
+
+  downloadPromise
+    .then((file) => {
+      handleSuccessfulDownload(file);
+    })
+    .catch((error) => {
+      handleFailedDownload(file, error);
+    })
+    .finally(() => {
+      // Remove from active downloads
+      state.downloadStatus.activeDownloads.delete(file.id);
+      state.downloadStatus.inProgressFiles--;
+
+      // Continue processing queue
+      processDownloadQueue();
+    });
+}
+
+/**
+ * Handle a successful file download
+ * @param {Object} file - The successfully downloaded file
+ */
+function handleSuccessfulDownload(file) {
+  const status = state.downloadStatus;
+  const rowElement = $(`#files-table tbody tr[data-file-id="${file.id}"]`);
+
+  // Mark as downloaded in UI
+  rowElement.find("td:last-child span").removeClass("badge-warning").addClass("badge-success").text("Downloaded");
+
+  // Update state
+  status.completedFiles++;
+  state.downloadedFiles.push(file);
+
+  // Update progress
+  const progress = Math.round(((status.completedFiles + status.failedFiles) / status.totalFiles) * 100);
+  $("#download-progress").css("width", `${progress}%`);
+
+  // Add log entry
+  addProcessingLog(`Downloaded file: ${file.filename || file.title || "Unknown file"}`);
+}
+
+/**
+ * Handle a failed file download with retry logic
+ * @param {Object} file - The file that failed to download
+ * @param {Error} error - The error that occurred
+ */
+function handleFailedDownload(file, error) {
+  const status = state.downloadStatus;
+  const rowElement = $(`#files-table tbody tr[data-file-id="${file.id}"]`);
+
+  // Check if we should retry
+  const retryCount = state.downloadStatus.retryMap.get(file.id) || 0;
+
+  if (retryCount < DOWNLOAD_CONFIG.retryAttempts) {
+    // Increment retry count
+    state.downloadStatus.retryMap.set(file.id, retryCount + 1);
+
+    // Show retry status
+    rowElement
+      .find("td:last-child span")
+      .removeClass("badge-warning")
+      .addClass("badge-info")
+      .text(`Retry ${retryCount + 1}/${DOWNLOAD_CONFIG.retryAttempts}`);
+
+    addProcessingLog(
+      `Retrying download for: ${file.filename || file.title || "Unknown file"} (Attempt ${retryCount + 1})`
+    );
+
+    // Wait a bit then add back to queue
+    setTimeout(() => {
+      status.queue.push(file);
+      processDownloadQueue();
+    }, DOWNLOAD_CONFIG.retryDelay);
+  } else {
+    // Mark as failed after retries
+    rowElement
+      .find("td:last-child span")
+      .removeClass("badge-warning badge-info")
+      .addClass("badge-danger")
+      .text("Failed");
+
+    // Update state
+    status.failedFiles++;
+
+    // Update progress
+    const progress = Math.round(((status.completedFiles + status.failedFiles) / status.totalFiles) * 100);
+    $("#download-progress").css("width", `${progress}%`);
+
+    // Add log entry
+    addProcessingLog(`Failed to download file: ${file.filename || file.title || "Unknown file"} - ${error.message}`);
+    console.error(`Download failed for file ${file.id}:`, error);
+  }
+}
+
+/**
+ * Finish the download process and update the UI
+ */
+function finishDownloadProcess() {
+  const status = state.downloadStatus;
+
+  // Check if we had any successful downloads
+  if (status.completedFiles > 0) {
+    // Show completion message with success/failure counts
+    if (status.failedFiles > 0) {
+      alertify.warning(
+        `Download completed with ${status.completedFiles} files successful and ${status.failedFiles} files failed`
+      );
+    } else {
+      alertify.success("All files downloaded successfully");
+    }
+
+    // Add log entry
+    addProcessingLog(
+      `Download process completed: ${status.completedFiles} files successful, ${status.failedFiles} files failed`
+    );
+
+    // Show next button
+    $("#download-next-btn").removeClass("d-none");
+
+    // Update vector DB status
+    state.vectorDBStatus.dataIngestion = status.failedFiles === 0 ? "completed" : "partial";
+    updateVectorDBStatusUI();
+
+    // Populate file selector for reading step
+    populateFileSelector();
+  } else {
+    // All downloads failed
+    alertify.error("All file downloads failed. Please check your connection and try again.");
+    $("#start-download-btn").prop("disabled", false);
+
+    // Add log entry
+    addProcessingLog("All file downloads failed. Please retry the download process.");
+
+    // Update vector DB status
+    state.vectorDBStatus.dataIngestion = "failed";
+    updateVectorDBStatusUI();
+  }
 }
 
 /**
@@ -114,7 +331,7 @@ export function startDownloadProcess() {
 export function loadFilesTable() {
   if (state.currentThemeId) {
     $.ajax({
-      url: `/api/themes/${state.currentThemeId}/documents`,
+      url: `/api/themes/${state.currentThemeId}/files`,
       method: "GET",
       headers: {
         "X-CSRF-Token": getCsrfToken(),
@@ -184,106 +401,44 @@ function formatFileSize(bytes) {
 }
 
 /**
- * Fetch documents for a theme from the server and add them to Dropzone
- * @param {string} themeId - The ID of the theme
- * @param {Dropzone} dropzoneInstance - The Dropzone instance
+ * Cancel all active downloads and reset the download process
  */
-function fetchThemeDocuments(themeId, dropzoneInstance) {
-  console.log(`Fetching documents for theme ID: ${themeId}`);
+export function cancelDownloads() {
+  if (!state.downloadStatus || state.downloadStatus.totalFiles === 0) {
+    return;
+  }
 
-  $.ajax({
-    url: `/api/themes/${themeId}/documents`,
-    method: "GET",
-    headers: {
-      "X-CSRF-Token": getCsrfToken(),
-    },
-    success: function (documents) {
-      console.log(`Retrieved ${documents.length} documents for theme ID: ${themeId}`);
-
-      if (documents.length > 0) {
-        // Update state with the fetched documents
-        state.uploadedFiles = documents;
-
-        // Save to localStorage
-        saveWorkflowState();
-
-        // Add each document to the Dropzone UI
-        documents.forEach((fileData) => {
-          // Create a mock file object that Dropzone can use
-          const mockFile = {
-            name: fileData.title || fileData.source || "Unknown file",
-            size: fileData.size || 0,
-            status: "success",
-            accepted: true,
-          };
-
-          // Add the mock file to Dropzone
-          dropzoneInstance.emit("addedfile", mockFile);
-          dropzoneInstance.emit("complete", mockFile);
-
-          // Add a CSS class to indicate it's a restored file
-          mockFile.previewElement.classList.add("dz-success");
-          mockFile.previewElement.classList.add("dz-restored");
-          mockFile.previewElement.classList.add("dz-server-fetched");
-
-          // Set the file ID as a data attribute for later reference
-          mockFile.previewElement.setAttribute("data-file-id", fileData.id);
-
-          // Add file type icon or thumbnail if available
-          const thumbnailElement = mockFile.previewElement.querySelector(".dz-image");
-          if (thumbnailElement) {
-            const fileExtension = (fileData.title || "").split(".").pop().toLowerCase();
-            let iconClass = "fas fa-file"; // Default icon
-
-            // Map file extensions to icons
-            switch (fileExtension) {
-              case "pdf":
-                iconClass = "fas fa-file-pdf";
-                break;
-              case "doc":
-              case "docx":
-                iconClass = "fas fa-file-word";
-                break;
-              case "csv":
-              case "xls":
-              case "xlsx":
-                iconClass = "fas fa-file-excel";
-                break;
-              case "txt":
-              case "md":
-                iconClass = "fas fa-file-alt";
-                break;
-              case "html":
-              case "htm":
-                iconClass = "fas fa-file-code";
-                break;
-              default:
-                iconClass = "fas fa-file";
-            }
-
-            thumbnailElement.innerHTML = `<i class="${iconClass}" style="font-size: 2rem; margin-top: 1rem;"></i>`;
-          }
-
-          // Add file size display if available
-          const fileSizeElement = mockFile.previewElement.querySelector(".dz-size");
-          if (fileSizeElement && fileData.size) {
-            const formattedSize = formatFileSize(fileData.size);
-            fileSizeElement.innerHTML = `<span><strong>Size:</strong> ${formattedSize}</span>`;
-          }
-        });
-
-        // Update next button state
-        $("#upload-next-btn").prop("disabled", false);
-
-        alertify.success(`Loaded ${documents.length} documents from theme`);
-      } else {
-        console.log("No documents found for this theme");
-        $("#upload-next-btn").prop("disabled", true);
-      }
-    },
-    error: function (xhr, status, error) {
-      console.error("Error fetching theme documents:", xhr.responseText || error);
-      alertify.error("Failed to fetch documents from the server");
-    },
+  // Mark as canceled in UI
+  state.downloadStatus.activeDownloads.forEach((downloadInfo, fileId) => {
+    const rowElement = $(`#files-table tbody tr[data-file-id="${fileId}"]`);
+    rowElement
+      .find("td:last-child span")
+      .removeClass("badge-warning badge-info")
+      .addClass("badge-secondary")
+      .text("Canceled");
   });
+
+  // Reset download status
+  state.downloadStatus = null;
+
+  // Enable restart
+  $("#start-download-btn").prop("disabled", false);
+
+  // Add log entry
+  addProcessingLog("Download process canceled by user");
+
+  // Update vector DB status
+  state.vectorDBStatus.dataIngestion = "pending";
+  updateVectorDBStatusUI();
+
+  alertify.message("Downloads canceled");
 }
+
+/**
+ * Update state.js to include downloadStatus
+ */
+// This should be added to state.js
+/*
+// Add to the state object:
+downloadStatus: null, // Will hold download queue and progress information
+*/

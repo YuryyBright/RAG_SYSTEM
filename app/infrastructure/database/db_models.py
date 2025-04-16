@@ -8,6 +8,7 @@ from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.sql import func
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
+from pgvector.sqlalchemy import Vector
 from sqlalchemy.types import JSON
 Base = declarative_base()
 
@@ -122,7 +123,7 @@ class File(Base):
 
     id = Column(String, primary_key=True, default=generate_uuid)
     filename = Column(String, nullable=False)
-    file_path = Column(String, nullable=False)  # Path in file system
+    file_path = Column(String, nullable=False, unique=True)  # Path in file system
     content_type = Column(String, nullable=False)
     size = Column(Integer, nullable=False)
     is_public = Column(Boolean, default=False)
@@ -158,7 +159,7 @@ class Document(Base):
 
     id = Column(String, primary_key=True, default=generate_uuid)
     content = Column(Text, nullable=False)
-    embedding = Column(LargeBinary, nullable=True)  # Store embedding as binary
+    embedding = Column(Vector(768)) # Store embedding as binary
     file_id = Column(String, ForeignKey("files.id"), nullable=True)
     owner_id = Column(String, ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

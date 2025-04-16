@@ -2,6 +2,7 @@
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from api.schemas.files import FileResponse
 from app.api.dependencies import get_theme_use_case
 from app.api.schemas.theme import (
     ThemeCreate,
@@ -397,7 +398,7 @@ async def get_theme_documents(
         )
 
 
-@router.get("/{theme_id}/files", response_model=List[dict])
+@router.get("/{theme_id}/files", response_model=List[FileResponse])
 async def get_theme_files(
         theme_id: str,
         user: dict = Depends(get_current_active_user),
@@ -422,22 +423,24 @@ async def get_theme_files(
             )
 
         # Get documents first to get their IDs
-        documents = await theme_use_case.get_theme_files(theme_id)
+        files_theme = await theme_use_case.get_theme_files(theme_id)
 
         # Create a list to hold file data
         files = []
 
         # Process each document to extract file info
-        for doc in documents:
+        for file in files_theme:
             # Extract relevant file information
             file_info = {
-                "id": doc.id,
-                "filename": doc.metadata.get("filename", doc.metadata.get("title", "Untitled")),
-                "title": doc.metadata.get("title", "Untitled"),
-                "source": doc.metadata.get("source", "Unknown"),
-                "size": doc.metadata.get("size", 0),
-                "created_at": doc.created_at,
-                "updated_at": doc.updated_at
+                "id": file.id,
+                "filename": file.filename,
+                "title": file.filename,  # or extract from a title metadata field if you store it
+                "source": "Unknown",  # update if you store this in the File model or metadata
+                "size": file.size,
+                'content_type':file.content_type,
+                'is_public': file.is_public,
+                "created_at": file.created_at.isoformat() if file.created_at else None,
+                "updated_at": file.updated_at.isoformat() if file.updated_at else None,
             }
 
             files.append(file_info)

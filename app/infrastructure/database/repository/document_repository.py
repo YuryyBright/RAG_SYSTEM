@@ -64,7 +64,7 @@ class DocumentRepository:
         )
         return result.scalars().all()
 
-    async def create_document(self, **kwargs) -> Document:
+    async def create_document(self, **kwargs) -> str:
         """
         Create a new document record in the database.
 
@@ -79,14 +79,14 @@ class DocumentRepository:
             The created Document object.
         """
 
-        if "owner_id" not in kwargs or "content" not in kwargs:
-            raise ValueError("Both 'owner_id' and 'content' are required.")
+        if "content" not in kwargs:
+            raise ValueError("Both 'owner_id' 'content' are required.")
         doc = Document(**kwargs)
         self.db.add(doc)
         await self.db.commit()
         await self.db.refresh(doc)
         logger.info(f"Created document (ID: {doc.id}) for user: {doc.owner_id}")
-        return doc
+        return doc.id
 
     async def delete_document(self, document_id: str) -> bool:
         """

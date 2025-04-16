@@ -20,7 +20,7 @@ services:
     restart: always
 
   db:
-    image: postgres:14
+    image: ankane/pgvector
     container_name: rag_postgres
     env_file:
       - .env
