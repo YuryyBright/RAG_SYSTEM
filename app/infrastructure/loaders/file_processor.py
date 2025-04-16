@@ -1,7 +1,6 @@
 # app/infrastructure/loaders/file_processor.py
 import os
 import uuid
-import json
 import logging
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime
@@ -9,10 +8,16 @@ from pathlib import Path
 from dataclasses import asdict
 from langdetect import detect
 from langdetect.lang_detect_exception import LangDetectException
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.entities.document import Document
 from core.entities.processed_file import ProcessedFile
+from infrastructure.database.repository.file_repository import FileRepository
 from utils.logger_util import get_logger
+from .readers.reader_factory import ReaderFactory
+from .readers.base_reader import BaseReader
+from infrastructure.cleaners.cleaner_factory import CleanerFactory
+from infrastructure.cleaners.base_cleaner import BaseCleaner  # Import BaseCleaner
 
 logger = get_logger(__name__)
 
@@ -26,33 +31,16 @@ class FileProcessor:
     unreadable files and language detection failures.
     """
 
-    def __init__(self):
-        self.supported_extensions = [
-            ".txt", ".md", ".json", ".html", ".csv", ".pdf",
-            ".docx", ".xlsx", ".pptx", ".rtf", ".xml", ".yaml", ".yml"
-        ]
-
+    def __init__(self, file_repository: FileRepository):
+        self.supported_extensions = {
+            "txt", "md", "markdown", "html", "htm", "pdf", "doc", "docx",
+            "csv", "xls", "xlsx", "json", "xml", "ppt", "pptx", "rtf", "yaml", "yml"
+        }
         self.successful_files = []
         self.unreadable_files = []
         self.language_detection_failures = []
         self.files_with_warnings = []
-
-        # Map extensions to their handler methods
-        self.extension_handlers = {
-            ".txt": self._read_text_file,
-            ".md": self._read_text_file,
-            ".json": self._read_json_file,
-            ".html": self._read_html_file,
-            ".csv": self._read_csv_file,
-            ".pdf": self._read_pdf_file,
-            ".docx": self._read_docx_file,
-            ".xlsx": self._read_xlsx_file,
-            ".pptx": self._read_pptx_file,
-            ".rtf": self._read_rtf_file,
-            ".xml": self._read_xml_file,
-            ".yaml": self._read_yaml_file,
-            ".yml": self._read_yaml_file,
-        }
+        self.file_repository = file_repository
 
     async def process_directory(
             self,
@@ -98,19 +86,19 @@ class FileProcessor:
 
             suffix = file_path.suffix.lower()
 
-            # Skip unsupported file types
-            if suffix not in self.extension_handlers:
+            # Skip files with unsupported extensions
+            if suffix.lstrip('.') not in self.supported_extensions:
                 logger.info(f"Skipping unsupported file type: {file_path}")
                 continue
 
             try:
-                processed_file = await self._process_file(file_path, metadata)
+                processed_file = await self.process_file(file_path, metadata)
 
                 # Handle the processed file based on its status
                 if processed_file.is_readable:
-                    doc = self._convert_to_document(processed_file)
-                    documents.append(doc)
-
+                    doc = await self._convert_to_document(processed_file, file_path)
+                    if doc:  # Only add valid documents
+                        documents.append(doc)
                     has_warnings = False
 
                     # Check for language detection failures
@@ -128,7 +116,7 @@ class FileProcessor:
                         self.successful_files.append(processed_file)
                 else:
                     self.unreadable_files.append(processed_file)
-
+                logger.info(f"Finished processing file {file_path}")
             except Exception as e:
                 logger.error(f"Failed to process {file_path}: {e}")
                 # Create a processed file record for the failure
@@ -149,7 +137,7 @@ class FileProcessor:
         report = self._generate_enhanced_report()
         return documents, report
 
-    async def _process_file(self, file_path: Path, metadata: Optional[Dict[str, Any]] = None) -> ProcessedFile:
+    async def process_file(self, file_path: Path, metadata: Optional[Dict[str, Any]] = None) -> ProcessedFile:
         """
         Process a single file: read content and detect language.
 
@@ -185,15 +173,19 @@ class FileProcessor:
         is_readable = True
 
         try:
-            # Get the appropriate handler for this file extension
-            handler = self.extension_handlers.get(file_path.suffix.lower())
-            if handler:
-                content = handler(file_path)
-            else:
-                is_readable = False
-                meta["error"] = f"No handler for file extension: {file_path.suffix}"
-                meta["has_warnings"] = True
+            # Get appropriate reader for this file
+            reader = ReaderFactory.get_reader(file_path)
+            content = reader.read(file_path)
 
+            # If needed, apply content-specific cleaner
+            extension = file_path.suffix.lower().lstrip('.')
+            cleaner = CleanerFactory.get_cleaner(extension)
+            content = cleaner.clean(content)
+
+        except ValueError as e:
+            is_readable = False
+            meta["error"] = f"No reader available: {str(e)}"
+            meta["has_warnings"] = True
         except Exception as e:
             is_readable = False
             meta["error"] = str(e)
@@ -231,19 +223,21 @@ class FileProcessor:
             metadata=meta
         )
 
-    def _convert_to_document(self, pf: ProcessedFile) -> Document:
+    async def _convert_to_document(self, pf: ProcessedFile, file_path: Path) -> Optional[Document]:
         """
         Convert a ProcessedFile to a Document for vector database storage.
 
         Parameters
         ----------
         pf : ProcessedFile
-            The processed file to convert.
+            Processed file to convert
+        file_path : Path
+            Path to the original file
 
         Returns
         -------
-        Document
-            Document entity ready for vector database.
+        Optional[Document]
+            Document object or None if conversion fails
         """
         # Copy metadata to avoid modifying the original
         meta = pf.metadata.copy() if pf.metadata else {}
@@ -256,7 +250,23 @@ class FileProcessor:
         if not pf.is_language_detected:
             meta["language_detection_failed"] = True
 
-        return Document(id=pf.id, content=pf.content, metadata=meta)
+        # Fetch file from DB using path
+        try:
+            file_record = await self.file_repository.get_file_by_path(str(file_path))
+            if file_record:
+                return Document(
+                    id=pf.id,
+                    content=pf.content,
+                    metadata=meta,
+                    file_id=file_record.id,
+                    owner_id=file_record.owner_id,
+                    theme_id=file_record.theme_id
+                )
+            logger.warning(f"File not found in database: {str(file_path)}")
+            return None
+        except Exception as e:
+            logger.warning(f"Failed to fetch file from DB for path {meta.get('source')}: {e}")
+            return None
 
     def _generate_enhanced_report(self) -> Dict[str, Any]:
         """
@@ -331,152 +341,3 @@ class FileProcessor:
             warnings.append(f"Language detection issue: {metadata['language_error']}")
         if metadata.get("error"):
             warnings.append(f"Processing error: {metadata['error']}")
-
-        return warnings
-
-    # === File readers ===
-    def _read_text_file(self, path: Path) -> str:
-        """Read content from text files."""
-        return path.read_text(encoding="utf-8", errors="replace")
-
-    def _read_json_file(self, path: Path) -> str:
-        """Read and extract text from JSON files."""
-        with open(path, "r", encoding="utf-8", errors="replace") as f:
-            try:
-                data = json.load(f)
-                if isinstance(data, dict):
-                    # Try to extract content field or stringify the dict
-                    return data.get("content", json.dumps(data, ensure_ascii=False))
-                elif isinstance(data, list):
-                    # Stringify each item in the list
-                    return "\n".join(json.dumps(item, ensure_ascii=False) for item in data)
-                return str(data)
-            except json.JSONDecodeError as e:
-                # Handle invalid JSON
-                return f"Invalid JSON file: {str(e)}"
-
-    def _read_html_file(self, path: Path) -> str:
-        """Extract text content from HTML files."""
-        try:
-            from bs4 import BeautifulSoup
-            content = path.read_text(encoding="utf-8", errors="replace")
-            soup = BeautifulSoup(content, "html.parser")
-            # Remove script and style elements
-            for script in soup(["script", "style"]):
-                script.extract()
-            # Get text
-            return soup.get_text(separator=" ", strip=True)
-        except ImportError:
-            # Fallback to simple HTML parser if BeautifulSoup is not available
-            from html.parser import HTMLParser
-            class SimpleHTMLParser(HTMLParser):
-                def __init__(self):
-                    super().__init__()
-                    self.result = []
-
-                def handle_data(self, d):
-                    self.result.append(d)
-
-            parser = SimpleHTMLParser()
-            parser.feed(path.read_text(encoding="utf-8", errors="replace"))
-            return " ".join(parser.result)
-
-    def _read_csv_file(self, path: Path) -> str:
-        """Read and format text from CSV files."""
-        import csv
-        try:
-            with open(path, newline='', encoding='utf-8', errors="replace") as f:
-                reader = csv.reader(f)
-                return "\n".join([", ".join(row) for row in reader])
-        except Exception as e:
-            return f"Error reading CSV: {str(e)}"
-
-    def _read_pdf_file(self, path: Path) -> str:
-        """Extract text from PDF files."""
-        try:
-            from PyPDF2 import PdfReader
-            reader = PdfReader(path)
-            text = ""
-            for page in reader.pages:
-                page_text = page.extract_text()
-                if page_text:
-                    text += page_text + "\n"
-            return text
-        except Exception as e:
-            return f"Error reading PDF: {str(e)}"
-
-    def _read_docx_file(self, path: Path) -> str:
-        """Extract text from DOCX files."""
-        try:
-            from docx import Document
-            doc = Document(path)
-            return "\n".join(paragraph.text for paragraph in doc.paragraphs)
-        except Exception as e:
-            return f"Error reading DOCX: {str(e)}"
-
-    def _read_xlsx_file(self, path: Path) -> str:
-        """Extract text from XLSX files."""
-        try:
-            from openpyxl import load_workbook
-            wb = load_workbook(path, data_only=True)
-            result = []
-            for sheet in wb.worksheets:
-                for row in sheet.iter_rows():
-                    result.append(", ".join(str(cell.value) if cell.value is not None else "" for cell in row))
-            return "\n".join(result)
-        except Exception as e:
-            return f"Error reading XLSX: {str(e)}"
-
-    def _read_pptx_file(self, path: Path) -> str:
-        """Extract text from PPTX files."""
-        try:
-            from pptx import Presentation
-            prs = Presentation(path)
-            text = []
-            for slide in prs.slides:
-                for shape in slide.shapes:
-                    if hasattr(shape, "text"):
-                        text.append(shape.text)
-            return "\n".join(text)
-        except Exception as e:
-            return f"Error reading PPTX: {str(e)}"
-
-    def _read_rtf_file(self, path: Path) -> str:
-        """Extract text from RTF files."""
-        try:
-            import striprtf.striprtf as striprtf
-            with open(path, 'rb') as f:
-                rtf_content = f.read().decode('utf-8', errors="replace")
-                return striprtf.rtf_to_text(rtf_content)
-        except Exception as e:
-            return f"Error reading RTF: {str(e)}"
-
-    def _read_xml_file(self, path: Path) -> str:
-        """Extract text from XML files."""
-        try:
-            import xml.etree.ElementTree as ET
-            tree = ET.parse(path)
-            root = tree.getroot()
-
-            # Function to extract text from element and its children
-            def extract_text(element):
-                text = element.text or ""
-                for child in element:
-                    text += extract_text(child)
-                if element.tail:
-                    text += element.tail
-                return text
-
-            return extract_text(root)
-        except Exception as e:
-            return f"Error reading XML: {str(e)}"
-
-    def _read_yaml_file(self, path: Path) -> str:
-        """Extract text from YAML files."""
-        try:
-            import yaml
-            with open(path, 'r', encoding='utf-8', errors="replace") as f:
-                data = yaml.safe_load(f)
-                return yaml.dump(data, default_flow_style=False)
-        except Exception as e:
-            return f"Error reading YAML: {str(e)}"

@@ -16,6 +16,7 @@ from fastapi import (
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.middleware_auth import get_current_active_user
 # Schemas for creating and updating tasks/logs
 from api.schemas.task import (
     CreateTaskRequest,
@@ -38,7 +39,7 @@ from app.api.dependencies import (
 
 # A logger utility for debugging
 from app.utils.logger_util import get_logger
-from core.services.task_services import Task
+from core.services.task_services import Task, TaskManager
 
 logger = get_logger(__name__)
 router = APIRouter()
@@ -49,6 +50,7 @@ async def create_task(
     request: CreateTaskRequest,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_async_db),
+    user: dict = Depends(get_current_active_user),
     task_repository: TaskRepository = Depends(get_task_repository),
     theme_use_case=Depends(get_theme_use_case),
     # processing_service: ProcessingService = Depends(get_processing_service),
@@ -61,26 +63,6 @@ async def create_task(
       2. Creates a domain-level Task object.
       3. Persists the Task to the database via TaskRepository.
       4. Optionally schedules background work if a recognized step is provided.
-
-    Parameters
-    ----------
-    request : CreateTaskRequest
-        The request body for creating a task, including the task type, theme_id, step, etc.
-    background_tasks : BackgroundTasks
-        FastAPI's background task manager, used to schedule processing asynchronously.
-    db : AsyncSession
-        SQLAlchemy AsyncSession for database access.
-    task_repository : TaskRepository
-        Repository for Task-related database operations.
-    theme_use_case : ThemeUseCase
-        Example use-case class for validating themes (if theme IDs need to exist).
-    # processing_service : ProcessingService
-    #     A service that actually handles downloading, reading, embedding, etc.
-
-    Returns
-    -------
-    Task
-        The created domain-level Task object. Its `id` is assigned after DB persistence.
     """
     # 1. Validate the task type
     try:
@@ -94,53 +76,55 @@ async def create_task(
         if not existing_theme:
             raise HTTPException(status_code=404, detail="Specified theme does not exist.")
 
-    # 3. Create a domain-level Task
-    domain_task = Task(
+    # Create metadata with proper null handling
+    metadata = {
+        "step": request.step,
+        "files": request.files
+    }
+    if request.metadata:
+        metadata.update(request.metadata)
+
+    # 3. Create task using the TaskManager
+    task_manager = TaskManager(db)
+    domain_task = await task_manager.create_task(
         task_type=task_type,
-        user_id="current_user_id",  # Replace with real user ID from your auth system
+        user_id=user.id,
         theme_id=request.theme_id,
         description=request.description or f"Processing theme {request.theme_id}",
-        metadata={
-            "step": request.step,
-            "files": request.files,
-            **request.metadata
-        },
+        metadata=metadata
     )
 
-    # For demonstration: use a simple numeric step system
-    if request.step == "download":
-        domain_task.current_step = 0
-    elif request.step == "read":
-        domain_task.current_step = 1
-    elif request.step == "embed":
-        domain_task.current_step = 2
-    # ... handle additional steps if needed
-
-    # 4. Persist the task in DB
-    db_task_model = await task_repository.create(domain_task)
-    domain_task.id = db_task_model.id
+    # 4. Set the current step based on step name
+    step_mapping = {
+        "download": 0,
+        "read": 1,
+        "embed": 2
+    }
+    if request.step in step_mapping:
+        domain_task.current_step = step_mapping[request.step]
+        # Update task with new step
+        await task_repository.update(
+            task_id=domain_task.id,
+            status=domain_task.status.value,
+            progress=domain_task.progress,
+            started_at=domain_task.started_at,
+            completed_at=domain_task.completed_at,
+            error_message=domain_task.error_message,
+            logs=domain_task.logs,
+            task_metadata=domain_task.metadata,
+            steps=domain_task.steps,
+            current_step=domain_task.current_step,
+        )
 
     # 5. Optionally schedule background work based on the step
-    # if request.step == "download":
-    #     background_tasks.add_task(
-    #         processing_service.process_downloads,
-    #         task_id=domain_task.id,
+    # if request.step in step_mapping and processing_service:
+    #     task_manager.run_task_in_background(
+    #         background_tasks,
+    #         domain_task,
+    #         processing_service.process_step,
+    #         step=request.step,
     #         file_ids=request.files
     #     )
-    # elif request.step == "read":
-    #     background_tasks.add_task(
-    #         processing_service.process_text_extraction,
-    #         task_id=domain_task.id,
-    #         file_ids=request.files
-    #     )
-    # elif request.step == "embed":
-    #     background_tasks.add_task(
-    #         processing_service.process_embeddings,
-    #         task_id=domain_task.id,
-    #         file_ids=request.files
-    #     )
-    # else:
-    #     logger.warning(f"No specific process defined for step '{request.step}'")
 
     return domain_task
 
@@ -150,40 +134,19 @@ async def get_tasks(
     user_id: Optional[str] = None,
     theme_id: Optional[str] = None,
     status: Optional[str] = None,
-    task_repository: TaskRepository = Depends(get_task_repository)
+    db: AsyncSession = Depends(get_async_db),
 ):
     """
     Retrieve tasks based on optional filter criteria (user_id, theme_id, status).
-
-    Parameters
-    ----------
-    user_id : str, optional
-        If provided, filter tasks by this user ID.
-    theme_id : str, optional
-        If provided, filter tasks by this theme ID.
-    status : str, optional
-        If provided, filter tasks by this status (pending, in_progress, etc.).
-    task_repository : TaskRepository
-        Repository for Task-related DB operations.
-
-    Returns
-    -------
-    List[Task]
-        A list of domain-level Task objects that match the filters.
     """
-    tasks: List[Task] = []
+    task_manager = TaskManager(db)
+    tasks = []
 
-    # Filter by theme_id
+    # Filter tasks by criteria
     if theme_id:
-        db_tasks = await task_repository.get_by_theme(theme_id)
-        tasks = [await _to_domain_task(db_task) for db_task in db_tasks]
-
-    # Filter by user_id (only if theme_id not used)
+        tasks = await task_manager.get_theme_tasks(theme_id)
     elif user_id:
-        db_tasks = await task_repository.get_by_user(user_id)
-        tasks = [await _to_domain_task(db_task) for db_task in db_tasks]
-
-    # If no filters are provided, return an empty list or some default behavior
+        tasks = await task_manager.get_user_tasks(user_id)
     else:
         return []
 
@@ -202,33 +165,19 @@ async def get_tasks(
 @router.get("/{task_id}", response_model=TaskResponse)
 async def get_task(
     task_id: str,
-    task_repository: TaskRepository = Depends(get_task_repository)
+    db: AsyncSession = Depends(get_async_db),
 ):
     """
     Retrieve a single task by its unique ID.
-
-    Parameters
-    ----------
-    task_id : str
-        The ID of the task to retrieve.
-    task_repository : TaskRepository
-        Repository for Task-related DB operations.
-
-    Raises
-    ------
-    HTTPException
-        If the task does not exist (404).
-
-    Returns
-    -------
-    Task
-        The requested domain-level Task object.
     """
-    db_task = await task_repository.get_by_id(task_id)
-    if not db_task:
+    task_manager = TaskManager(db)
+    task = await task_manager.get_task(task_id)
+
+    if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
-    return await _to_domain_task(db_task)
+    return task
+
 
 @router.post("/{task_id}/resume")
 async def resume_task(
@@ -238,25 +187,34 @@ async def resume_task(
 ):
     """
     Resume a paused task and mark it as in_progress again.
-
-    Parameters:
-    - task_id: ID of the task to resume
-
-    Returns:
-    - JSON confirmation response
     """
-    db_task = await task_repository.get_by_id(task_id)
-    if not db_task:
+    task_manager = TaskManager(db)
+    task = await task_manager.get_task(task_id)
+
+    if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
-    if db_task.status != TaskStatusEnum.PAUSED:
+    if task.status != TaskStatusEnum.PAUSED:
         raise HTTPException(status_code=400, detail="Only paused tasks can be resumed")
 
-    domain_task = await _to_domain_task(db_task)
-    domain_task.status = TaskStatusEnum.IN_PROGRESS
-    await task_repository.update(domain_task)
+    task.status = TaskStatusEnum.IN_PROGRESS
+    task.add_log("Task resumed")
+
+    await task_repository.update(
+        task_id=task.id,
+        status=task.status.value,
+        progress=task.progress,
+        started_at=task.started_at,
+        completed_at=task.completed_at,
+        error_message=task.error_message,
+        logs=task.logs,
+        task_metadata=task.metadata,
+        steps=task.steps,
+        current_step=task.current_step,
+    )
 
     return {"status": "success", "message": f"Task {task_id} resumed"}
+
 
 @router.post("/embed-step", response_model=dict)
 async def start_embed_step(
@@ -264,77 +222,67 @@ async def start_embed_step(
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_async_db),
     task_repository: TaskRepository = Depends(get_task_repository),
+    # processing_service = Depends(get_processing_service),
 ):
     """
     Start the embedding step for a task.
-
-    Parameters:
-    - task_id: Task ID to update and begin embedding
-
-    Returns:
-    - JSON message
     """
-    db_task = await task_repository.get_by_id(task_id)
-    if not db_task:
+    task_manager = TaskManager(db)
+    task = await task_manager.get_task(task_id)
+
+    if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
-    domain_task = await _to_domain_task(db_task)
-    domain_task.current_step = 2  # 2 = embed
-    domain_task.status = TaskStatusEnum.IN_PROGRESS
+    task.current_step = 2  # 2 = embed
+    task.status = TaskStatusEnum.IN_PROGRESS
+    task.add_log("Starting embedding process")
 
-    await task_repository.update(domain_task)
+    await task_repository.update(
+        task_id=task.id,
+        status=task.status.value,
+        progress=task.progress,
+        started_at=task.started_at,
+        completed_at=task.completed_at,
+        error_message=task.error_message,
+        logs=task.logs,
+        task_metadata=task.metadata,
+        steps=task.steps,
+        current_step=task.current_step,
+    )
 
-    # ✅ You can add background job logic here if using RQ/Celery
-    # background_tasks.add_task(embed_worker.process, task_id=task_id)
+    # Schedule background task for embedding
+    # if processing_service:
+    #     task_manager.run_task_in_background(
+    #         background_tasks,
+    #         task,
+    #         processing_service.process_embeddings,
+    #         task_id=task_id
+    #     )
 
     return {"status": "success", "message": "Embedding process started."}
+
+
 @router.post("/{task_id}/cancel")
 async def cancel_task(
     task_id: str,
-    task_repository: TaskRepository = Depends(get_task_repository),
-    # processing_service: ProcessingService = Depends(get_processing_service),
+    db: AsyncSession = Depends(get_async_db),
 ):
     """
     Cancel a running or pending task.
-
-    Parameters
-    ----------
-    task_id : str
-        The ID of the task to cancel.
-    task_repository : TaskRepository
-        Repository for Task-related DB operations.
-    # processing_service : ProcessingService
-    #     Service for cancelling tasks that may be running asynchronously.
-
-    Raises
-    ------
-    HTTPException
-        If the task does not exist, or if its status is not cancellable.
-
-    Returns
-    -------
-    dict
-        A JSON response indicating the result of the cancellation.
     """
-    db_task = await task_repository.get_by_id(task_id)
-    if not db_task:
-        raise HTTPException(status_code=404, detail="Task not found")
+    task_manager = TaskManager(db)
+    success = await task_manager.cancel_task(task_id)
 
-    # Only PENDING or IN_PROGRESS tasks can be cancelled
-    cancellable_statuses = (TaskStatusEnum.PENDING.value, TaskStatusEnum.IN_PROGRESS.value)
-    if db_task.status not in cancellable_statuses:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Cannot cancel task with status {db_task.status}"
-        )
-
-    # If you have a background worker system, you could signal that system here:
-    # await processing_service.cancel_task(task_id)
-
-    # Convert to domain, cancel it, then save
-    domain_task = await _to_domain_task(db_task)
-    domain_task.cancel()
-    await task_repository.update(domain_task)
+    if not success:
+        # Get the task to determine why cancellation failed
+        task = await task_manager.get_task(task_id)
+        if not task:
+            raise HTTPException(status_code=404, detail="Task not found")
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot cancel task with status {task.status.value}"
+            )
 
     return {"status": "success", "message": f"Task {task_id} has been cancelled"}
 
@@ -343,78 +291,31 @@ async def cancel_task(
 async def add_task_log(
     task_id: str,
     log_entry: TaskLogEntry,
-    task_repository: TaskRepository = Depends(get_task_repository)
+    db: AsyncSession = Depends(get_async_db),
+    task_repository: TaskRepository = Depends(get_task_repository),
 ):
     """
     Append a log entry to the specified Task.
-
-    Parameters
-    ----------
-    task_id : str
-        The ID of the task to log to.
-    log_entry : TaskLogEntry
-        A simple schema containing the new log message.
-    task_repository : TaskRepository
-        Repository for Task-related DB operations.
-
-    Raises
-    ------
-    HTTPException
-        If the task is not found.
-
-    Returns
-    -------
-    dict
-        A confirmation message indicating the log entry was added.
     """
-    db_task = await task_repository.get_by_id(task_id)
-    if not db_task:
+    task_manager = TaskManager(db)
+    task = await task_manager.get_task(task_id)
+
+    if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
-    domain_task = await _to_domain_task(db_task)
+    task.add_log(log_entry.log_entry)
 
-    # Here we use a random ID as a timestamp for demonstration only.
-    # Normally, you'd add a real datetime string:
-    domain_task.logs.append({
-        "timestamp": str(uuid.uuid4()),
-        "message": log_entry.log_entry
-    })
-
-    await task_repository.update(domain_task)
-    return {"status": "success", "message": "Log entry added"}
-
-
-async def _to_domain_task(db_task_model) -> Task:
-    """
-    Convert a database model into a domain-level Task object.
-
-    Parameters
-    ----------
-    db_task_model : ProcessingTask
-        The ORM model from the database.
-
-    Returns
-    -------
-    Task
-        A domain-level Task object with matching fields.
-    """
-    domain_task = Task(
-        task_type=TaskTypeEnum(db_task_model.task_type),
-        user_id=db_task_model.user_id,
-        theme_id=db_task_model.theme_id,
-        description=db_task_model.description,
-        metadata=db_task_model.parsed_metadata,  # e.g. JSON-loaded object
+    await task_repository.update(
+        task_id=task.id,
+        status=task.status.value,
+        progress=task.progress,
+        started_at=task.started_at,
+        completed_at=task.completed_at,
+        error_message=task.error_message,
+        logs=task.logs,
+        task_metadata=task.metadata,
+        steps=task.steps,
+        current_step=task.current_step,
     )
-    # Populate database-assigned fields
-    domain_task.id = db_task_model.id
-    domain_task.status = TaskStatusEnum(db_task_model.status)
-    domain_task.progress = db_task_model.progress
-    domain_task.created_at = db_task_model.created_at
-    domain_task.started_at = db_task_model.started_at
-    domain_task.completed_at = db_task_model.completed_at
-    domain_task.error_message = db_task_model.error_message
-    domain_task.logs = db_task_model.parsed_logs    # e.g. JSON-loaded logs
-    domain_task.steps = db_task_model.parsed_steps  # e.g. JSON-loaded steps
-    domain_task.current_step = db_task_model.current_step
 
-    return domain_task
+    return {"status": "success", "message": "Log entry added"}

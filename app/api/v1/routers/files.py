@@ -23,11 +23,11 @@ from api.schemas.files import (
 )
 from app.core.use_cases.file_processing import FileProcessingUseCase
 from app.api.dependencies import file_processing_use_case
+from config import settings
 from infrastructure.database.repository.file_repository import FileRepository
 
 router = APIRouter()
 file_manager = FileManager()
-
 
 @router.post("/", response_model=List[FileResponseSchema])
 async def upload_files(
@@ -73,47 +73,54 @@ async def upload_files(
 
 
 @router.post("/process", response_model=FileProcessingResponse)
-async def process_files(
-        request: FileProcessingRequest,
-        current_user: User = Depends(get_current_active_user),
-        file_processing_use_case_: FileProcessingUseCase = Depends(file_processing_use_case),
-        db: Session = Depends(get_async_db)
+async def process_files_with_chunking(
+    request: FileProcessingRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_async_db),
+    file_processing_use_case_: FileProcessingUseCase = Depends(file_processing_use_case)
 ):
     """
-    Process files in a directory for the RAG system.
+    Read files from `directory_path`, chunk them, save to the document store,
+    and create embeddings in the vector index. Returns a detailed report.
 
-    This endpoint:
-    1. Reads different types of files (marking unreadable files as warnings)
-    2. Detects language (marking detection failures as warnings)
-    3. Prepares text for vector database storage
-    4. Provides a detailed report with recommendations for files with warnings
+    Steps:
+      1. Read and chunk files
+      2. Save each chunk to the document store
+      3. Embed chunks and store vectors
+      4. Return a summary report
     """
+    user_theme_path = settings.UPLOAD_DIR / str(current_user.id) / request.theme_id
+
+    if not user_theme_path.exists() or not user_theme_path.is_dir():
+        raise HTTPException(status_code=404, detail="Theme directory does not exist.")
     try:
-        # Process the directory
-        documents, report = await file_processing_use_case_.process_directory(
-            request.directory_path,
+        # Call our new integrated process
+        report = await file_processing_use_case_.process_and_vectorize_directory(
+            directory_path=str(user_theme_path),
             recursive=request.recursive,
-            metadata=request.additional_metadata
+            metadata=request.additional_metadata or {},
+            theme_id=request.theme_id,
+            chunk_size=request.chunk_size,
+            chunk_overlap=request.chunk_overlap
         )
 
-        # Analyze document quality
-        quality_analysis = await file_processing_use_case_.analyze_document_quality(documents)
-
-        # Add quality analysis to the report
-        report["quality_analysis"] = quality_analysis
-
-        # Create the response
+        # Construct the response schema
+        summary = report["summary"]
         return FileProcessingResponse(
             success=True,
-            message=f"Successfully processed {len(documents)} documents from {request.directory_path}",
-            documents_count=len(documents),
+            message=(
+                f"Successfully processed {summary['successful_files']} files, "
+                f"created {summary['total_chunks_created']} chunks, "
+                f"vectorized {summary['chunks_vectorized']} chunks."
+            ),
+            documents_count=summary["successful_files"],
             report=FileProcessingReport(
                 summary=ProcessedFileSummary(
-                    total_files=report["summary"]["total_files"],
-                    successful=report["summary"]["successful"],
-                    unreadable=report["summary"]["unreadable"],
-                    language_detection_failures=report["summary"]["language_detection_failures"],
-                    files_with_warnings=report["summary"]["files_with_warnings"]
+                    total_files=summary["total_files"],
+                    successful=summary["successful_files"],
+                    unreadable=summary["unreadable_files"],
+                    language_detection_failures=summary["language_detection_failures"],
+                    files_with_warnings=summary["files_with_warnings"]
                 ),
                 details=report["details"],
                 recommendations=FileProcessingRecommendations(
@@ -126,6 +133,7 @@ async def process_files(
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"An error occurred during file processing: {str(e)}")
+
 
 
 @router.post("/vectorize", response_model=FileProcessingResponse)

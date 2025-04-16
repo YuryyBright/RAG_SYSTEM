@@ -37,3 +37,31 @@ class EmbeddingInterface(ABC):
             List[float]: A list of floats representing the embedding of the query.
         """
         pass
+
+    @abstractmethod
+    async def get_embedding(self, text: str) -> List[float]:
+        """
+        Generate an embedding for a single text input.
+
+        This is useful when embedding is required without wrapping it in a Document object.
+
+        Args:
+            text (str): The input text to embed.
+
+        Returns:
+            List[float]: Embedding vector of the input text.
+        """
+        pass
+
+    @abstractmethod
+    async def get_embeddings(self, texts: List[str]) -> List[List[float]]:
+        """
+        Generate embeddings for a list of text inputs.
+
+        Args:
+            texts (List[str]): List of text strings to embed.
+
+        Returns:
+            List[List[float]]: List of embedding vectors for the input texts.
+        """
+        pass

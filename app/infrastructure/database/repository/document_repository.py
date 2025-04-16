@@ -1,6 +1,6 @@
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.infrastructure.database.db_models import Document
 from app.utils.logger_util import get_logger
@@ -64,7 +64,7 @@ class DocumentRepository:
         )
         return result.scalars().all()
 
-    async def create_document(self, **kwargs) -> Document:
+    async def create_document(self, **kwargs) -> str:
         """
         Create a new document record in the database.
 
@@ -79,14 +79,14 @@ class DocumentRepository:
             The created Document object.
         """
 
-        if "owner_id" not in kwargs or "content" not in kwargs:
-            raise ValueError("Both 'owner_id' and 'content' are required.")
+        if "content" not in kwargs:
+            raise ValueError("'content' are required.")
         doc = Document(**kwargs)
         self.db.add(doc)
         await self.db.commit()
         await self.db.refresh(doc)
         logger.info(f"Created document (ID: {doc.id}) for user: {doc.owner_id}")
-        return doc
+        return doc.id
 
     async def delete_document(self, document_id: str) -> bool:
         """
@@ -158,3 +158,67 @@ class DocumentRepository:
         await self.db.commit()
         logger.info(f"Deleted {count} document(s) for file: {file_id}")
         return count
+
+    async def get_documents(self, ids: List[str]) -> List[Document]:
+        """
+        Retrieve documents by a list of IDs.
+        """
+        result = await self.db.execute(
+            select(Document).where(Document.id.in_(ids))
+        )
+        return result.scalars().all()
+
+    async def get_all_documents(self, owner_id: Optional[str] = None) -> List[Document]:
+        """
+        Retrieve all documents, optionally filtered by owner.
+        """
+        stmt = select(Document)
+        if owner_id:
+            stmt = stmt.where(Document.owner_id == owner_id)
+
+        result = await self.db.execute(stmt)
+        return result.scalars().all()
+
+    async def update_document(
+            self, document_id: str, content: str, embedding: List[float], metadata: Dict[str, Any]
+    ) -> bool:
+        """
+        Update document fields.
+        """
+        doc = await self.get_by_id(document_id)
+        if not doc:
+            return False
+
+        doc.content = content
+        doc.embedding = embedding
+        doc.metadata = metadata
+
+        await self.db.commit()
+        return True
+
+    async def count_documents(self, filter_criteria: Dict[str, Any] = None) -> int:
+        """
+        Count documents based on filter criteria.
+        """
+        stmt = select(func.count()).select_from(Document)
+
+        if filter_criteria:
+            conditions = []
+            for key, value in filter_criteria.items():
+                if hasattr(Document, key):
+                    conditions.append(getattr(Document, key) == value)
+            if conditions:
+                stmt = stmt.where(and_(*conditions))
+
+        result = await self.db.execute(stmt)
+        return result.scalar()
+
+    async def search_similar(
+            self, embedding: Optional[List[float]], limit: int = 10, owner_id: Optional[str] = None
+    ) -> List[Document]:
+        """
+        Search for similar documents using a vector embedding. This assumes
+        a method is in place (e.g., FAISS or Postgres pgvector) that supports vector similarity.
+        """
+        # Placeholder stub — to be implemented based on your similarity method (e.g., cosine similarity).
+        raise NotImplementedError("Vector similarity search not yet implemented.")

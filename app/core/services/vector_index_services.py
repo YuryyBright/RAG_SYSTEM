@@ -1,207 +1,181 @@
-# app/core/services/vector_index_services.py
-from typing import List, Dict, Any, Optional, Union
+# core/services/vector_index_services.py
+from typing import List, Dict, Any, Optional
 import numpy as np
-import uuid
-
-from core.interfaces.vector_index import VectorIndexInterface
-from utils.logger_util import get_logger
-
-logger = get_logger(__name__)
 
 
+class VectorIndexService:
+    """
+    Service for managing vector indices, providing storage and similarity search capabilities
+    for document embeddings.
+    """
 
-
-
-class VectorIndex(VectorIndexInterface):
-    """Service for storing and searching vector embeddings."""
-
-    def __init__(self, dimensions: int = 768, index_type: str = "hnsw"):
+    def __init__(self, index_name: str, dimensions: int = 1536):
         """
-        Initialize the vector index.
+        Initialize the vector index service.
 
         Args:
-            dimensions: Dimensionality of the vectors
-            index_type: Type of index (e.g., "hnsw", "flat")
+            index_name: Name of the vector index
+            dimensions: Dimensionality of the vectors to be stored
         """
+        self.index_name = index_name
         self.dimensions = dimensions
-        self.index_type = index_type
+        self.vectors = {}  # Simple in-memory storage for vectors
+        self.metadata = {}  # Metadata associated with vectors
 
-        # In a real implementation, this would initialize the vector database
-        # For demonstration, we'll use a simple in-memory store
-        self._vectors = {}  # id -> vector
-        self._metadata = {}  # id -> metadata
-
-        logger.info(f"Initialized VectorIndex ({index_type}) with {dimensions} dimensions")
-
-    async def add_vectors(self, vectors: List[List[float]], ids: Optional[List[str]] = None) -> List[str]:
+    async def add_vectors(self, vectors: List[Any], ids: List[str], metadata: Optional[List[Dict[str, Any]]] = None) -> \
+    List[str]:
         """
         Add vectors to the index.
 
         Args:
-            vectors: List of embedding vectors
-            ids: Optional list of IDs corresponding to the vectors
+            vectors: List of vector embeddings
+            ids: List of IDs to associate with the vectors
+            metadata: Optional list of metadata dictionaries for each vector
 
         Returns:
-            List of IDs of the added vectors
+            List of vector IDs that were added
         """
-        if not vectors:
-            return []
+        if len(vectors) != len(ids):
+            raise ValueError("Length of vectors and ids must match")
 
-        # Generate IDs if not provided
-        if ids is None:
-            ids = [str(uuid.uuid4()) for _ in vectors]
-        elif len(ids) != len(vectors):
-            raise ValueError("Length of ids must match length of vectors")
+        if metadata and len(metadata) != len(ids):
+            raise ValueError("Length of metadata and ids must match")
 
-        # Add vectors to store
-        for vec_id, vector in zip(ids, vectors):
-            self._vectors[vec_id] = vector
-            if vec_id not in self._metadata:
-                self._metadata[vec_id] = {}
+        added_ids = []
 
-        logger.debug(f"Added {len(vectors)} vectors to index")
-        return ids
+        for i, (vector, id) in enumerate(zip(vectors, ids)):
+            # Store the vector
+            self.vectors[id] = vector
 
-    async def search(self, query_vector: List[float], top_k: int = 10, filter_dict: Optional[Dict[str, Any]] = None) -> \
-    List[Dict[str, Any]]:
+            # Store metadata if provided
+            if metadata:
+                self.metadata[id] = metadata[i]
+            else:
+                self.metadata[id] = {}
+
+            added_ids.append(id)
+
+        return added_ids
+
+    async def search_similar(self, query_vector: Any, limit: int = 5,
+                             filter_criteria: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         """
-        Search for vectors similar to query_vector.
+        Search for vectors similar to the query vector.
 
         Args:
             query_vector: Vector to search for
-            top_k: Number of results to return
-            filter_dict: Optional dictionary of metadata filters
+            limit: Maximum number of results to return
+            filter_criteria: Optional criteria to filter results
 
         Returns:
-            List of search results with document IDs and scores
+            List of dictionaries containing vector ID, score, and metadata
         """
-        if not self._vectors:
+        if not self.vectors:
             return []
 
-        # Filter by metadata if filter_dict is provided
-        candidate_ids = self._vectors.keys()
-        if filter_dict:
-            candidate_ids = [
-                vec_id for vec_id in candidate_ids
-                if self._matches_filter(self._metadata.get(vec_id, {}), filter_dict)
-            ]
-
-        # Calculate similarities
+        # Convert to numpy for easier calculation
         query_np = np.array(query_vector)
-        similarities = []
 
-        for vec_id in candidate_ids:
-            vector = self._vectors[vec_id]
+        results = []
+
+        for id, vector in self.vectors.items():
+            # Skip if doesn't match filter criteria
+            if filter_criteria and not self._matches_filter(id, filter_criteria):
+                continue
+
             # Calculate cosine similarity
             vector_np = np.array(vector)
-            dot_product = np.dot(query_np, vector_np)
-            magnitude_product = np.linalg.norm(query_np) * np.linalg.norm(vector_np)
-            similarity = dot_product / magnitude_product if magnitude_product > 0 else 0
+            similarity = np.dot(query_np, vector_np) / (np.linalg.norm(query_np) * np.linalg.norm(vector_np))
 
-            similarities.append((vec_id, similarity))
+            results.append({
+                "id": id,
+                "score": float(similarity),
+                "metadata": self.metadata.get(id, {})
+            })
 
-        # Sort by similarity (descending) and take top_k
-        similarities.sort(key=lambda x: x[1], reverse=True)
-        results = [
-            {"id": vec_id, "score": float(score), "metadata": self._metadata.get(vec_id, {})}
-            for vec_id, score in similarities[:top_k]
-        ]
+        # Sort by similarity score (highest first)
+        results.sort(key=lambda x: x["score"], reverse=True)
 
-        logger.debug(f"Search returned {len(results)} results")
-        return results
+        # Return top results
+        return results[:limit]
 
     async def delete_vectors(self, ids: List[str]) -> int:
         """
         Delete vectors from the index.
 
         Args:
-            ids: List of IDs to delete
+            ids: List of vector IDs to delete
 
         Returns:
             Number of vectors deleted
         """
         deleted_count = 0
-        for vec_id in ids:
-            if vec_id in self._vectors:
-                del self._vectors[vec_id]
-                if vec_id in self._metadata:
-                    del self._metadata[vec_id]
+
+        for id in ids:
+            if id in self.vectors:
+                del self.vectors[id]
+                if id in self.metadata:
+                    del self.metadata[id]
                 deleted_count += 1
 
-        logger.debug(f"Deleted {deleted_count} vectors from index")
         return deleted_count
 
-    async def count_vectors(self, filter_dict: Optional[Dict[str, Any]] = None) -> int:
+    async def count_vectors(self, filter_criteria: Optional[Dict[str, Any]] = None) -> int:
         """
-        Count vectors in the index.
+        Count vectors in the index, optionally filtered by criteria.
 
         Args:
-            filter_dict: Optional dictionary of metadata filters
+            filter_criteria: Optional criteria to filter vectors
 
         Returns:
-            Number of vectors matching the filter
+            Count of matching vectors
         """
-        if not filter_dict:
-            return len(self._vectors)
+        if not filter_criteria:
+            return len(self.vectors)
 
-        # Count vectors that match the filter
-        count = sum(
-            1 for vec_id in self._vectors
-            if self._matches_filter(self._metadata.get(vec_id, {}), filter_dict)
-        )
+        count = 0
+        for id in self.vectors:
+            if self._matches_filter(id, filter_criteria):
+                count += 1
 
         return count
 
-    async def update_metadata(self, vec_id: str, metadata: Dict[str, Any]) -> bool:
-        """
-        Update metadata for a vector.
-
-        Args:
-            vec_id: ID of the vector
-            metadata: Metadata to update
-
-        Returns:
-            True if successful, False if vector not found
-        """
-        if vec_id not in self._vectors:
-            return False
-
-        if vec_id not in self._metadata:
-            self._metadata[vec_id] = {}
-
-        self._metadata[vec_id].update(metadata)
-        return True
-
-    def _matches_filter(self, metadata: Dict[str, Any], filter_dict: Dict[str, Any]) -> bool:
-        """
-        Check if metadata matches filter criteria.
-
-        Args:
-            metadata: Metadata dictionary to check
-            filter_dict: Filter criteria
-
-        Returns:
-            True if metadata matches filter, False otherwise
-        """
-        for key, value in filter_dict.items():
-            if key not in metadata or metadata[key] != value:
-                return False
-        return True
-
     def get_index_type(self) -> str:
         """
-        Get the type of index.
+        Get the type of vector index.
 
         Returns:
-            Type of the index
+            String describing the vector index type
         """
-        return self.index_type
+        return "in-memory"
 
     def get_dimensions(self) -> int:
         """
-        Get the dimensionality of the vectors.
+        Get the dimensionality of vectors in the index.
 
         Returns:
-            Number of dimensions
+            Number of dimensions for vectors
         """
         return self.dimensions
+
+    def _matches_filter(self, vector_id: str, filter_criteria: Dict[str, Any]) -> bool:
+        """
+        Check if a vector matches the filter criteria.
+
+        Args:
+            vector_id: ID of the vector to check
+            filter_criteria: Dictionary of filter criteria
+
+        Returns:
+            True if the vector matches the criteria, False otherwise
+        """
+        if vector_id not in self.metadata:
+            return False
+
+        vector_metadata = self.metadata[vector_id]
+
+        for key, value in filter_criteria.items():
+            if key not in vector_metadata or vector_metadata[key] != value:
+                return False
+
+        return True

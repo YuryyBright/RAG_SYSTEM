@@ -192,3 +192,25 @@ class FileRepository:
         """
         result = await self.db.get(File, file_id)
         return result
+
+    async def get_file_by_path(self, file_path: str) -> Optional[File]:
+        """
+        Retrieve a file record by its unique ID.
+
+        Parameters
+        ----------
+        file_path : str
+            The unique path of the file to retrieve.
+
+        Returns
+        -------
+        Optional[FileModel]
+            The `FileModel` object if found, otherwise `None`.
+
+        Notes
+        -----
+        This method uses the asynchronous session to fetch the file record
+        directly by its primary key.
+        """
+        result = await self.db.execute(select(File).where(File.file_path == file_path))
+        return result.scalars().one_or_none()

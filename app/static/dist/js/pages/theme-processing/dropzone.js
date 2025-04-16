@@ -24,7 +24,7 @@ export function initDropzone() {
 
   // Check and destroy existing Dropzone instance
   if (dropzoneElement.dropzone) {
-    console.log("Destroying existing Dropzone instance on #file-upload-form.");
+    // console.log("Destroying existing Dropzone instance on #file-upload-form.");
     dropzoneElement.dropzone.destroy();
     // Also clear the element's inner HTML if needed
     $("#file-upload-form").html(`
@@ -90,7 +90,7 @@ export function initDropzone() {
           }
 
           // Update URL with the correct theme ID endpoint
-          this.options.url = `/api/themes/${state.currentThemeId}/documents`;
+          // this.options.url = `/api/themes/${state.currentThemeId}/files`;
 
           // Append necessary data
           xhr.withCredentials = true; // ← this is required for cookies
@@ -221,7 +221,7 @@ export function initDropzone() {
  * @param {Dropzone} dropzoneInstance - The Dropzone instance
  */
 function fetchThemeFiles(themeId, dropzoneInstance) {
-  console.log(`Fetching files for theme ID: ${themeId}`);
+  // console.log(`Fetching files for theme ID: ${themeId}`);
 
   // First try to fetch from /files endpoint
   $.ajax({
@@ -231,7 +231,7 @@ function fetchThemeFiles(themeId, dropzoneInstance) {
       "X-CSRF-Token": getCsrfToken(),
     },
     success: function (files) {
-      console.log(`Retrieved ${files.length} files for theme ID: ${themeId}`);
+      // console.log(`Retrieved ${files.length} files for theme ID: ${themeId}`);
       processFiles(files, dropzoneInstance);
     },
     error: function (xhr, status, error) {
@@ -343,7 +343,7 @@ function processFiles(files, dropzoneInstance) {
 
     alertify.success(`Loaded ${files.length} files from theme`);
   } else {
-    console.log("No files found for this theme");
+    // console.log("No files found for this theme");
     $("#upload-next-btn").prop("disabled", true);
   }
 }
@@ -363,7 +363,7 @@ function restorePreviousUploads(dropzoneInstance) {
     }
   }
 
-  console.log(`Restoring ${state.uploadedFiles.length} previously uploaded files to Dropzone UI`);
+  // console.log(`Restoring ${state.uploadedFiles.length} previously uploaded files to Dropzone UI`);
 
   state.uploadedFiles.forEach((fileData) => {
     // Create a mock file object that Dropzone can use

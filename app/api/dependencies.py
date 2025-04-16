@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from adapters.embeding.instructor import InstructorEmbedding
 from adapters.embeding.open_ai import OpenAIEmbedding
+from adapters.embeding.sentence_transformer import SentenceTransformerEmbedding
 from adapters.indexing.chroma_index import ChromaVectorIndex
 from adapters.indexing.milvus import MilvusVectorIndex
 from adapters.storage.file_manager import FileManager
@@ -52,10 +53,12 @@ from core.services.chunking_service import ChunkingService
 from core.services.embedding_service import EmbeddingService
 
 from core.services.task_services import TaskManager
-from core.services.vector_index_services import VectorIndex
+from core.services.vector_index_services import VectorIndexService
+from infrastructure.database.repository.file_repository import FileRepository
 from infrastructure.database.repository.task_repository import TaskRepository
 
 logger = get_logger(__name__)
+
 
 # === Infrastructure ===
 # async def get_cache_service() -> RedisCache:
@@ -75,15 +78,19 @@ def get_document_repository(db: AsyncSession = Depends(get_async_db)) -> Documen
     """Provides DocumentRepository bound to a DB session."""
     return DocumentRepository(db)
 
+
 def get_task_manager(db: AsyncSession = Depends(get_async_db)) -> TaskManager:
     """Helper to provide a TaskManager with a DB session."""
     return TaskManager(db)
+
 
 def get_auth_service(db: AsyncSession = Depends(get_async_db)) -> AuthService:
     """
     A FastAPI dependency that returns an AuthService with a real AsyncSession.
     """
     return AuthService(db)
+
+
 def get_theme_repository(db: AsyncSession = Depends(get_async_db)) -> ThemeRepository:
     """Provides ThemeRepository bound to a DB session."""
     return ThemeRepository(db)
@@ -91,28 +98,21 @@ def get_theme_repository(db: AsyncSession = Depends(get_async_db)) -> ThemeRepos
 
 # === Embedding / Model Services ===
 
-def get_embedding_service(cache_service=None) -> EmbeddingInterface:
+def get_embedding_service() -> EmbeddingInterface:
     """
-    Factory function that provides the configured embedding service.
-
-    This creates and configures the appropriate embedding model implementation
-    based on application settings. The embedding service is used to convert
-    documents and queries into vector representations for semantic search.
+    Factory function to return the appropriate embedding service with optional caching.
 
     Args:
-        cache_service: Optional cache service to store/retrieve embeddings
+        cache_service (RedisCache, optional): Redis-based caching layer
 
     Returns:
-        EmbeddingInterface: The configured embedding service implementation
-
-    Raises:
-        ValueError: If the configured embedding service is not supported
+        EmbeddingInterface: Configured embedding service
     """
     embedding_service = settings.EMBEDDING_SERVICE.lower()
     logger.debug(f"Initializing embedding service: {embedding_service}")
 
     if embedding_service == "instructor":
-        return InstructorEmbedding(
+        service = InstructorEmbedding(
             model_name=settings.INSTRUCTOR_MODEL_NAME,
             instruction=settings.EMBEDDING_INSTRUCTION,
             query_instruction=settings.QUERY_INSTRUCTION,
@@ -120,25 +120,32 @@ def get_embedding_service(cache_service=None) -> EmbeddingInterface:
             device=settings.EMBEDDING_DEVICE
         )
     elif embedding_service == "openai":
-        return OpenAIEmbedding(
+        service = OpenAIEmbedding(
             model_name=settings.OPENAI_EMBEDDING_MODEL,
             api_key=settings.OPENAI_API_KEY,
             batch_size=settings.OPENAI_BATCH_SIZE
         )
     elif embedding_service == "sentence_transformer":
-        # You could add support for sentence-transformers models
-        from adapters.embeding.sentence_transformer import SentenceTransformerEmbedding
-        return SentenceTransformerEmbedding(
+        service = SentenceTransformerEmbedding(
             model_name=settings.SENTENCE_TRANSFORMER_MODEL_NAME,
             batch_size=settings.EMBEDDING_BATCH_SIZE
         )
+    elif embedding_service == "default":
+        service = EmbeddingService(
+            model_name="default",
+            dimensions=settings.EMBEDDING_DIMENSIONS
+        )
     else:
-        available_services = ["instructor", "openai", "sentence_transformer"]
+        available_services = ["instructor", "openai", "sentence_transformer", "default"]
         logger.error(f"Unsupported embedding service: {embedding_service}")
         raise ValueError(
             f"Unsupported embedding service: {embedding_service}. "
             f"Available options: {', '.join(available_services)}"
         )
+
+
+
+    return service
 
 
 def get_llm_service() -> LLMInterface:
@@ -154,8 +161,8 @@ def get_reranker_service() -> RerankerInterface:
 # === Storage Services ===
 
 def get_document_store(
-    document_repository: DocumentRepository = Depends(get_document_repository),
-    embedding_service: EmbeddingInterface = Depends(get_embedding_service)
+        document_repository: DocumentRepository = Depends(get_document_repository),
+        embedding_service: EmbeddingInterface = Depends(get_embedding_service)
 ) -> DocumentStoreInterface:
     """Provides a DocumentStore instance."""
     return DocumentStore(
@@ -165,20 +172,30 @@ def get_document_store(
     )
 
 
-
 # === Use Cases ===
 
+# def get_theme_use_case_p(
+#     theme_repository: ThemeRepositoryInterface = Depends(get_theme_repository),
+#     document_store: DocumentStoreInterface = Depends(get_document_store)
+# ) -> ThemeUseCase:
+#     """Provides the ThemeUseCase with repository + store dependencies."""
+#     return ThemeUseCase(
+#         theme_repository=theme_repository,
+#         document_store=document_store
+#     )
+
+def get_files_store(db: AsyncSession = Depends(get_async_db))-> FileRepository:
+    return FileRepository(db)
+
 def get_theme_use_case(
-    theme_repository: ThemeRepositoryInterface = Depends(get_theme_repository),
-    document_store: DocumentStoreInterface = Depends(get_document_store)
+        theme_repository: ThemeRepositoryInterface = Depends(get_theme_repository),
+        # document_store: DocumentStoreInterface = Depends(get_document_store),
 ) -> ThemeUseCase:
     """Provides the ThemeUseCase with repository + store dependencies."""
     return ThemeUseCase(
         theme_repository=theme_repository,
-        document_store=document_store
+        document_store=None,
     )
-
-
 
 
 async def get_task_repository(db: AsyncSession = Depends(get_async_db)) -> TaskRepository:
@@ -195,8 +212,9 @@ async def get_chunking_service() -> ChunkingService:
     # In a real implementation, you might need to pass configuration here
     return ChunkingService()
 
+
 async def get_vector_index(
-    db: Annotated[AsyncSession, Depends(get_async_db)]
+        db: Annotated[AsyncSession, Depends(get_async_db)]
 ) -> IndexInterface:
     """
     Provide an initialized vector index implementation based on application settings.
@@ -232,11 +250,12 @@ async def get_vector_index(
         # Fallback to FAISS
         return FaissVectorIndex(dimension=settings.EMBEDDING_DIMENSION)
 
+
 def get_query_processor(
-    embedding_service: EmbeddingInterface = Depends(get_embedding_service),
-    index_service: IndexInterface = Depends(get_vector_index),
-    reranker_service: RerankerInterface = Depends(get_reranker_service),
-    llm_service: LLMInterface = Depends(get_llm_service)
+        embedding_service: EmbeddingInterface = Depends(get_embedding_service),
+        index_service: IndexInterface = Depends(get_vector_index),
+        reranker_service: RerankerInterface = Depends(get_reranker_service),
+        llm_service: LLMInterface = Depends(get_llm_service)
 ) -> QueryProcessor:
     """Provides a QueryProcessor instance with all AI services."""
     return QueryProcessor(
@@ -246,22 +265,22 @@ def get_query_processor(
         llm_service=llm_service,
         score_threshold=settings.SCORE_THRESHOLD
     )
-# Or define simple factories if you have none:
-def get_file_processor() -> FileProcessor:
-    """Return a new FileProcessor instance."""
-    return FileProcessor()
+
 
 def get_file_manager() -> FileManager:
     """Return a new FileManager instance."""
     return FileManager()
 
+def get_file_processor(db: AsyncSession = Depends(get_async_db)) -> FileProcessor:
+    file_repo = FileRepository(db)
+    return FileProcessor(file_repository=file_repo)
 
 async def file_processing_use_case(
-    file_processor: FileProcessor = Depends(get_file_processor),
-    embedding_service: EmbeddingService = Depends(get_embedding_service),
-    document_store: DocumentStore = Depends(get_document_store),
-    vector_index: VectorIndex = Depends(get_vector_index),
-    file_manager: FileManager = Depends(get_file_manager)
+        file_processor: FileProcessor = Depends(get_file_processor),
+        chunking_service: ChunkingService = Depends(get_chunking_service),
+        embedding_service: EmbeddingService = Depends(get_embedding_service),
+        document_store: DocumentStore = Depends(get_document_store),
+        vector_index: VectorIndexService = Depends(get_vector_index)
 ) -> FileProcessingUseCase:
     """
     Provides a FileProcessingUseCase instance via FastAPI's dependency injection.
@@ -272,6 +291,7 @@ async def file_processing_use_case(
       - document_store: For persisting documents
       - vector_index: For storing/retrieving vectors
       - file_manager: For file storage / management tasks
+      - chunking_service:  For file CHUNKING / management tasks
 
     Returns
     -------
@@ -280,8 +300,8 @@ async def file_processing_use_case(
     """
     return FileProcessingUseCase(
         file_processor=file_processor,
+        chunking_service=chunking_service,
         embedding_service=embedding_service,
         document_store=document_store,
         vector_index=vector_index,
-        file_manager=file_manager
     )

@@ -40,29 +40,28 @@ class LoggerFactory:
         else:
             level = cls._LOG_LEVELS.get(default_level.lower(), logging.INFO)
 
-            if colorlog:
-                handler = colorlog.StreamHandler()
-                formatter = colorlog.ColoredFormatter(
-                    "%(log_color)s%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-                    datefmt='%Y-%m-%d %H:%M:%S',
-                    log_colors={
-                        'DEBUG': 'cyan',
-                        'INFO': 'green',
-                        'WARNING': 'yellow',
-                        'ERROR': 'red',
-                        'CRITICAL': 'bold_red',
-                    }
-                )
-                handler.setFormatter(formatter)
-                root_logger = logging.getLogger()
-                root_logger.setLevel(level)
-                root_logger.handlers = []  # Clear default handlers
-                root_logger.addHandler(handler)
-            else:
-                # Fallback to basicConfig if colorlog isn't available
-                if not log_format:
-                    log_format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-                logging.basicConfig(level=level, format=log_format, datefmt='%Y-%m-%d %H:%M:%S')
+            handler = colorlog.StreamHandler()
+
+            # 🔧 Patch: force UTF-8 encoding for Windows consoles or legacy terminals
+            if hasattr(handler.stream, 'reconfigure'):
+                handler.stream.reconfigure(encoding='utf-8')
+
+            formatter = colorlog.ColoredFormatter(
+                "%(log_color)s%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+                datefmt='%Y-%m-%d %H:%M:%S',
+                log_colors={
+                    'DEBUG': 'cyan',
+                    'INFO': 'green',
+                    'WARNING': 'yellow',
+                    'ERROR': 'red',
+                    'CRITICAL': 'bold_red',
+                }
+            )
+            handler.setFormatter(formatter)
+            root_logger = logging.getLogger()
+            root_logger.setLevel(level)
+            root_logger.handlers = []  # Clear default handlers
+            root_logger.addHandler(handler)
 
     @classmethod
     def get_logger(cls, name: str) -> logging.Logger:

@@ -158,6 +158,8 @@ class Settings(BaseSettings):
     )
 
     # Embedding configuration
+    VECTOR_DB_TYPE: str = Field("faiss", description="Type of vector database (e.g., faiss, qdrant, chroma)")
+
     EMBEDDING_SERVICE: str = Field("instructor",
                                    description="Embedding service to use (instructor, openai, sentence_transformer)")
     INSTRUCTOR_MODEL_NAME: str = Field("hkunlp/instructor-large", description="Instructor model name")

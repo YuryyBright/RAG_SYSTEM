@@ -127,7 +127,6 @@ export function subscribeToThemeUpdates(themeId) {
 
   state.taskSocket.send(JSON.stringify(subscribeMsg));
   state.subscribedThemeId = themeId; // optimistic update
-  console.log(`Subscribed to theme ${themeId}`);
 }
 
 /**
@@ -135,11 +134,11 @@ export function subscribeToThemeUpdates(themeId) {
  * @param {Object} message - Message received from WebSocket
  */
 export function handleWebSocketMessage(message) {
-  console.log("Received WebSocket message:", message);
+  // console.log("Received WebSocket message:", message);
 
   // Handle subscription confirmation
   if (message.type === "subscription") {
-    console.log(`Subscription status: ${message.status} for theme ${message.theme_id}`);
+    // console.log(`Subscription status: ${message.status} for theme ${message.theme_id}`);
 
     // If subscription was successful, store the subscribed theme
     if (message.status === "success") {

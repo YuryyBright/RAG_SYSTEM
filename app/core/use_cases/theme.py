@@ -2,10 +2,11 @@
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 
+from adapters.storage.document_store import DocumentStore
 from app.core.entities.theme import Theme
 from app.core.entities.document import Document
-from app.core.interfaces.theme_repository import ThemeRepositoryInterface
-from app.core.interfaces.document_store import DocumentStoreInterface
+from infrastructure.database.db_models import File
+from infrastructure.database.repository.theme_repository import ThemeRepository
 
 
 class ThemeUseCase:
@@ -20,8 +21,8 @@ class ThemeUseCase:
 
     def __init__(
             self,
-            theme_repository: ThemeRepositoryInterface,
-            document_store: DocumentStoreInterface
+            theme_repository: ThemeRepository,
+            document_store: DocumentStore,
     ):
         """
         Initialize the theme use cases.
@@ -187,7 +188,7 @@ class ThemeUseCase:
 
         return documents
 
-    async def get_theme_files(self, theme_id: str) -> List[Document]:
+    async def get_theme_files(self, theme_id: str) -> List[File]:
         """
         Get the files associated with a theme.
 
@@ -195,15 +196,7 @@ class ThemeUseCase:
             theme_id: ID of the theme
 
         Returns:
-            List[Files]: List of document entities
+            List[Files]: List of files entities
         """
-        file_ids = await self.theme_repository.get_theme_files(theme_id)
-
-        files = []
-        for file_id in file_ids:
-            file = await self.document_store.get_document(file_id)
-            if file:
-                files.append(file)
-
-        return files
+        return await self.theme_repository.get_theme_files(theme_id)
 

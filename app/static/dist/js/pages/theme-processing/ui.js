@@ -37,7 +37,7 @@ export function fetchAllThemeFiles(themeId) {
   if (!themeId) return;
 
   $.ajax({
-    url: `/api/themes/${themeId}/documents`,
+    url: `/api/themes/${themeId}/files`,
     method: "GET",
     headers: {
       "X-CSRF-Token": getCsrfToken(),
@@ -112,7 +112,8 @@ export function restoreDropZoneFiles() {
 }
 
 /**
- * Navigate to a specific step in the workflow
+ * Updated navigation function for ui.js
+ * Adds support for direct jump from step 2 to step 5
  */
 export function navigateToStep(step, saveState = true) {
   // Update current step
@@ -160,8 +161,9 @@ export function navigateToStep(step, saveState = true) {
       $("#workflow-progress-bar").css("width", "80%").text("Step 4 of 5");
       break;
 
-    case 5: // Process
+    case 5: // Process - Direct jump from step 2 or 3
       $("#process-section").removeClass("d-none");
+      // Mark all previous steps as completed
       $("#step-theme, #step-upload, #step-download, #step-read").addClass("completed");
       $("#step-process").addClass("active");
       $("#workflow-progress-bar").css("width", "100%").text("Step 5 of 5");
@@ -360,7 +362,7 @@ export function showSuccessModal() {
 function loadFilesTable() {
   if (state.currentThemeId) {
     $.ajax({
-      url: `/api/themes/${state.currentThemeId}/documents`,
+      url: `/api/themes/${state.currentThemeId}/files`,
       method: "GET",
       headers: {
         "X-CSRF-Token": getCsrfToken(),

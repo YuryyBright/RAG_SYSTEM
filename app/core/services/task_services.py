@@ -1,4 +1,5 @@
 # app/core/services/task_manager.py
+import json
 import logging
 import asyncio
 from datetime import datetime
@@ -200,13 +201,12 @@ class TaskManager:
         if not db_model:
             return None
 
-        # Convert DB model back to domain Task
         domain_task = Task(
             task_type=TaskTypeEnum(db_model.task_type),
             user_id=db_model.user_id,
             theme_id=db_model.theme_id,
             description=db_model.description,
-            metadata=db_model.parsed_metadata  # or json.loads(...)
+            metadata=json.loads(db_model.task_metadata or '{}')
         )
         domain_task.id = db_model.id
         domain_task.status = TaskStatusEnum(db_model.status)
@@ -215,8 +215,8 @@ class TaskManager:
         domain_task.started_at = db_model.started_at
         domain_task.completed_at = db_model.completed_at
         domain_task.error_message = db_model.error_message
-        domain_task.logs = db_model.parsed_logs
-        domain_task.steps = db_model.parsed_steps
+        domain_task.logs = json.loads(db_model.logs or '[]')  # ✅ fixed
+        domain_task.steps = json.loads(db_model.steps or '[]')  # ✅ fixed
         domain_task.current_step = db_model.current_step
         return domain_task
 
@@ -293,7 +293,7 @@ class TaskManager:
             user_id=db_model.user_id,
             theme_id=db_model.theme_id,
             description=db_model.description,
-            metadata=db_model.parsed_metadata
+            metadata=json.loads(db_model.task_metadata or '{}')  # fix here
         )
         domain_task.id = db_model.id
         domain_task.status = TaskStatusEnum(db_model.status)
@@ -302,7 +302,7 @@ class TaskManager:
         domain_task.started_at = db_model.started_at
         domain_task.completed_at = db_model.completed_at
         domain_task.error_message = db_model.error_message
-        domain_task.logs = db_model.parsed_logs
-        domain_task.steps = db_model.parsed_steps
+        domain_task.logs = json.loads(db_model.logs or '[]')  # fix here
+        domain_task.steps = json.loads(db_model.steps or '[]')  # fix here
         domain_task.current_step = db_model.current_step
         return domain_task

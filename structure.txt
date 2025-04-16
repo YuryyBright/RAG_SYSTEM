@@ -122,6 +122,10 @@ rag_system/
 │   │   │   ├── html_loader.py       # HTML document loader
 │   │   │   ├── markdown_loader.py   # Markdown document loader
 │   │   │   └── csv_loader.py        # CSV document loader
+│   │   ├── cleaners/
+│   │   │   ├── base_cleaner.py
+│   │   │   ├── markdown_cleaner.py
+│   │   │   └── html_cleaner.py
 │   │   │
 │   │   ├── cache/
 │   │   │   ├── __init__.py

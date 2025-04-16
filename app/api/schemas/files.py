@@ -1,5 +1,7 @@
 # app/api/schemas/files.py
 from datetime import datetime
+from typing import Optional, Dict, Any, List
+
 from pydantic import BaseModel, Field
 
 
@@ -32,10 +34,6 @@ class FileResponse(BaseModel):
     class Config:
         orm_mode = True
 
-# app/api/schemas/file_processing.py
-from typing import List, Dict, Any, Optional
-from pydantic import BaseModel, Field
-
 
 class FileProcessingRequest(BaseModel):
     """
@@ -50,9 +48,11 @@ class FileProcessingRequest(BaseModel):
     additional_metadata : Optional[Dict[str, Any]]
         Additional metadata to attach to all processed documents.
     """
-    directory_path: str = Field(..., description="Path to the directory containing files to process")
+    theme_id: str = Field(..., description="Theme ID to derive path from")
     recursive: bool = Field(True, description="Whether to process subdirectories")
     additional_metadata: Optional[Dict[str, Any]] = Field(None, description="Additional metadata to attach to documents")
+    chunk_size: int = Field(1000, description="Size of each text chunk")
+    chunk_overlap: int = Field(200, description="Number of overlapping characters per chunk")
 
 
 class ProcessedFileSummary(BaseModel):
