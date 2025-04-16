@@ -2,7 +2,7 @@
 import os
 from typing import Dict, List, Tuple, Any, Optional
 from datetime import datetime
-
+import numpy as np
 from adapters.storage.document_store import DocumentStore
 from app.core.entities.document import Document
 from app.adapters.storage.file_manager import FileManager
@@ -283,6 +283,7 @@ class FileProcessingUseCase:
                 # Create a Document object for the chunk
                 chunk_doc = Document(
                     content=chunk,
+                    file_id=doc.file_id,
                     owner_id = doc.owner_id or doc.metadata.get("owner_id"),
                     metadata={
                         **doc.metadata,  # copy original metadata
@@ -290,10 +291,8 @@ class FileProcessingUseCase:
                         "parent_doc_id": doc.id,
                     }
                 )
-                logger.info(f"Processing chunk {chunk_doc} of {len(chunks)}")
                 # Store the chunk in the document store to get a doc_id
                 doc_id = await self.document_store.store_document(chunk_doc)
-
                 # We'll collect text for embedding
                 vectors_to_add.append(chunk)
                 vector_ids.append(doc_id)
@@ -302,7 +301,9 @@ class FileProcessingUseCase:
         if vectors_to_add:
             embeddings = await self.embedding_service.get_embeddings(vectors_to_add)
             # Now store them in the vector index:
+
             await self.vector_index.add_vectors(embeddings, vector_ids)
+
             chunks_vectorized = len(vectors_to_add)
 
         # Update the extended report

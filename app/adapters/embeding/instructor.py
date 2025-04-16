@@ -10,6 +10,7 @@ from utils.logger_util import get_logger
 
 logger = get_logger(__name__)
 
+
 class InstructorEmbedding(EmbeddingInterface):
     """
     Implementation of INSTRUCTOR embedding model.
@@ -70,6 +71,9 @@ class InstructorEmbedding(EmbeddingInterface):
         Returns:
             List[Document]: The list of Document objects with their embedding attributes populated.
         """
+        if not documents:
+            return []
+
         # Process documents in batches
         for i in range(0, len(documents), self.batch_size):
             batch = documents[i:i + self.batch_size]
@@ -125,7 +129,7 @@ class InstructorEmbedding(EmbeddingInterface):
 
     async def get_embedding(self, text: str) -> List[float]:
         """
-        Get a single embedding using the embed_query logic.
+        Get a single embedding using the embed_text logic.
         Alias method for interface compatibility.
 
         Args:
@@ -134,4 +138,34 @@ class InstructorEmbedding(EmbeddingInterface):
         Returns:
             List[float]: The generated embedding.
         """
-        return await self.embed_query(text)
+        return await self.embed_text(text)
+
+    async def get_embeddings(self, texts: List[str]) -> List[List[float]]:
+        """
+        Generate embeddings for a list of text inputs.
+
+        Args:
+            texts (List[str]): List of text strings to embed.
+
+        Returns:
+            List[List[float]]: List of embedding vectors for the input texts.
+        """
+        if not texts:
+            return []
+
+        results = []
+        # Process in batches
+        for i in range(0, len(texts), self.batch_size):
+            batch = texts[i:i + self.batch_size]
+
+            # Create instruction pairs for each text in the batch
+            instruction_pairs = [[self.instruction, text] for text in batch]
+
+            # Generate embeddings
+            batch_embeddings = self.model.encode(instruction_pairs)
+
+            # Convert numpy arrays to lists
+            batch_embeddings = [emb.tolist() for emb in batch_embeddings]
+            results.extend(batch_embeddings)
+
+        return results

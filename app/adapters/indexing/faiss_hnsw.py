@@ -174,3 +174,45 @@ class FaissVectorIndex(IndexInterface):
             self.id_to_index = data["id_to_index"]
             self.index_to_id = data["index_to_id"]
             self.current_index = data["current_index"]
+
+    async def add_vectors(self, vectors: List[List[float]], document_ids: List[str],
+                          contents: List[str] = None, metadata: List[Dict] = None) -> None:
+        """
+        Add vectors directly to the index with associated document information.
+
+        Parameters
+        ----------
+        vectors : List[List[float]]
+            List of embedding vectors to add to the index
+        document_ids : List[str]
+            List of document IDs corresponding to the vectors
+        contents : List[str], optional
+            List of document contents
+        metadata : List[Dict], optional
+            List of metadata dictionaries for each document
+        """
+        if not vectors or len(vectors) == 0:
+            return
+
+        # Convert to float32 np array
+        embeddings = np.array(vectors, dtype=np.float32)
+
+        # Add to FAISS index
+        self.index.add(embeddings)
+
+        # Create and store Document objects
+        for i, (vec, doc_id) in enumerate(zip(vectors, document_ids)):
+            content = contents[i] if contents and i < len(contents) else ""
+            meta = metadata[i] if metadata and i < len(metadata) else {}
+
+            doc = Document(
+                id=doc_id,
+                content=content,
+                metadata=meta,
+                embedding=vec
+            )
+
+            self.documents[doc_id] = doc
+            self.id_to_index[doc_id] = self.current_index
+            self.index_to_id[self.current_index] = doc_id
+            self.current_index += 1

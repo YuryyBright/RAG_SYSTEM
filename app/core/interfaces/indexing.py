@@ -1,7 +1,9 @@
 # app/core/interfaces/indexing.py
+
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any
 from core.entities.document import Document
+
 
 class IndexInterface(ABC):
     """
@@ -23,71 +25,51 @@ class IndexInterface(ABC):
         Asynchronously saves the current state of the index to disk.
     load_index(path: str) -> None
         Asynchronously loads the index state from disk.
+    add_vectors(vectors: List[List[float]], document_ids: List[str],
+                contents: List[str], metadata: List[Dict]) -> None
+        Asynchronously adds raw vectors with metadata directly to the index.
     """
 
     @abstractmethod
     async def add_documents(self, documents: List[Document]) -> None:
-        """
-        Add documents to the index.
-
-        Parameters
-        ----------
-        documents : List[Document]
-            A list of `Document` objects to be added to the index.
-        """
+        """Add a list of `Document` objects to the index."""
         pass
 
     @abstractmethod
     async def search(self, query_embedding: List[float], k: int = 5) -> List[Dict[str, Any]]:
-        """
-        Search the index for similar documents to the query embedding.
-
-        Parameters
-        ----------
-        query_embedding : List[float]
-            A list of floats representing the embedding of the query.
-        k : int, optional
-            The number of top similar documents to return (default is 5).
-
-        Returns
-        -------
-        List[Dict[str, Any]]
-            A list of dictionaries containing the IDs and similarity scores of the top similar documents.
-        """
+        """Search the index for documents similar to the query embedding."""
         pass
 
     @abstractmethod
     async def delete_document(self, doc_id: str) -> None:
-        """
-        Delete a document from the index.
-
-        Parameters
-        ----------
-        doc_id : str
-            The unique identifier of the document to be deleted.
-        """
+        """Delete a document from the index."""
         pass
 
     @abstractmethod
     async def save_index(self, path: str) -> None:
-        """
-        Save the index to disk.
-
-        Parameters
-        ----------
-        path : str
-            The file path where the index should be saved.
-        """
+        """Save the index to disk."""
         pass
 
     @abstractmethod
     async def load_index(self, path: str) -> None:
+        """Load the index from disk."""
+        pass
+
+    @abstractmethod
+    async def add_vectors(self, vectors: List[List[float]], document_ids: List[str],
+                          contents: List[str], metadata: List[Dict]) -> None:
         """
-        Load the index from disk.
+        Add vectors directly to the index with associated document information.
 
         Parameters
         ----------
-        path : str
-            The file path from where the index should be loaded.
+        vectors : List[List[float]]
+            List of embedding vectors to add to the index
+        document_ids : List[str]
+            List of document IDs corresponding to the vectors
+        contents : List[str]
+            List of document contents
+        metadata : List[Dict]
+            List of metadata dictionaries for each document
         """
         pass

@@ -236,16 +236,6 @@ class FileProcessor:
     async def _convert_to_document(self, pf: ProcessedFile, file_path) -> Document:
         """
         Convert a ProcessedFile to a Document for vector database storage.
-
-        Parameters
-        ----------
-        pf : ProcessedFile
-            The processed file to convert.
-
-        Returns
-        -------
-        Document
-            Document entity ready for vector database.
         """
         # Copy metadata to avoid modifying the original
         meta = pf.metadata.copy() if pf.metadata else {}
@@ -258,14 +248,17 @@ class FileProcessor:
         if not pf.is_language_detected:
             meta["language_detection_failed"] = True
 
-        # Fetch file from DB using path
+        # Fetch file from DB using path - FIX: removed extra parentheses
         try:
-            file_record = await self.file_repository.get_file_by_path((str(file_path)))
+            file_record = await self.file_repository.get_file_by_path(str(file_path))
             if file_record:
-                return Document(id=pf.id, content=pf.content, metadata=meta, file_id=file_record.id, owner_id=file_record.owner_id)
-            raise "File not found"
+                return Document(id=pf.id, content=pf.content, metadata=meta, file_id=file_record.id,
+                                owner_id=file_record.owner_id)
+            raise ValueError("File not found")  # FIX: use proper exception
         except Exception as e:
             logger.warning(f"Failed to fetch file from DB for path {meta.get('source')}: {e}")
+            # FIX: Handle this error case by returning None or an appropriate value
+            return None
 
 
 

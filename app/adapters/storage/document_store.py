@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import List, Optional, Dict, Any
 import json
 import os
-import uuid
+import numpy as np
 
 from app.core.entities.document import Document
 from app.core.interfaces.document_store import DocumentStoreInterface
@@ -382,7 +382,7 @@ class DocumentStore(DocumentStoreInterface):
         if document.embedding is not None:
             embedding_path = self.storage_path / f"{document_id}.embedding"
             with open(embedding_path, "wb") as f:
-                f.write(document.embedding)
+                np.save(f, np.array(document.embedding))
 
     def _load_document_from_disk(self, document_id: str) -> Optional[Document]:
         """Load document from disk cache."""
@@ -400,7 +400,8 @@ class DocumentStore(DocumentStoreInterface):
             embedding_path = self.storage_path / f"{document_id}.embedding"
             if embedding_path.exists() and doc_dict.get("has_embedding", False):
                 with open(embedding_path, "rb") as f:
-                    embedding = f.read()
+                    # Convert the numpy array to a list when loading
+                    embedding = np.load(f).tolist()
 
             return Document(
                 id=doc_dict["id"],

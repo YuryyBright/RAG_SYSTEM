@@ -2,7 +2,7 @@
 from typing import List, Dict, Any, Optional, Tuple
 import re
 
-
+# TODO implement this class to dependence
 class ChunkingService:
     """Service for chunking text documents into smaller segments for embedding."""
 
@@ -58,9 +58,9 @@ class ChunkingService:
         current_chunk = []
         current_length = 0
 
-        for split in splits:
+        for i, split in enumerate(splits):
             # Add the separator back to the split (except for the first one)
-            if split and current_chunk:
+            if split and i > 0:
                 split_with_sep = separator + split
             else:
                 split_with_sep = split
@@ -70,10 +70,31 @@ class ChunkingService:
                 # Join the current chunk and add it to the list of chunks
                 chunks.append(''.join(current_chunk))
 
-                # Create overlap by keeping some of the current chunk
-                overlap_text = ''.join(current_chunk[-chunk_overlap:]) if chunk_overlap > 0 else ""
-                current_chunk = [overlap_text] if overlap_text else []
-                current_length = len(overlap_text)
+                # Find a good overlap point that doesn't cut in the middle of semantic units
+                if chunk_overlap > 0:
+                    # Calculate overlap starting point
+                    overlap_start_idx = max(0, len(''.join(current_chunk)) - chunk_overlap)
+
+                    # Find the closest separator after the overlap starting point
+                    overlap_text = ''.join(current_chunk)
+                    last_separator_pos = -1
+
+                    for sep_pos in [pos for pos in range(len(overlap_text)) if overlap_text.startswith(separator, pos)]:
+                        if sep_pos >= overlap_start_idx:
+                            last_separator_pos = sep_pos
+                            break
+
+                    # If we found a good separator position, use it; otherwise use character-based overlap
+                    if last_separator_pos >= 0:
+                        overlap_text = overlap_text[last_separator_pos:]
+                    else:
+                        overlap_text = overlap_text[overlap_start_idx:]
+
+                    current_chunk = [overlap_text] if overlap_text else []
+                    current_length = len(overlap_text)
+                else:
+                    current_chunk = []
+                    current_length = 0
 
             # Add the current split to the chunk
             if split_with_sep:
@@ -89,8 +110,8 @@ class ChunkingService:
     def chunk_by_semantic_units(
             self,
             text: str,
-            min_chunk_size: int = 500,
-            max_chunk_size: int = 1500,
+            chunk_size: Optional[int] = None,
+            chunk_overlap: Optional[int] = None,
             separator_hierarchy: Optional[List[str]] = None
     ) -> List[str]:
         """
@@ -100,10 +121,10 @@ class ChunkingService:
         -----------
         text : str
             The text to split into chunks
-        min_chunk_size : int
-            The minimum size of each chunk (in characters)
-        max_chunk_size : int
-            The maximum size of each chunk (in characters)
+        chunk_size : int, optional
+            The target maximum size of each chunk (in characters)
+        chunk_overlap : int, optional
+            The target overlap between chunks (in characters)
         separator_hierarchy : List[str], optional
             Ordered list of separators to use, from highest to lowest priority
 
@@ -112,6 +133,10 @@ class ChunkingService:
         List[str]
             List of text chunks
         """
+        # Use defaults if not specified
+        chunk_size = chunk_size or self.default_chunk_size
+        chunk_overlap = chunk_overlap or self.default_chunk_overlap
+
         # Default separator hierarchy if not provided
         if not separator_hierarchy:
             separator_hierarchy = [
@@ -123,28 +148,35 @@ class ChunkingService:
                 " "  # Word
             ]
 
-        # If text is shorter than max_chunk_size, return it as a single chunk
-        if len(text) <= max_chunk_size:
+        # If text is shorter than chunk_size, return it as a single chunk
+        if len(text) <= chunk_size:
             return [text]
 
         chunks = []
+        remaining_text = text
+
+        # Try each separator in the hierarchy
         for separator in separator_hierarchy:
+            if not remaining_text:
+                break
+
             result = self._try_chunking_with_separator(
-                text, separator, min_chunk_size, max_chunk_size
+                remaining_text, separator, chunk_size, chunk_overlap
             )
 
             if result:
-                # This separator worked well
-                chunks = result
-                break
+                # Add successfully chunked sections to our chunks list
+                chunks.extend(result)
+                remaining_text = ""
 
-        # If no separator worked well, fall back to simple chunking
-        if not chunks:
-            chunks = self.chunk_text(
-                text,
-                chunk_size=max_chunk_size,
-                chunk_overlap=min(200, max_chunk_size // 5)
-            )
+        # If we still have remaining text, fall back to character-based chunking
+        if remaining_text:
+            chunks.extend(self.chunk_text(
+                remaining_text,
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap,
+                separator=" "  # Fall back to word-level splitting
+            ))
 
         return chunks
 
@@ -152,76 +184,101 @@ class ChunkingService:
             self,
             text: str,
             separator: str,
-            min_chunk_size: int,
-            max_chunk_size: int
-    ) -> Optional[List[str]]:
+            chunk_size: int,
+            chunk_overlap: int
+    ) -> List[str]:
         """
-        Try chunking the text with a specific separator.
-        Returns None if the separator doesn't work well for this text.
+        Attempt to chunk text using a specific separator.
+
+        Parameters:
+        -----------
+        text : str
+            The text to chunk
+        separator : str
+            The separator to use for chunking
+        chunk_size : int
+            Target maximum chunk size
+        chunk_overlap : int
+            Target overlap between chunks
+
+        Returns:
+        --------
+        List[str] or None
+            List of chunks if successful, None if the separator doesn't create good chunks
         """
-        # Split by separator
-        segments = text.split(separator)
+        # Split by the separator
+        splits = text.split(separator)
 
-        # If most segments are too small or too large, this separator isn't suitable
-        segment_sizes = [len(s) for s in segments]
-        too_small = sum(1 for size in segment_sizes if size < min_chunk_size / 2)
-        too_large = sum(1 for size in segment_sizes if size > max_chunk_size * 0.8)
-
-        # If more than 70% of segments are too small or too large, try another separator
-        if (too_small + too_large) / len(segments) > 0.7:
+        # If this separator doesn't create meaningful splits, return None
+        if len(splits) <= 1:
             return None
 
-        # This separator seems good, proceed with chunking
         chunks = []
         current_chunk = []
         current_length = 0
 
-        for i, segment in enumerate(segments):
-            # Add separator back to segment (except for first one)
-            if i > 0:
-                segment_with_sep = separator + segment
+        for i, split in enumerate(splits):
+            # Add separator back except for the first item
+            if i > 0 and split:
+                split_with_sep = separator + split
             else:
-                segment_with_sep = segment
+                split_with_sep = split
 
-            segment_length = len(segment_with_sep)
+            split_length = len(split_with_sep)
 
-            # If segment alone exceeds max_chunk_size, we need to split it further
-            if segment_length > max_chunk_size:
-                # First add the current accumulated chunk if it exists
-                if current_chunk:
+            # If a single split is larger than chunk_size, this separator won't work well
+            if split_length > chunk_size * 1.5:
+                return None
+
+            # If adding this split would exceed the chunk size, finalize the chunk
+            if current_length + split_length > chunk_size and current_chunk:
+                # Don't create tiny chunks - require at least 50% of chunk_size
+                if current_length < chunk_size * 0.5 and len(chunks) > 0:
+                    # Merge with the previous chunk if possible
+                    if chunks:
+                        chunks[-1] += ''.join(current_chunk)
+                    else:
+                        chunks.append(''.join(current_chunk))
+                else:
                     chunks.append(''.join(current_chunk))
+
+                # Calculate overlap, ensuring we don't overlap at arbitrary positions
+                if chunk_overlap > 0 and current_chunk:
+                    full_chunk_text = ''.join(current_chunk)
+
+                    # Find the last complete semantic unit within the overlap range
+                    overlap_start = max(0, len(full_chunk_text) - chunk_overlap)
+
+                    # Find the nearest separator after the overlap start
+                    nearest_sep_pos = full_chunk_text.find(separator, overlap_start)
+
+                    if nearest_sep_pos != -1:
+                        # Use separator-based overlap
+                        overlap_text = full_chunk_text[nearest_sep_pos:]
+                    else:
+                        # Fall back to character-based overlap if no separator found
+                        overlap_text = full_chunk_text[overlap_start:]
+
+                    current_chunk = [overlap_text]
+                    current_length = len(overlap_text)
+                else:
                     current_chunk = []
                     current_length = 0
 
-                # Then recursively chunk this large segment and add the results
-                sub_chunks = self.chunk_text(
-                    segment_with_sep,
-                    chunk_size=max_chunk_size,
-                    chunk_overlap=min(200, max_chunk_size // 5)
-                )
-                chunks.extend(sub_chunks)
-                continue
+            # Add the current split to the chunk
+            current_chunk.append(split_with_sep)
+            current_length += split_length
 
-            # If adding this segment would exceed max_chunk_size, finalize current chunk
-            if current_length + segment_length > max_chunk_size and current_chunk:
-                chunks.append(''.join(current_chunk))
-                current_chunk = []
-                current_length = 0
-
-            # Add segment to current chunk
-            current_chunk.append(segment_with_sep)
-            current_length += segment_length
-
-            # If current chunk exceeds min_chunk_size and segment ends with sentence-ending punctuation,
-            # consider this a good place to break
-            last_char = segment_with_sep.strip()[-1] if segment_with_sep.strip() else None
-            if current_length > min_chunk_size and last_char in ['.', '!', '?', ':', ';']:
-                chunks.append(''.join(current_chunk))
-                current_chunk = []
-                current_length = 0
-
-        # Add the final chunk if it's not empty
+        # Add the final chunk
         if current_chunk:
             chunks.append(''.join(current_chunk))
+
+        # Validate the chunks - ensure we've properly chunked the text
+        total_chunks_length = sum(len(chunk) for chunk in chunks)
+        expected_length = len(text) + (len(chunks) - 1) * chunk_overlap
+
+        # Allow for small differences due to overlap calculation
+        if abs(total_chunks_length - expected_length) > len(chunks) * 10:
+            return None
 
         return chunks

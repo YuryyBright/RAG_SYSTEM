@@ -52,3 +52,16 @@ class EmbeddingInterface(ABC):
             List[float]: Embedding vector of the input text.
         """
         pass
+
+    @abstractmethod
+    async def get_embeddings(self, texts: List[str]) -> List[List[float]]:
+        """
+        Generate embeddings for a list of text inputs.
+
+        Args:
+            texts (List[str]): List of text strings to embed.
+
+        Returns:
+            List[List[float]]: List of embedding vectors for the input texts.
+        """
+        pass

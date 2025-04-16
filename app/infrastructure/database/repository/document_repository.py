@@ -80,7 +80,7 @@ class DocumentRepository:
         """
 
         if "content" not in kwargs:
-            raise ValueError("Both 'owner_id' 'content' are required.")
+            raise ValueError("'content' are required.")
         doc = Document(**kwargs)
         self.db.add(doc)
         await self.db.commit()
