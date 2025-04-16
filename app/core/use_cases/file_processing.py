@@ -9,7 +9,7 @@ from app.adapters.storage.file_manager import FileManager
 from core.services.chunking_service import ChunkingService
 from core.services.embedding_service import EmbeddingService
 from core.services.vector_index_services import VectorIndexService
-from infrastructure.loaders.file_processor import FileProcessor
+from infrastructure.loaders.readers.file_processor import FileProcessor
 from utils.logger_util import get_logger
 
 logger = get_logger(__name__)
