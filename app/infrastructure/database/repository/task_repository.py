@@ -1,4 +1,4 @@
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Sequence
 import json
 
 from sqlalchemy import select, delete, update
@@ -29,7 +29,7 @@ class TaskRepository:
         )
         return result.scalar_one_or_none()
 
-    async def get_by_user(self, user_id: str) -> List[ProcessingTask]:
+    async def get_by_user(self, user_id: str) -> Sequence[ProcessingTask]:
         """
         Retrieve all tasks created by a specific user.
         """
@@ -38,7 +38,7 @@ class TaskRepository:
         )
         return result.scalars().all()
 
-    async def get_by_theme(self, theme_id: str) -> List[ProcessingTask]:
+    async def get_by_theme(self, theme_id: str) -> Sequence[ProcessingTask]:
         """
         Retrieve all tasks associated with a specific theme.
         """
@@ -56,7 +56,7 @@ class TaskRepository:
         rather than a domain `Task` object.
         """
         db_task = ProcessingTask(
-            task_type=task.type.value,
+            task_type=task.type,
             user_id=task.user_id,
             theme_id=task.theme_id,
             description=task.description,
@@ -127,3 +127,33 @@ class TaskRepository:
             logger.warning(f"Task delete failed (not found): {task_id}")
 
         return result.rowcount > 0
+
+    async def get_user_tasks(self, user_id: str) -> Sequence[ProcessingTask]:
+        """
+        Retrieve all tasks for a specific user.
+
+        Args:
+            user_id (str): ID of the user.
+
+        Returns:
+            List[ProcessingTask]: List of tasks created by the user.
+        """
+        result = await self.db.execute(
+            select(ProcessingTask).where(ProcessingTask.user_id == user_id)
+        )
+        return result.scalars().all()
+
+    async def get_theme_tasks(self, theme_id: str) -> Sequence[ProcessingTask]:
+        """
+        Retrieve all tasks associated with a specific theme.
+
+        Args:
+            theme_id (str): ID of the theme.
+
+        Returns:
+            List[ProcessingTask]: List of tasks related to the theme.
+        """
+        result = await self.db.execute(
+            select(ProcessingTask).where(ProcessingTask.theme_id == theme_id)
+        )
+        return result.scalars().all()

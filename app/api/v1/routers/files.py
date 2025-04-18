@@ -22,8 +22,9 @@ from api.schemas.files import (
     FileProcessingRecommendations
 )
 from app.core.use_cases.file_processing import FileProcessingUseCase
-from app.api.dependencies import file_processing_use_case
+from app.api.dependencies import file_processing_use_case, get_task_manager
 from config import settings
+from core.services.task_services import TaskManager
 from infrastructure.database.repository.file_repository import FileRepository
 
 router = APIRouter()
@@ -74,40 +75,63 @@ async def upload_files(
 
 @router.post("/process", response_model=FileProcessingResponse)
 async def process_files_with_chunking(
-    request: FileProcessingRequest,
-    current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_async_db),
-    file_processing_use_case_: FileProcessingUseCase = Depends(file_processing_use_case)
+        request: FileProcessingRequest,
+        current_user: User = Depends(get_current_active_user),
+        db: Session = Depends(get_async_db),
+        file_processing_use_case_: FileProcessingUseCase = Depends(file_processing_use_case),
+        task_service: TaskManager = Depends(get_task_manager)
 ):
     """
     Read files from `directory_path`, chunk them, save to the document store,
     and create embeddings in the vector index. Returns a detailed report.
-
     Steps:
       1. Read and chunk files
       2. Save each chunk to the document store
       3. Embed chunks and store vectors
-      4. Return a summary report
+      4. Return a summary report with detailed logs
     """
     user_theme_path = settings.UPLOAD_DIR / str(current_user.id) / request.theme_id
-
     if not user_theme_path.exists() or not user_theme_path.is_dir():
         raise HTTPException(status_code=404, detail="Theme directory does not exist.")
+
+    # Create a task to track progress
+    task = await task_service.create_task(
+        user_id=current_user.id,
+        theme_id=request.theme_id,
+        task_type="theme_processing",
+        description=f"Processing theme: {request.theme_id}",
+        metadata={
+            "step": "processing",
+            "files_count": len(list(user_theme_path.glob('*'))),
+            "chunk_size": request.chunk_size,
+            "chunk_overlap": request.chunk_overlap
+        }
+    )
+
     try:
-        # Call our new integrated process
+        # Update task status to in_progress
+        await task_service.update_task_status(task.id, "in_progress", current_step=0)
+
+        # Call our integrated process
         report = await file_processing_use_case_.process_and_vectorize_directory(
             directory_path=str(user_theme_path),
             recursive=request.recursive,
             metadata=request.additional_metadata or {},
             theme_id=request.theme_id,
             chunk_size=request.chunk_size,
-            chunk_overlap=request.chunk_overlap
+            chunk_overlap=request.chunk_overlap,
+            task_id=task.id,  # Pass task_id to enable progress updates
+            user_id = current_user.id,
         )
+
+        # Mark task as completed
+        await task_service.update_task_status(task.id, "completed", current_step=3, progress=100)
 
         # Construct the response schema
         summary = report["summary"]
         return FileProcessingResponse(
             success=True,
+            task_id=task.id,
             message=(
                 f"Successfully processed {summary['successful_files']} files, "
                 f"created {summary['total_chunks_created']} chunks, "
@@ -120,7 +144,9 @@ async def process_files_with_chunking(
                     successful=summary["successful_files"],
                     unreadable=summary["unreadable_files"],
                     language_detection_failures=summary["language_detection_failures"],
-                    files_with_warnings=summary["files_with_warnings"]
+                    files_with_warnings=summary["files_with_warnings"],
+                    total_chunks_created=summary["total_chunks_created"],
+                    chunks_vectorized=summary["chunks_vectorized"]
                 ),
                 details=report["details"],
                 recommendations=FileProcessingRecommendations(
@@ -130,8 +156,12 @@ async def process_files_with_chunking(
             )
         )
     except ValueError as e:
+        # Update task as failed
+        await task_service.update_task_status(task.id, "failed", error_message=str(e))
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
+        # Update task as failed with error details
+        await task_service.update_task_status(task.id, "failed", error_message=str(e))
         raise HTTPException(status_code=500, detail=f"An error occurred during file processing: {str(e)}")
 
 

@@ -199,6 +199,8 @@ class FileProcessingUseCase:
             theme_id: str = None,
             chunk_size: int = 1000,
             chunk_overlap: int = 200,
+            task_id: str = None,
+            user_id: str = None,
     ) -> Dict[str, Any]:
         """
         Process all files in a directory:
@@ -208,6 +210,8 @@ class FileProcessingUseCase:
            4) Embeds each chunk
            5) Stores embeddings in the vector index
            6) Returns a consolidated report
+
+        Also sends progress updates via WebSockets if task_id is provided.
 
         Parameters
         ----------
@@ -223,6 +227,10 @@ class FileProcessingUseCase:
             Maximum size (in characters) of each text chunk (default 1000).
         chunk_overlap : int, optional
             Overlap (in characters) between consecutive text chunks (default 200).
+        task_id : str, optional
+            ID of the task to send progress updates for.
+        user_id : str, optional
+            ID of the user to send progress updates for.
 
         Returns
         -------
@@ -230,14 +238,27 @@ class FileProcessingUseCase:
             A report detailing how many files were processed, how many chunks
             were created, and any warnings or errors encountered.
         """
+        READING = 0  # scan & load files
+        CHUNKING = 1  # split text
+        EMBEDDING = 2  # create & store vectors
         if not os.path.isdir(directory_path):
             raise ValueError(f"Directory not found: {directory_path}")
 
         # Step 1: Read directory and produce raw documents
-        #   (Each file is read fully as a single "Document" in memory)
-        #   The existing file_processor already returns
-        #   (documents, report) describing success/failures.
         logger.info(f"Processing {directory_path}")
+
+        # Create WebSocket update if task_id is provided
+        if task_id:
+            await self._send_task_update(
+                task_id=task_id,
+                theme_id=theme_id,
+                user_id=user_id,
+                status="in_progress",
+                current_step=READING,
+                progress=0,
+                message="Starting processing",
+            )
+
         documents, base_report = await self.file_processor.process_directory(
             directory_path=directory_path,
             recursive=recursive,
@@ -267,7 +288,20 @@ class FileProcessingUseCase:
         vectors_to_add = []
         vector_ids = []
 
-        for doc in documents:
+        # Update task to indicate chunking has started
+        if task_id:
+            await self._send_task_update(
+                task_id=task_id,
+                theme_id=theme_id,
+                user_id=user_id,
+                status="in_progress",
+                current_step=EMBEDDING,
+                progress=0,
+                message="Starting processing",
+            )
+
+        total_docs = len(documents)
+        for idx, doc in enumerate(documents):
             text = doc.content
             # Use chunking service to split text
             chunks = self.chunking_service.chunk_text(
@@ -277,14 +311,26 @@ class FileProcessingUseCase:
             )
             total_chunks_created += len(chunks)
 
-            # For each chunk, we treat it as a separate document
-            # so that each chunk has its own embedding
+            # Send periodic progress updates
+            if task_id and idx % max(1, total_docs // 10) == 0:  # Update roughly every 10% of documents
+                progress = 30 + int(20 * (idx / total_docs))
+                await self._send_task_update(
+                    task_id=task_id,
+                    theme_id=theme_id,
+                    user_id=user_id,
+                    status="in_progress",
+                    current_step=1,
+                    progress=progress,
+                    message=f"Chunking document {idx + 1}/{total_docs}"
+                )
+
+            # For each chunk, treat it as a separate document
             for chunk in chunks:
                 # Create a Document object for the chunk
                 chunk_doc = Document(
                     content=chunk,
                     file_id=doc.file_id,
-                    owner_id = doc.owner_id or doc.metadata.get("owner_id"),
+                    owner_id=doc.owner_id or doc.metadata.get("owner_id"),
                     theme_id=theme_id,
                     metadata={
                         **doc.metadata,  # copy original metadata
@@ -298,20 +344,97 @@ class FileProcessingUseCase:
                 vectors_to_add.append(chunk)
                 vector_ids.append(doc_id)
 
+        # Update task status for embedding step
+        if task_id:
+            await self._send_task_update(
+                user_id=user_id,
+                task_id=task_id,
+                theme_id=theme_id,
+                status="in_progress",
+                current_step=EMBEDDING,
+                progress=60,
+                message=f"Creating embeddings for {len(vectors_to_add)} chunks"
+            )
+
         # Step 3: Embed all chunks in one or more batches
         if vectors_to_add:
-            embeddings = await self.embedding_service.get_embeddings(vectors_to_add)
-            # Now store them in the vector index:
+            # For large sets, process in batches and update progress
+            batch_size = 100  # Adjust based on your embedding service capacity
+            total_batches = (len(vectors_to_add) + batch_size - 1) // batch_size
 
-            await self.vector_index.add_vectors(embeddings, vector_ids)
+            for batch_idx in range(total_batches):
+                start_idx = batch_idx * batch_size
+                end_idx = min((batch_idx + 1) * batch_size, len(vectors_to_add))
 
-            chunks_vectorized = len(vectors_to_add)
+                batch_vectors = vectors_to_add[start_idx:end_idx]
+                batch_ids = vector_ids[start_idx:end_idx]
+
+                embeddings = await self.embedding_service.get_embeddings(batch_vectors)
+                await self.vector_index.add_vectors(embeddings, batch_ids)
+
+                chunks_vectorized += len(batch_vectors)
+
+                # Send progress updates for embedding process
+                if task_id:
+                    progress = 60 + int(30 * ((batch_idx + 1) / total_batches))
+                    await self._send_task_update(
+                        task_id=task_id,
+                        theme_id=theme_id,
+                        user_id=user_id,  # see next item
+                        status="in_progress",
+                        current_step=EMBEDDING,
+                        progress=progress,
+                        message=f"Processed batch {batch_idx + 1}/{total_batches} of embeddings"
+                    )
+
+        # Final task update
+        if task_id:
+            await self._send_task_update(
+                task_id=task_id,
+                theme_id=theme_id,
+                user_id=user_id,  # see next item
+                status="completed",
+                current_step=EMBEDDING,
+                progress=100,
+                message="Processing complete"
+            )
 
         # Update the extended report
         extended_report["summary"]["total_chunks_created"] = total_chunks_created
         extended_report["summary"]["chunks_vectorized"] = chunks_vectorized
 
         return extended_report
+
+    async def _send_task_update(
+            self,
+            task_id: str,
+            theme_id: str,
+            user_id: str,
+            status: str,
+            current_step: int,
+            progress: int,
+            message: str | None = None,
+    ):
+        """Send a websocket update via TaskUpdateManager."""
+        from app.api.websockets.task_updates import task_update_manager
+        try:
+            update_data = {
+                "type": "task_update",
+                "theme_id": theme_id,
+                "user_id": user_id,
+                "data": {
+                    "id": task_id,
+                    "status": status,
+                    "current_step": current_step,
+                    "progress": progress,
+                    "message": message,
+                },
+            }
+            await task_update_manager.broadcast_task_update(update_data)
+
+        except Exception as e:
+            logger.error(f"Failed to send task update: {e}")
+            # Continue processing even if update fails
 
 
     async def analyze_document_quality(self, documents: List[Document]) -> Dict[str, Any]:

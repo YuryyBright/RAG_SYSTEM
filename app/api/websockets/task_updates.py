@@ -40,7 +40,7 @@ class TaskUpdateManager:
 
     async def connect(self, websocket: WebSocket, user_id: str):
         """Connect a new WebSocket client."""
-        # await websocket.accept() #Remove this line.
+        # No need to call accept() here as it's already called in the handler
 
         if user_id not in self.active_connections:
             self.active_connections[user_id] = set()
@@ -101,6 +101,7 @@ class TaskUpdateManager:
         for websocket in self.active_connections[user_id]:
             try:
                 if websocket.client_state == WebSocketState.CONNECTED:
+                    logger.info('Send message for sock')
                     await websocket.send_text(message)
             except Exception:
                 disconnected.add(websocket)

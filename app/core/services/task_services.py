@@ -234,6 +234,58 @@ class TaskManager:
         db_tasks = await self.repository.get_by_theme(theme_id)
         return [self._to_domain_task(db_task) for db_task in db_tasks]
 
+    async def update_task_status(
+        self,
+        task_id: str,
+        status: Optional[str] = None,
+        current_step: Optional[int] = None,
+        progress: Optional[float] = None,
+        error_message: Optional[str] = None,
+    ) -> bool:
+        """
+        Update the status, progress, current step, or error message of a task.
+
+        Args:
+            task_id (str): ID of the task to update.
+            status (Optional[str]): New status for the task (pending, in_progress, completed, failed, etc.).
+            current_step (Optional[int]): Current processing step index.
+            progress (Optional[float]): Progress percentage (0.0 - 100.0).
+            error_message (Optional[str]): Error message if task failed.
+
+        Returns:
+            bool: True if the update succeeded, False otherwise.
+        """
+        # Fetch task first
+        task = await self.get_task(task_id)
+        if not task:
+            return False
+
+        # Apply updates
+        if status:
+            task.status = TaskStatusEnum(status)
+        if progress is not None:
+            task.progress = min(max(progress, 0.0), 100.0)
+        if current_step is not None:
+            task.current_step = current_step
+        if error_message:
+            task.error_message = error_message
+            task.add_log(f"Error occurred: {error_message}")
+            task.completed_at = datetime.now()
+
+        # Persist to DB
+        success = await self.repository.update(
+            task_id=task.id,
+            status=task.status.value,
+            progress=task.progress,
+            started_at=task.started_at,
+            completed_at=task.completed_at,
+            error_message=task.error_message,
+            logs=task.logs,
+            task_metadata=task.metadata,
+            steps=task.steps,
+            current_step=task.current_step
+        )
+        return success
     async def run_task_async(
         self,
         task: Task,
