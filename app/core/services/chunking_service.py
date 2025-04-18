@@ -8,8 +8,8 @@ class ChunkingService:
 
     def __init__(
             self,
-            default_chunk_size: int = 1000,
-            default_chunk_overlap: int = 200,
+            default_chunk_size: int = 2000,
+            default_chunk_overlap: int = 400,
             default_separator: str = "\n"
     ):
         self.default_chunk_size = default_chunk_size

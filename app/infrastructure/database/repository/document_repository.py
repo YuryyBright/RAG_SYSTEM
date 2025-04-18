@@ -1,6 +1,6 @@
 from typing import Optional, List, Dict, Any
 
-from sqlalchemy import select, func
+from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.infrastructure.database.db_models import Document
 from app.utils.logger_util import get_logger

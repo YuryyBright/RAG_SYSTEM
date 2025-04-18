@@ -247,6 +247,9 @@ export function updateVectorDBStatusUI() {
 /**
  * Start the embedding process
  */
+/**
+ * Start the embedding process
+ */
 export function startEmbeddingProcess() {
   $("#start-process-btn").prop("disabled", true);
   $("#process-progress").css("width", "0%");
@@ -291,32 +294,4 @@ export function startEmbeddingProcess() {
       $("#start-process-btn").prop("disabled", false);
     },
   });
-
-  // Simulate embedding process for UI
-  let progress = 0;
-  const progressInterval = setInterval(() => {
-    progress += 5;
-    $("#process-progress").css("width", `${progress}%`);
-
-    if (progress === 25) {
-      addProcessingLog("Generating embeddings for chunks...");
-    } else if (progress === 50) {
-      state.vectorDBStatus.generateEmbeddings = "completed";
-      state.vectorDBStatus.storeVectors = "in_progress";
-      updateVectorDBStatusUI();
-      addProcessingLog("Embeddings generated successfully!");
-      addProcessingLog("Starting vector database storage...");
-    } else if (progress === 75) {
-      addProcessingLog("Optimizing vector database for search...");
-    }
-
-    if (progress >= 100) {
-      clearInterval(progressInterval);
-      state.vectorDBStatus.storeVectors = "completed";
-      updateVectorDBStatusUI();
-      addProcessingLog("Vector database created successfully!");
-      alertify.success("Embedding process completed successfully");
-      $("#finish-btn").prop("disabled", false);
-    }
-  }, 500);
 }

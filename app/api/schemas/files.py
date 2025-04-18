@@ -71,12 +71,16 @@ class ProcessedFileSummary(BaseModel):
         Number of files where language detection failed.
     files_with_warnings : int
         Number of files with warnings during processing.
+    total_chunks_created
+    chunks_vectorized
     """
     total_files: int
     successful: int
     unreadable: int
     language_detection_failures: int
     files_with_warnings: int
+    total_chunks_created: int
+    chunks_vectorized: int
 
 
 class FileError(BaseModel):
@@ -141,6 +145,7 @@ class FileProcessingResponse(BaseModel):
     report : FileProcessingReport
         A detailed report of the file processing results.
     """
+    task_id: str
     success: bool
     message: str
     documents_count: int

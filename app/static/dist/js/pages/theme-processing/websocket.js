@@ -1,10 +1,11 @@
 /**
  * websocket.js
- * Handles WebSocket connections for real-time updates in theme processing
+ * Improved WebSocket connection for real-time updates in theme processing
  */
 
 import { state } from "./state.js";
-import { updateTaskUI } from "./ui.js";
+import { updateTaskUI, addLogMessage } from "./ui.js";
+import { updateVectorDBStatusUI } from "./vectorDB.js";
 
 /**
  * Wait until WebSocket is connected before executing a callback
@@ -20,6 +21,7 @@ export function waitForSocketConnection(callback, interval = 100) {
     }, interval);
   }
 }
+
 /**
  * Initialize WebSocket connection for real-time updates
  */
@@ -33,17 +35,8 @@ export function initializeWebSocketConnection() {
   const wsUrl = `${protocol}//${window.location.host}/ws/tasks`;
   try {
     state.taskSocket = new WebSocket(wsUrl);
-
+    console.log("WebSocket initialized:", wsUrl); // <-- add this
     state.taskSocket.onopen = function () {
-      //   state.reconnectAttempts = 0;
-      //   // ✅ Safe to send after socket is open
-      //   const testMessage = {
-      //     command: "ping", // not "action"
-      //     message: "Test WebSocket message",
-      //     timestamp: new Date().toISOString(),
-      //   };
-      //   state.taskSocket.send(JSON.stringify(testMessage));
-      //   console.log("Test message sent to server:", testMessage);
       // Process any pending subscription
       if (state.pendingSubscription) {
         subscribeToThemeUpdates(state.pendingSubscription);
@@ -56,6 +49,7 @@ export function initializeWebSocketConnection() {
 
     state.taskSocket.onmessage = function (event) {
       const message = JSON.parse(event.data);
+      console.log("Received WebSocket message:", message); // <-- add this
       handleWebSocketMessage(message);
     };
 
@@ -94,7 +88,6 @@ export function attemptReconnect() {
 
 /**
  * Subscribe to theme updates via WebSocket
- * Avoids redundant subscriptions and assumes socket is ready when called
  * @param {string} themeId
  */
 export function subscribeToThemeUpdates(themeId) {
@@ -115,8 +108,10 @@ export function subscribeToThemeUpdates(themeId) {
       command: "unsubscribe",
       theme_id: state.subscribedThemeId,
     };
-    state.taskSocket.send(JSON.stringify(unsubscribeMsg));
-    console.log(`Unsubscribed from theme ${state.subscribedThemeId}`);
+    waitForSocketConnection(() => {
+      state.taskSocket.send(JSON.stringify(unsubscribeMsg));
+      console.log(`Unsubscribed from theme ${state.subscribedThemeId}`);
+    });
   }
 
   // Now send the subscription
@@ -125,8 +120,11 @@ export function subscribeToThemeUpdates(themeId) {
     theme_id: themeId,
   };
 
-  state.taskSocket.send(JSON.stringify(subscribeMsg));
-  state.subscribedThemeId = themeId; // optimistic update
+  waitForSocketConnection(() => {
+    state.taskSocket.send(JSON.stringify(subscribeMsg));
+    state.subscribedThemeId = themeId; // optimistic update
+    console.log(`Subscribed to theme ${themeId}`);
+  });
 }
 
 /**
@@ -134,60 +132,87 @@ export function subscribeToThemeUpdates(themeId) {
  * @param {Object} message - Message received from WebSocket
  */
 export function handleWebSocketMessage(message) {
-  // console.log("Received WebSocket message:", message);
-
-  // Handle subscription confirmation
   if (message.type === "subscription") {
-    // console.log(`Subscription status: ${message.status} for theme ${message.theme_id}`);
-
-    // If subscription was successful, store the subscribed theme
     if (message.status === "success") {
       state.subscribedThemeId = message.theme_id;
     }
+    return;
   }
 
-  // Handle task updates
   if (message.type === "task_update" && message.data) {
     const taskData = message.data;
 
-    // Only process updates for the current theme
-    if (taskData.theme_id === state.currentThemeId) {
-      // Update our task data
-      state.processingTask = taskData;
+    if (message.theme_id !== state.currentThemeId) return; // <-- Fix here
 
-      // Update UI based on task data
-      updateTaskUI(taskData);
+    state.processingTask = taskData;
+    updateTaskUI(taskData);
 
-      // Import necessary modules dynamically to avoid circular dependencies
-      import("./vectorDB.js").then(({ updateVectorDBStatusUI }) => {
-        // Update vector DB status if it exists in the metadata
-        if (taskData.metadata && taskData.metadata.vectorDBStatus) {
-          state.vectorDBStatus = taskData.metadata.vectorDBStatus;
-          updateVectorDBStatusUI();
-        }
-      });
+    const progress = taskData.progress || 0;
+    const step = taskData.current_step;
 
-      // If there are new logs, add them to the UI
-      if (taskData.logs && taskData.logs.length > 0) {
-        // Find logs that are not already in our state
-        const existingLogs = new Set(state.processingLogs || []);
-        const newLogs = taskData.logs.filter((log) => !existingLogs.has(log));
+    let stepDescription = "";
 
-        // Add new logs to UI and state
-        newLogs.forEach((log) => {
-          $("#process-log-content").append(`<div>> ${log}</div>`);
-          state.processingLogs = state.processingLogs || [];
-          state.processingLogs.push(log);
-        });
+    switch (step) {
+      case 0:
+        stepDescription = `Reading files (${progress}%)`;
+        break;
+      case 1:
+        stepDescription = `Chunking text (${progress}%)`;
+        break;
+      case 2:
+        stepDescription = `Generating embeddings (${progress}%)`;
+        break;
+      case 3:
+        stepDescription = `Storing vectors (${progress}%)`;
+        break;
+      default:
+        stepDescription = `Processing (${progress}%)`;
+    }
 
-        // Auto-scroll to bottom if there are new logs
-        if (newLogs.length > 0) {
-          const logContainer = $("#process-log-content").parent();
-          logContainer.scrollTop(logContainer[0].scrollHeight);
-        }
-      }
+    addLogMessage(stepDescription);
+
+    // Update the live progress bar
+    $("#process-progress").css("width", `${progress}%`);
+
+    // Update vector DB status UI
+    if (taskData.metadata && taskData.metadata.vectorDBStatus) {
+      state.vectorDBStatus = taskData.metadata.vectorDBStatus;
+      updateVectorDBStatusUI();
     }
   }
+}
+
+/**
+ * Update processing status based on details
+ */
+function updateProcessingStatus(details) {
+  // Update state based on processing stage
+  if (details.stage === "reading") {
+    state.vectorDBStatus.dataIngestion = "in_progress";
+    addLogMessage(`Reading files: ${details.progress}% complete`);
+  } else if (details.stage === "chunking") {
+    state.vectorDBStatus.dataIngestion = "completed";
+    state.vectorDBStatus.textChunking = "in_progress";
+    addLogMessage(`Chunking text: ${details.progress}% complete. Created ${details.chunksCreated || 0} chunks.`);
+  } else if (details.stage === "embedding") {
+    state.vectorDBStatus.textChunking = "completed";
+    state.vectorDBStatus.generateEmbeddings = "in_progress";
+    addLogMessage(
+      `Generating embeddings: ${details.progress}% complete. Processed ${details.embeddingsCreated || 0} embeddings.`
+    );
+  } else if (details.stage === "storing") {
+    state.vectorDBStatus.generateEmbeddings = "completed";
+    state.vectorDBStatus.storeVectors = "in_progress";
+    addLogMessage(`Storing vectors: ${details.progress}% complete`);
+  } else if (details.stage === "completed") {
+    state.vectorDBStatus.storeVectors = "completed";
+    addLogMessage(
+      `Processing completed. Total chunks: ${details.totalChunks}, total embeddings: ${details.totalEmbeddings}`
+    );
+  }
+
+  // Update the UI
+  updateVectorDBStatusUI();
 }
 /**
  * Handle page visibility change to manage WebSocket connection
@@ -211,7 +236,6 @@ export function handleWindowFocus() {
  * Handle window blur event (user navigated away)
  */
 export function handleWindowBlur() {
-  // We could pause long-running operations here or update status
   console.log("Window lost focus");
 }
 

@@ -54,7 +54,7 @@ export function startFileProcessing() {
     success: function (response) {
       // Log the complete response to console for debugging
       console.log("Complete processing response:", response);
-
+      addLogMessage("✅ Processing completed successfully");
       // Update processing logs with details from the response
       addLogMessage(`Successfully processed ${response.documents_count} files`);
 
