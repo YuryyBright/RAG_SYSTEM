@@ -101,6 +101,7 @@ class TaskUpdateManager:
         for websocket in self.active_connections[user_id]:
             try:
                 if websocket.client_state == WebSocketState.CONNECTED:
+                    #TODO check why not working
                     logger.info('Send message for sock')
                     await websocket.send_text(message)
             except Exception:
