@@ -511,25 +511,29 @@ export function updateTaskUI(task) {
     $("#task-error-message").addClass("d-none").text("");
   }
 
-  // Update task completion info
   if (task.status === "completed" && (!state.processingTask || state.processingTask.status !== "completed")) {
     // Task just completed - show completion information
     $("#task-completion-info").removeClass("d-none").html(`<div class="alert alert-success">
-        <i class="fas fa-check-circle mr-2"></i>
-        Processing completed successfully at ${new Date().toLocaleTimeString()}
-      </div>`);
+      <i class="fas fa-check-circle mr-2"></i>
+      Processing completed successfully at ${new Date().toLocaleTimeString()}
+    </div>`);
 
-    // Add completion message to log
     addLogMessage("Processing completed successfully!", "success");
 
     // Enable the finish button
-    $("#finish-btn").prop("disabled", false).removeClass("btn-secondary").addClass("btn-primary");
+    $("#finish-btn").prop("disabled", false).removeClass("btn-secondary").addClass("btn-primary").show();
 
-    // Maybe play a sound notification
-    if (window.Audio && state.userPreferences?.enableSounds) {
-      const completeSound = new Audio("/static/sounds/complete.mp3");
-      completeSound.play().catch((e) => console.log("Could not play completion sound"));
-    }
+    // // Play sound if enabled
+    // if (window.Audio && state.userPreferences?.enableSounds) {
+    //   const completeSound = new Audio("/static/sounds/complete.mp3");
+    //   completeSound.play().catch((e) => console.log("Could not play completion sound"));
+    // }
+
+    // 🎯 ADD THIS
+    setTimeout(() => {
+      alertify.success("🎉 Processing finished! Returning to theme selection...");
+      navigateToStep(1); // Move back to Step 1
+    }, 3000);
   }
 
   // Update state and save

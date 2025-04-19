@@ -2,7 +2,7 @@ from typing import Optional, List, Dict, Any
 
 from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.infrastructure.database.db_models import Document
+from app.infrastructure.database.db_models import Document, ThemeDocument
 from app.utils.logger_util import get_logger
 
 logger = get_logger(__name__)
@@ -143,6 +143,21 @@ class DocumentRepository:
         result = await self.db.execute(select(Document))
         return result.scalars().all()
 
+    async def create_theme_document_link(self, theme_id: str, document_id: str) -> None:
+        """
+        Create a link between a Theme and a Document in the ThemeDocument table.
+
+        Args:
+            theme_id: ID of the theme
+            document_id: ID of the document
+        """
+
+        theme_document = ThemeDocument(
+            theme_id=theme_id,
+            document_id=document_id
+        )
+        self.db.add(theme_document)
+        await  self.db.commit()
     async def delete_by_file_id(self, file_id: str) -> int:
         """
         Delete all documents linked to a file.

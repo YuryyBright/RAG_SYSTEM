@@ -139,7 +139,7 @@ export function startFileProcessing() {
       updateVectorDBStatusUI();
 
       // Enable the finish button
-      $("#finish-btn").prop("disabled", false);
+      $("#finish-btn").prop("disabled", false).removeClass("btn-secondary").addClass("btn-primary").show(); // Явно показати кнопку
 
       // Reset the download button text after processing completes
       $("#start-download-btn").text("Start Download").prop("disabled", false);
@@ -232,7 +232,8 @@ export function processFilesWithProgress() {
 
     updateVectorDBStatusUI();
     $("#start-process-btn").prop("disabled", false);
-    $("#finish-btn").prop("disabled", false);
+    // В функції updateTaskUI, коли task.status === "completed"
+    $("#finish-btn").prop("disabled", false).removeClass("btn-secondary").addClass("btn-primary").show(); // Явно показати кнопку
     saveWorkflowState();
   }
 
