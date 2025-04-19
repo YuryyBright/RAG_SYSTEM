@@ -162,7 +162,7 @@ class Settings(BaseSettings):
 
     EMBEDDING_SERVICE: str = Field("instructor",
                                    description="Embedding service to use (instructor, openai, sentence_transformer)")
-    INSTRUCTOR_MODEL_NAME: str = Field("hkunlp/instructor-large", description="Instructor model name")
+    INSTRUCTOR_MODEL_NAME: str = Field("models/instructor-xl", description="Instructor model name")
     EMBEDDING_INSTRUCTION: str = Field("Represent the document for retrieval:",
                                        description="Instruction for document embeddings")
     QUERY_INSTRUCTION: str = Field("Represent the question for retrieving relevant documents:",

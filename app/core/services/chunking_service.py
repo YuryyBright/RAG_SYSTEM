@@ -1,6 +1,6 @@
 # app/core/services/chunking_service.py
 from typing import List, Dict, Any, Optional, Tuple
-import tiktoken
+# import tiktoken
 
 class ChunkingService:
     """Service for chunking text documents into smaller segments for embedding."""
@@ -15,12 +15,12 @@ class ChunkingService:
         self.default_chunk_size = default_chunk_size
         self.default_chunk_overlap = default_chunk_overlap
         self.default_separator = default_separator
-        self.model_name = model_name
-
-        try:
-            self.tokenizer = tiktoken.encoding_for_model(model_name)
-        except KeyError:
-            self.tokenizer = tiktoken.get_encoding("cl100k_base")  # Safe default
+        # self.model_name = model_name
+        #
+        # try:
+        #     self.tokenizer = tiktoken.encoding_for_model(model_name)
+        # except KeyError:
+        #     self.tokenizer = tiktoken.get_encoding("cl100k_base")  # Safe default
 
     def chunk_text(
             self,
@@ -186,33 +186,33 @@ class ChunkingService:
 
         return chunks
 
-    def chunk_text_by_tokens(
-            self,
-            text: str,
-            chunk_size_tokens: Optional[int] = None,
-            chunk_overlap_tokens: Optional[int] = None,
-    ) -> List[str]:
-        chunk_size_tokens = chunk_size_tokens or self.default_chunk_size
-        chunk_overlap_tokens = chunk_overlap_tokens or self.default_chunk_overlap
-
-        tokens = self.tokenizer.encode(text)
-        total_tokens = len(tokens)
-
-        if total_tokens <= chunk_size_tokens:
-            return [text]
-
-        chunks = []
-        start = 0
-
-        while start < total_tokens:
-            end = min(start + chunk_size_tokens, total_tokens)
-            chunk_tokens = tokens[start:end]
-            chunk_text = self.tokenizer.decode(chunk_tokens)
-            chunks.append(chunk_text)
-
-            start = end - chunk_overlap_tokens  # step back by overlap
-
-        return chunks
+    # def chunk_text_by_tokens(
+    #         self,
+    #         text: str,
+    #         chunk_size_tokens: Optional[int] = None,
+    #         chunk_overlap_tokens: Optional[int] = None,
+    # ) -> List[str]:
+    #     chunk_size_tokens = chunk_size_tokens or self.default_chunk_size
+    #     chunk_overlap_tokens = chunk_overlap_tokens or self.default_chunk_overlap
+    #
+    #     tokens = self.tokenizer.encode(text)
+    #     total_tokens = len(tokens)
+    #
+    #     if total_tokens <= chunk_size_tokens:
+    #         return [text]
+    #
+    #     chunks = []
+    #     start = 0
+    #
+    #     while start < total_tokens:
+    #         end = min(start + chunk_size_tokens, total_tokens)
+    #         chunk_tokens = tokens[start:end]
+    #         chunk_text = self.tokenizer.decode(chunk_tokens)
+    #         chunks.append(chunk_text)
+    #
+    #         start = end - chunk_overlap_tokens  # step back by overlap
+    #
+    #     return chunks
     def _try_chunking_with_separator(
             self,
             text: str,
