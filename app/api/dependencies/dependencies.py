@@ -56,6 +56,7 @@ from core.services.task_services import TaskManager
 from core.services.vector_index_services import VectorIndexService
 from infrastructure.database.repository.file_repository import FileRepository
 from infrastructure.database.repository.task_repository import TaskRepository
+from api.websockets.task_updates import get_task_update_manager, TaskUpdateManager
 
 logger = get_logger(__name__)
 
@@ -198,11 +199,7 @@ def get_theme_use_case(
     )
 
 
-async def get_task_repository(db: AsyncSession = Depends(get_async_db)) -> TaskRepository:
-    """
-    Get task repository instance.
-    """
-    return TaskRepository(db)
+
 
 
 async def get_chunking_service() -> ChunkingService:
@@ -280,7 +277,9 @@ async def file_processing_use_case(
         chunking_service: ChunkingService = Depends(get_chunking_service),
         embedding_service: EmbeddingService = Depends(get_embedding_service),
         document_store: DocumentStore = Depends(get_document_store),
-        vector_index: VectorIndexService = Depends(get_vector_index)
+        vector_index: VectorIndexService = Depends(get_vector_index),
+        task_update_manager: TaskUpdateManager = Depends(get_task_update_manager)
+
 ) -> FileProcessingUseCase:
     """
     Provides a FileProcessingUseCase instance via FastAPI's dependency injection.
@@ -304,4 +303,5 @@ async def file_processing_use_case(
         embedding_service=embedding_service,
         document_store=document_store,
         vector_index=vector_index,
+        task_update_manager = task_update_manager,
     )

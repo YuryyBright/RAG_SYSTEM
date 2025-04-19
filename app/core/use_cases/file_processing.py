@@ -4,13 +4,14 @@ from typing import Dict, List, Tuple, Any, Optional
 from datetime import datetime
 import numpy as np
 from adapters.storage.document_store import DocumentStore
+
 from app.core.entities.document import Document
-from app.adapters.storage.file_manager import FileManager
 from core.services.chunking_service import ChunkingService
 from core.services.embedding_service import EmbeddingService
 from core.services.vector_index_services import VectorIndexService
 from infrastructure.loaders.file_processor import FileProcessor
 from utils.logger_util import get_logger
+from api.websockets.task_updates import TaskUpdateManager
 
 logger = get_logger(__name__)
 
@@ -29,6 +30,7 @@ class FileProcessingUseCase:
             embedding_service: EmbeddingService,
             document_store: DocumentStore,
             vector_index: VectorIndexService,
+            task_update_manager: TaskUpdateManager
     ):
         """
         Initialize the FileProcessingUseCase with required services.
@@ -51,6 +53,7 @@ class FileProcessingUseCase:
         self.embedding_service = embedding_service
         self.document_store = document_store
         self.vector_index = vector_index
+        self.task_update_manager = task_update_manager
 
     async def process_directory(
             self,
@@ -256,7 +259,7 @@ class FileProcessingUseCase:
                 status="in_progress",
                 current_step=READING,
                 progress=0,
-                message="Starting processing",
+                message="Starting processing reading files",
             )
 
         documents, base_report = await self.file_processor.process_directory(
@@ -279,7 +282,19 @@ class FileProcessingUseCase:
             "details": base_report["details"],
             "recommendations": base_report["recommendations"],
         }
-
+        if task_id:
+            await self._send_task_update(
+                task_id=task_id,
+                theme_id=theme_id,
+                user_id=user_id,
+                status="completed",  # maybe "in_progress" if not fully done
+                current_step=READING,
+                progress=100,
+                message=f"Finished processing {extended_report['summary']['total_files']} files: "
+                        f"{extended_report['summary']['successful_files']} successful, "
+                        f"{extended_report['summary']['unreadable_files']} unreadable, "
+                        f"{extended_report['summary']['language_detection_failures']} language detection failures.",
+            )
         # Step 2: Chunk, store, and embed each document
         total_chunks_created = 0
         chunks_vectorized = 0
@@ -295,7 +310,7 @@ class FileProcessingUseCase:
                 theme_id=theme_id,
                 user_id=user_id,
                 status="in_progress",
-                current_step=EMBEDDING,
+                current_step=CHUNKING,
                 progress=0,
                 message="Starting processing",
             )
@@ -319,7 +334,7 @@ class FileProcessingUseCase:
                     theme_id=theme_id,
                     user_id=user_id,
                     status="in_progress",
-                    current_step=1,
+                    current_step=CHUNKING,
                     progress=progress,
                     message=f"Chunking document {idx + 1}/{total_docs}"
                 )
@@ -343,7 +358,15 @@ class FileProcessingUseCase:
                 # We'll collect text for embedding
                 vectors_to_add.append(chunk)
                 vector_ids.append(doc_id)
-
+        await self._send_task_update(
+            task_id=task_id,
+            theme_id=theme_id,
+            user_id=user_id,
+            status="in_progress",
+            current_step=CHUNKING,
+            progress=100,
+            message=f"Chunking document: {total_docs}"
+        )
         # Update task status for embedding step
         if task_id:
             await self._send_task_update(
@@ -416,7 +439,6 @@ class FileProcessingUseCase:
             message: str | None = None,
     ):
         """Send a websocket update via TaskUpdateManager."""
-        from app.api.websockets.task_updates import task_update_manager
         try:
             update_data = {
                 "type": "task_update",
@@ -430,11 +452,12 @@ class FileProcessingUseCase:
                     "message": message,
                 },
             }
-            await task_update_manager.broadcast_task_update(update_data)
+            await self.task_update_manager.broadcast_task_update(update_data)
 
         except Exception as e:
             logger.error(f"Failed to send task update: {e}")
             # Continue processing even if update fails
+
 
 
     async def analyze_document_quality(self, documents: List[Document]) -> Dict[str, Any]:

@@ -22,7 +22,7 @@ from api.schemas.files import (
     FileProcessingRecommendations
 )
 from app.core.use_cases.file_processing import FileProcessingUseCase
-from app.api.dependencies import file_processing_use_case, get_task_manager
+from app.api.dependencies.dependencies import file_processing_use_case, get_task_manager
 from config import settings
 from core.services.task_services import TaskManager
 from infrastructure.database.repository.file_repository import FileRepository

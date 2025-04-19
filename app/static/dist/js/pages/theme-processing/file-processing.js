@@ -23,7 +23,9 @@ export function startFileProcessing() {
 
   // Disable the process button while processing
   $("#start-process-btn").prop("disabled", true);
-
+  // Clear previous logs
+  $("#process-log-content").empty();
+  state.processingLogs = [];
   // Update UI with processing status
   addLogMessage("Starting file processing workflow...");
   state.vectorDBStatus.dataIngestion = "completed";

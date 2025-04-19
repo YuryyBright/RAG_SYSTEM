@@ -2,7 +2,7 @@
 from fastapi import APIRouter, Depends
 from api.schemas.query import QueryRequest, QueryResponse
 from core.use_cases.query import QueryProcessor
-from app.api.dependencies import get_query_processor
+from app.api.dependencies.dependencies import get_query_processor
 
 router = APIRouter()
 
