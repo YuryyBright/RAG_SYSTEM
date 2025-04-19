@@ -9,7 +9,7 @@ from core.entities.document import Document
 
 from core.interfaces.embedding import EmbeddingInterface
 from core.interfaces.indexing import IndexInterface
-from app.api.dependencies import (
+from app.api.dependencies.dependencies import (
     get_document_repository,
     get_embedding_service,
     get_vector_index

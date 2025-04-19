@@ -44,11 +44,18 @@ export function checkForActiveTasks() {
             // Restore logs if available
             if (state.processingTask.logs && state.processingTask.logs.length > 0) {
               // Clear existing logs
+              // Clear existing logs
               $("#process-log-content").empty();
 
-              // Add each log entry
+              // Add each log entry properly formatted
               state.processingTask.logs.forEach((log) => {
-                $("#process-log-content").append(`<div>> ${log}</div>`);
+                const logEntry = `
+      <div class="log-entry animate-new-log">
+        <i class="fas fa-chevron-right mr-1"></i>
+        <span>${log}</span>
+      </div>
+    `;
+                $("#process-log-content").append(logEntry);
               });
 
               // Store in state

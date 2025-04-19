@@ -9,6 +9,8 @@ from typing import Any, Dict, List, Optional, Union, Callable
 from datetime import datetime
 import logging
 
+from core.interfaces.embedding import EmbeddingInterface
+
 logger = logging.getLogger(__name__)
 
 # Email validation regex pattern
@@ -107,3 +109,18 @@ def safe_parse_json(json_str: str) -> Optional[Union[Dict[str, Any], List[Any]]]
     if not is_valid_json(json_str):
         return None
     return json.loads(json_str)
+
+
+# В utils/embedding_util.py або прямо в embedding_service.py
+async def validate_embedding_dimensions(embedding_service: EmbeddingInterface, expected_dim: int = 1536):
+    """Validates that the embedding model outputs vectors with the expected dimension."""
+    try:
+        dummy_text = "test validation text"
+        embedding = await embedding_service.get_embedding(dummy_text)
+        if len(embedding) != expected_dim:
+            raise ValueError(
+                f"Embedding dimension mismatch: got {len(embedding)}, expected {expected_dim}.\n"
+                f"⚠️ Check the model or settings."
+            )
+    except Exception as e:
+        raise RuntimeError(f"Failed to validate embedding dimensions: {str(e)}")

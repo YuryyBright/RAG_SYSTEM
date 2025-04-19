@@ -23,7 +23,6 @@ class DocxReader(BaseReader):
         str
             Extracted text content from the .docx file.
         """
-    def read(self, path: Path) -> str:  
         try:
             doc = Document(path)
             return "\n".join(

@@ -64,8 +64,8 @@ export function initDropzone() {
         this.on("sending", function (file, xhr, formData) {
           // Get the CSRF token
           const token = getCsrfToken();
-          console.log("CSRF Token:", token);
-
+          // console.log("CSRF Token:", token);
+          // console.log("File to be uploaded:", file);
           // Check if the token is valid
           if (!token) {
             console.error("CSRF Token is missing or invalid.");

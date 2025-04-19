@@ -12,16 +12,6 @@ import { updateVectorDBStatusUI } from "./vectorDB.js";
  * @param {function} callback - Function to run once the socket is connected
  * @param {number} interval - Interval in ms to check connection (default: 100ms)
  */
-export function waitForSocketConnection(callback, interval = 100) {
-  if (state.taskSocket && state.taskSocket.readyState === WebSocket.OPEN) {
-    callback();
-  } else {
-    setTimeout(() => {
-      waitForSocketConnection(callback, interval);
-    }, interval);
-  }
-}
-
 /**
  * Initialize WebSocket connection for real-time updates
  */
@@ -35,8 +25,14 @@ export function initializeWebSocketConnection() {
   const wsUrl = `${protocol}//${window.location.host}/ws/tasks`;
   try {
     state.taskSocket = new WebSocket(wsUrl);
-    console.log("WebSocket initialized:", wsUrl); // <-- add this
+
     state.taskSocket.onopen = function () {
+      state.reconnectAttempts = 0; // Reset reconnection counter on successful connection
+      console.log("WebSocket connection established successfully!");
+
+      state.taskSocket.send(JSON.stringify({ command: "ping" }));
+      console.log("Ping sent to server");
+
       // Process any pending subscription
       if (state.pendingSubscription) {
         subscribeToThemeUpdates(state.pendingSubscription);
@@ -71,21 +67,21 @@ export function initializeWebSocketConnection() {
  * Attempt to reconnect WebSocket after connection lost
  */
 export function attemptReconnect() {
+  // ⬇️  NEW: do we actually need the socket?
+  if (
+    !state.processingTask || // nothing to watch
+    ["completed", "failed", "cancelled"].includes(state.processingTask.status)
+  ) {
+    console.log("No active task – skip WebSocket reconnect");
+    return;
+  }
+
   if (state.reconnectAttempts >= state.maxReconnectAttempts) {
     console.error("Maximum reconnection attempts reached");
     alertify.error("Lost connection to server. Please refresh the page.");
     return;
   }
-
-  state.reconnectAttempts++;
-
-  console.log(`Attempting to reconnect (${state.reconnectAttempts}/${state.maxReconnectAttempts})...`);
-
-  setTimeout(() => {
-    initializeWebSocketConnection();
-  }, state.reconnectDelay);
 }
-
 /**
  * Subscribe to theme updates via WebSocket
  * @param {string} themeId
@@ -103,16 +99,15 @@ export function subscribeToThemeUpdates(themeId) {
   }
 
   // Optionally unsubscribe previous
-  if (state.subscribedThemeId && state.subscribedThemeId !== themeId) {
-    const unsubscribeMsg = {
-      command: "unsubscribe",
-      theme_id: state.subscribedThemeId,
-    };
-    waitForSocketConnection(() => {
-      state.taskSocket.send(JSON.stringify(unsubscribeMsg));
-      console.log(`Unsubscribed from theme ${state.subscribedThemeId}`);
-    });
-  }
+  // if (state.subscribedThemeId && state.subscribedThemeId !== themeId) {
+  //   const unsubscribeMsg = {
+  //     command: "unsubscribe",
+  //     theme_id: state.subscribedThemeId,
+  //   };
+
+  //   state.taskSocket.send(JSON.stringify(unsubscribeMsg));
+  //   console.log(`Unsubscribed from theme ${state.subscribedThemeId}`);
+  // }
 
   // Now send the subscription
   const subscribeMsg = {
@@ -120,11 +115,15 @@ export function subscribeToThemeUpdates(themeId) {
     theme_id: themeId,
   };
 
-  waitForSocketConnection(() => {
-    state.taskSocket.send(JSON.stringify(subscribeMsg));
-    state.subscribedThemeId = themeId; // optimistic update
-    console.log(`Subscribed to theme ${themeId}`);
-  });
+  state.taskSocket.send(JSON.stringify(subscribeMsg));
+  const sendMsg = () => state.taskSocket.send(JSON.stringify(subscribeMsg));
+  if (state.taskSocket.readyState === WebSocket.OPEN) {
+    sendMsg();
+  } else {
+    state.pendingSubscription = themeId; // will be flushed on onopen
+  }
+  state.subscribedThemeId = themeId; // optimistic update
+  console.log(`Subscribed to theme ${themeId}`);
 }
 
 /**
@@ -142,11 +141,11 @@ export function handleWebSocketMessage(message) {
   if (message.type === "task_update" && message.data) {
     const taskData = message.data;
 
-    if (message.theme_id !== state.currentThemeId) return; // <-- Fix here
-
+    // if (message.theme_id !== state.currentThemeId) return; // <-- Fix here
+    console.log("message update received:", message.theme_id);
     state.processingTask = taskData;
     updateTaskUI(taskData);
-
+    state.processingTask = taskData;
     const progress = taskData.progress || 0;
     const step = taskData.current_step;
 
@@ -177,8 +176,17 @@ export function handleWebSocketMessage(message) {
     // Update vector DB status UI
     if (taskData.metadata && taskData.metadata.vectorDBStatus) {
       state.vectorDBStatus = taskData.metadata.vectorDBStatus;
-      updateVectorDBStatusUI();
+    } else {
+      // Fallback logic to infer status from step
+      const step = taskData.current_step;
+      state.vectorDBStatus = {
+        dataIngestion: step === 0 ? "in_progress" : "completed",
+        textChunking: step === 1 ? "in_progress" : step > 1 ? "completed" : "pending",
+        generateEmbeddings: step === 2 ? "in_progress" : step > 2 ? "completed" : "pending",
+        storeVectors: taskData.status === "completed" ? "completed" : "pending",
+      };
     }
+    updateVectorDBStatusUI();
   }
 }
 

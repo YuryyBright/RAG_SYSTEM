@@ -1,21 +1,17 @@
 # app/api/websockets/task_updates.py
 import datetime
 import json
-from typing import Dict, List, Optional, Set, Annotated, Union
-import asyncio
-from fastapi import WebSocket, WebSocketDisconnect, Depends, Cookie, APIRouter, Query, WebSocketException
+from typing import Dict, Set
+
+from fastapi import WebSocket, WebSocketDisconnect, Depends, APIRouter
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
-from starlette import status
 from starlette.websockets import WebSocketState
 
-from api.middleware_auth import get_current_active_user
+from api.dependencies.task_dependencies import get_task_repository
 from app.infrastructure.database.repository.task_repository import TaskRepository
-from app.api.dependencies import get_task_repository
 from config import settings
-from core.entities.user import User
 from core.services.auth_service import AuthService
-from infrastructure.database.repository import get_async_db, get_websocket_db
 from utils.security import COOKIE_NAME
 
 router = APIRouter()
@@ -28,102 +24,103 @@ AsyncSessionLocal = sessionmaker(engine, expire_on_commit=False, class_=AsyncSes
 
 class TaskUpdateManager:
     """
-    WebSocket connection manager for task updates.
-    Broadcasts task updates to connected clients.
+    A Singleton WebSocket manager that handles task updates across multiple clients.
+    Manages active user connections and theme subscriptions.
     """
+    _instance = None
+    _initialized = False
+
+    def __new__(cls):
+        if cls._instance is None:
+            logger.info("Creating a new TaskUpdateManager instance (Singleton)")
+            cls._instance = super().__new__(cls)
+        return cls._instance
 
     def __init__(self):
-        # Map of user_id -> Set of WebSocket connections
-        self.active_connections: Dict[str, Set[WebSocket]] = {}
-        # Map of theme_id -> Set of user_ids interested in that theme
-        self.theme_subscriptions: Dict[str, Set[str]] = {}
+        if not self._initialized:
+            self.active_connections: Dict[str, Set[WebSocket]] = {}
+            self.theme_subscriptions: Dict[str, Set[str]] = {}
+            self._initialized = True  # Prevents reinitialization on next instantiation
 
     async def connect(self, websocket: WebSocket, user_id: str):
-        """Connect a new WebSocket client."""
-        # No need to call accept() here as it's already called in the handler
-
-        if user_id not in self.active_connections:
-            self.active_connections[user_id] = set()
-
-        self.active_connections[user_id].add(websocket)
+        """Register a new WebSocket connection for a user."""
+        logger.info(f"Connecting user {user_id} to WebSocket.")
+        self.active_connections.setdefault(user_id, set()).add(websocket)
+        logger.debug(f"Current active connections: {self.active_connections}")
 
     def disconnect(self, websocket: WebSocket, user_id: str):
-        """Disconnect a WebSocket client."""
+        """Remove a WebSocket connection for a user."""
+        logger.info(f"Disconnecting user {user_id} from WebSocket.")
         if user_id in self.active_connections:
             self.active_connections[user_id].discard(websocket)
-
-            # Clean up if no more connections for this user
             if not self.active_connections[user_id]:
                 del self.active_connections[user_id]
+        logger.debug(f"Active connections after disconnect: {self.active_connections}")
 
     async def subscribe_to_theme(self, user_id: str, theme_id: str):
-        """Subscribe a user to theme updates."""
-        if theme_id not in self.theme_subscriptions:
-            self.theme_subscriptions[theme_id] = set()
-
-        self.theme_subscriptions[theme_id].add(user_id)
+        """Subscribe a user to a theme to receive updates."""
+        self.theme_subscriptions.setdefault(theme_id, set()).add(user_id)
+        logger.info(f"User {user_id} subscribed to theme {theme_id}.")
 
     async def unsubscribe_from_theme(self, user_id: str, theme_id: str):
-        """Unsubscribe a user from theme updates."""
+        """Unsubscribe a user from a theme."""
         if theme_id in self.theme_subscriptions:
             self.theme_subscriptions[theme_id].discard(user_id)
-
-            # Clean up if no more subscriptions for this theme
             if not self.theme_subscriptions[theme_id]:
                 del self.theme_subscriptions[theme_id]
+            logger.info(f"User {user_id} unsubscribed from theme {theme_id}.")
 
     async def broadcast_task_update(self, task_data: dict):
-        """Broadcast task update to all connected clients who need to know."""
+        """Broadcast a task update to relevant users."""
         theme_id = task_data.get("theme_id")
         user_id = task_data.get("user_id")
 
-        # Always send to the task owner
+        if not user_id:
+            logger.warning("Broadcast aborted: task update missing user_id.")
+            return
+
         await self.send_to_user(user_id, task_data)
 
-        # Also send to anyone subscribed to the theme (if applicable)
         if theme_id and theme_id in self.theme_subscriptions:
             for subscribed_user_id in self.theme_subscriptions[theme_id]:
-                if subscribed_user_id != user_id:  # Skip if already sent to this user
+                if subscribed_user_id != user_id:
                     await self.send_to_user(subscribed_user_id, task_data)
 
     async def send_to_user(self, user_id: str, data: dict):
-        """Send a message to all connections of a specific user."""
+        """Send data to all active WebSocket connections of a user."""
         if user_id not in self.active_connections:
+            logger.info(f"No active connections for user {user_id}.")
             return
 
-        # Convert to JSON string
         message = json.dumps(data)
-
-        # Keep track of disconnected websockets to remove later
         disconnected = set()
 
-        # Send to all connections for this user
         for websocket in self.active_connections[user_id]:
             try:
                 if websocket.client_state == WebSocketState.CONNECTED:
-                    #TODO check why not working
-                    logger.info('Send message for sock')
                     await websocket.send_text(message)
-            except Exception:
+                    logger.info(f"Message sent to user {user_id}.")
+                else:
+                    logger.warning(f"WebSocket not connected for user {user_id}, marking for cleanup.")
+                    disconnected.add(websocket)
+            except Exception as e:
+                logger.error(f"Failed to send message to user {user_id}: {e}")
                 disconnected.add(websocket)
 
-        # Clean up disconnected websockets
         for websocket in disconnected:
             self.active_connections[user_id].discard(websocket)
 
-        # Clean up if no more connections for this user
         if not self.active_connections[user_id]:
             del self.active_connections[user_id]
 
-
-# Create a singleton instance
+# Create a singleton instance - should be imported, not instantiated elsewhere
 task_update_manager = TaskUpdateManager()
 
 
 async def get_task_update_manager():
-    """Dependency to get the task update manager."""
+    """Dependency to get the task update manager singleton."""
+    # This will always return the same instance
     return task_update_manager
-
 
 
 @router.websocket("/ws/tasks")
@@ -133,41 +130,21 @@ async def handle_task_websocket(
 ):
     """
     Handle task updates, subscriptions, and retrieval via a WebSocket connection.
-
-    This endpoint allows clients to:
-    1. Subscribe to a specific theme (via "subscribe" command).
-    2. Unsubscribe from a specific theme (via "unsubscribe" command).
-    3. Retrieve tasks for a given theme or all user tasks (via "get_tasks" command).
-
-    WebSocket connection flow:
-    - The client must provide a session/token either through a cookie or query parameter.
-    - The session/token is used to identify the user via AuthService.
-    - If the token is invalid/expired, the connection is closed with an error code.
-    - Once authenticated, the user is connected, and can send commands in JSON format:
-        {
-            "command": "<subscribe|unsubscribe|get_tasks>",
-            "theme_id": "..."
-        }
-    - The server responds with JSON messages as needed (e.g. subscription confirmation,
-      unsubscribing notification, or sending tasks).
-    - If the connection is closed, or any exception arises, we attempt to cleanly disconnect.
     """
     # Accept the WebSocket connection immediately upon entry
-
     await websocket.accept()
+
     # Add debug logging
     session = AsyncSessionLocal()  # create the session here.
-    # Get the manager
-    manager = await get_task_update_manager()
+
+    # Get the singleton manager
+    manager = task_update_manager  # Use the singleton directly - don't instantiate
+    logger.info(f"WebSocket handler using TaskUpdateManager instance ID: {id(manager)}")
+
     # Extract session ID with proper debugging
     session_id = websocket.cookies.get(COOKIE_NAME) or websocket.query_params.get("token")
     logger.debug(f"Extracted session ID: {session_id}")
-    # Get the manager responsible for orchestrating WebSocket connections and updates
 
-    # Extract session from cookie or query params
-    session_id: Optional[str] = (
-            websocket.cookies.get(COOKIE_NAME) or websocket.query_params.get("token")
-    )
     if not session_id:
         await websocket.close(code=4001, reason="Missing token or session")
         return
@@ -200,10 +177,9 @@ async def handle_task_websocket(
                         "status": "success",
                         "theme_id": theme_id
                     })
-                    # Handle different commands from the client
-            if command == "ping":
+            elif command == "ping":
                 logger.info('User ping socket connection')
-                # Subscribe the user to the given theme
+                # Send ping response
                 await websocket.send_json({
                     "type": "ping",
                     "status": "success",
@@ -219,7 +195,6 @@ async def handle_task_websocket(
                         "status": "unsubscribed",
                         "theme_id": theme_id
                     })
-
             elif command == "get_tasks":
                 theme_id = data.get("theme_id")
                 if theme_id:
@@ -232,6 +207,7 @@ async def handle_task_websocket(
 
                 # Send each task back to the client
                 for task in tasks:
+                    #
                     await websocket.send_json({
                         "type": "task_update",
                         "data": task.to_dict()  # or however you serialize your task
@@ -250,10 +226,10 @@ async def handle_task_websocket(
                             "type": "error",
                             "message": "Task not found or access denied"
                         })
-            # You can add more commands as needed...
 
     except WebSocketDisconnect:
         # Handle client disconnecting intentionally
+        logger.info(f"WebSocket disconnected for user {current_user.id}")
         manager.disconnect(websocket, current_user.id)
 
     except Exception as e:

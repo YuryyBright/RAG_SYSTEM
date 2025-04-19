@@ -6,7 +6,6 @@ cancelling tasks, and adding log entries to tasks. These tasks are
 processed in the background and tracked in the database.
 """
 
-import uuid
 from typing import List, Optional
 from fastapi import (
     APIRouter,
@@ -28,10 +27,9 @@ from api.schemas.task import (
 
 # Repository for Task objects
 from app.infrastructure.database.repository.task_repository import TaskRepository
-
+from api.dependencies.task_dependencies import get_task_repository
 # Example dependencies for injecting DB sessions, repositories, etc.
-from app.api.dependencies import (
-    get_task_repository,
+from app.api.dependencies.dependencies import (
     get_async_db,
     get_theme_use_case,
     # get_processing_service    # If your system uses a separate processing service
@@ -39,7 +37,7 @@ from app.api.dependencies import (
 
 # A logger utility for debugging
 from app.utils.logger_util import get_logger
-from core.services.task_services import Task, TaskManager
+from core.services.task_services import TaskManager
 
 logger = get_logger(__name__)
 router = APIRouter()
@@ -100,6 +98,7 @@ async def create_task(
         "read": 1,
         "embed": 2
     }
+
     if request.step in step_mapping:
         domain_task.current_step = step_mapping[request.step]
         # Update task with new step

@@ -3,7 +3,7 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from api.schemas.files import FileResponse
-from app.api.dependencies import get_theme_use_case
+from app.api.dependencies.dependencies import get_theme_use_case
 from app.api.schemas.theme import (
     ThemeCreate,
     ThemeUpdate,
@@ -15,11 +15,10 @@ from app.api.schemas.theme import (
 from app.api.middleware_auth import get_current_active_user
 from app.core.use_cases.theme import ThemeUseCase
 from app.core.interfaces.document_store import DocumentStoreInterface
-from app.api.dependencies import get_document_store
+from app.api.dependencies.dependencies import get_document_store
 from core.entities.user import User
 
 router = APIRouter()
-
 
 @router.post("/", response_model=ThemeResponse, status_code=status.HTTP_201_CREATED)
 async def create_theme(

@@ -53,7 +53,7 @@ class DocumentStore(DocumentStoreInterface):
 
     async def store_document(self, document: Document) -> str:
         """
-        Store a document with its embedding.
+        Store a document with its embedding, link it to a theme if theme_id provided.
 
         Args:
             document: Document entity to store
@@ -61,11 +61,12 @@ class DocumentStore(DocumentStoreInterface):
         Returns:
             str: ID of the stored document
         """
+
         # Generate embedding if not already present
         if document.embedding is None:
             document.embedding = await self.embedding_service.get_embedding(document.content)
 
-        # Save to database
+        # Save Document to database
         doc_id = await self.document_repository.create_document(
             content=document.content,
             embedding=document.embedding,
@@ -74,9 +75,18 @@ class DocumentStore(DocumentStoreInterface):
             theme_id=document.theme_id,
             metadata=document.metadata
         )
+        # Link document to the theme via the ThemeDocument table if theme_id is provided
+        if document.theme_id:
+            await self.document_repository.create_theme_document_link(
+                theme_id=document.theme_id,
+                document_id=doc_id
+            )
+
 
         # Save content to file system for faster retrieval
         self._save_document_to_disk(doc_id, document)
+
+
 
         return doc_id
 

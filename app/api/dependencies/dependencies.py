@@ -56,6 +56,8 @@ from core.services.task_services import TaskManager
 from core.services.vector_index_services import VectorIndexService
 from infrastructure.database.repository.file_repository import FileRepository
 from infrastructure.database.repository.task_repository import TaskRepository
+from api.websockets.task_updates import get_task_update_manager, TaskUpdateManager
+from utils.validators import validate_embedding_dimensions
 
 logger = get_logger(__name__)
 
@@ -98,15 +100,9 @@ def get_theme_repository(db: AsyncSession = Depends(get_async_db)) -> ThemeRepos
 
 # === Embedding / Model Services ===
 
-def get_embedding_service() -> EmbeddingInterface:
+async def get_embedding_service() -> EmbeddingInterface:
     """
     Factory function to return the appropriate embedding service with optional caching.
-
-    Args:
-        cache_service (RedisCache, optional): Redis-based caching layer
-
-    Returns:
-        EmbeddingInterface: Configured embedding service
     """
     embedding_service = settings.EMBEDDING_SERVICE.lower()
     logger.debug(f"Initializing embedding service: {embedding_service}")
@@ -130,22 +126,19 @@ def get_embedding_service() -> EmbeddingInterface:
             model_name=settings.SENTENCE_TRANSFORMER_MODEL_NAME,
             batch_size=settings.EMBEDDING_BATCH_SIZE
         )
-    elif embedding_service == "default":
-        service = EmbeddingService(
-            model_name="default",
-            dimensions=settings.EMBEDDING_DIMENSIONS
-        )
     else:
-        available_services = ["instructor", "openai", "sentence_transformer", "default"]
+        available_services = ["instructor", "openai", "sentence_transformer"]
         logger.error(f"Unsupported embedding service: {embedding_service}")
         raise ValueError(
             f"Unsupported embedding service: {embedding_service}. "
             f"Available options: {', '.join(available_services)}"
         )
 
-
+    # ✅ Validate dimension immediately
+    await validate_embedding_dimensions(service, expected_dim=settings.EMBEDDING_DIMENSION)
 
     return service
+
 
 
 def get_llm_service() -> LLMInterface:
@@ -198,11 +191,7 @@ def get_theme_use_case(
     )
 
 
-async def get_task_repository(db: AsyncSession = Depends(get_async_db)) -> TaskRepository:
-    """
-    Get task repository instance.
-    """
-    return TaskRepository(db)
+
 
 
 async def get_chunking_service() -> ChunkingService:
@@ -280,7 +269,9 @@ async def file_processing_use_case(
         chunking_service: ChunkingService = Depends(get_chunking_service),
         embedding_service: EmbeddingService = Depends(get_embedding_service),
         document_store: DocumentStore = Depends(get_document_store),
-        vector_index: VectorIndexService = Depends(get_vector_index)
+        vector_index: VectorIndexService = Depends(get_vector_index),
+        task_update_manager: TaskUpdateManager = Depends(get_task_update_manager)
+
 ) -> FileProcessingUseCase:
     """
     Provides a FileProcessingUseCase instance via FastAPI's dependency injection.
@@ -304,4 +295,5 @@ async def file_processing_use_case(
         embedding_service=embedding_service,
         document_store=document_store,
         vector_index=vector_index,
+        task_update_manager = task_update_manager,
     )

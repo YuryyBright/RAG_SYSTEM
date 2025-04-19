@@ -4,13 +4,14 @@ from typing import Dict, List, Tuple, Any, Optional
 from datetime import datetime
 import numpy as np
 from adapters.storage.document_store import DocumentStore
+
 from app.core.entities.document import Document
-from app.adapters.storage.file_manager import FileManager
 from core.services.chunking_service import ChunkingService
 from core.services.embedding_service import EmbeddingService
 from core.services.vector_index_services import VectorIndexService
 from infrastructure.loaders.file_processor import FileProcessor
 from utils.logger_util import get_logger
+from api.websockets.task_updates import TaskUpdateManager
 
 logger = get_logger(__name__)
 
@@ -29,6 +30,7 @@ class FileProcessingUseCase:
             embedding_service: EmbeddingService,
             document_store: DocumentStore,
             vector_index: VectorIndexService,
+            task_update_manager: TaskUpdateManager
     ):
         """
         Initialize the FileProcessingUseCase with required services.
@@ -51,6 +53,7 @@ class FileProcessingUseCase:
         self.embedding_service = embedding_service
         self.document_store = document_store
         self.vector_index = vector_index
+        self.task_update_manager = task_update_manager
 
     async def process_directory(
             self,
@@ -241,8 +244,17 @@ class FileProcessingUseCase:
         READING = 0  # scan & load files
         CHUNKING = 1  # split text
         EMBEDDING = 2  # create & store vectors
+
         if not os.path.isdir(directory_path):
             raise ValueError(f"Directory not found: {directory_path}")
+
+        # Define progress ranges for each step
+        READING_PROGRESS_START = 0
+        READING_PROGRESS_END = 25
+        CHUNKING_PROGRESS_START = 25
+        CHUNKING_PROGRESS_END = 60
+        EMBEDDING_PROGRESS_START = 60
+        EMBEDDING_PROGRESS_END = 100
 
         # Step 1: Read directory and produce raw documents
         logger.info(f"Processing {directory_path}")
@@ -255,8 +267,8 @@ class FileProcessingUseCase:
                 user_id=user_id,
                 status="in_progress",
                 current_step=READING,
-                progress=0,
-                message="Starting processing",
+                progress=READING_PROGRESS_START,
+                message="Starting processing reading files",
             )
 
         documents, base_report = await self.file_processor.process_directory(
@@ -280,6 +292,20 @@ class FileProcessingUseCase:
             "recommendations": base_report["recommendations"],
         }
 
+        if task_id:
+            await self._send_task_update(
+                task_id=task_id,
+                theme_id=theme_id,
+                user_id=user_id,
+                status="in_progress",  # Changed from "completed" to "in_progress" since we're not done yet
+                current_step=READING,
+                progress=READING_PROGRESS_END,
+                message=f"Finished processing {extended_report['summary']['total_files']} files: "
+                        f"{extended_report['summary']['successful_files']} successful, "
+                        f"{extended_report['summary']['unreadable_files']} unreadable, "
+                        f"{extended_report['summary']['language_detection_failures']} language detection failures.",
+            )
+
         # Step 2: Chunk, store, and embed each document
         total_chunks_created = 0
         chunks_vectorized = 0
@@ -295,9 +321,9 @@ class FileProcessingUseCase:
                 theme_id=theme_id,
                 user_id=user_id,
                 status="in_progress",
-                current_step=EMBEDDING,
-                progress=0,
-                message="Starting processing",
+                current_step=CHUNKING,
+                progress=CHUNKING_PROGRESS_START,
+                message="Starting chunking process",
             )
 
         total_docs = len(documents)
@@ -313,14 +339,18 @@ class FileProcessingUseCase:
 
             # Send periodic progress updates
             if task_id and idx % max(1, total_docs // 10) == 0:  # Update roughly every 10% of documents
-                progress = 30 + int(20 * (idx / total_docs))
+                # Calculate progress within the chunking range
+                chunk_progress_percent = idx / total_docs
+                actual_progress = CHUNKING_PROGRESS_START + (
+                            CHUNKING_PROGRESS_END - CHUNKING_PROGRESS_START) * chunk_progress_percent
+
                 await self._send_task_update(
                     task_id=task_id,
                     theme_id=theme_id,
                     user_id=user_id,
                     status="in_progress",
-                    current_step=1,
-                    progress=progress,
+                    current_step=CHUNKING,
+                    progress=int(actual_progress),
                     message=f"Chunking document {idx + 1}/{total_docs}"
                 )
 
@@ -344,6 +374,17 @@ class FileProcessingUseCase:
                 vectors_to_add.append(chunk)
                 vector_ids.append(doc_id)
 
+        if task_id:
+            await self._send_task_update(
+                task_id=task_id,
+                theme_id=theme_id,
+                user_id=user_id,
+                status="in_progress",
+                current_step=CHUNKING,
+                progress=CHUNKING_PROGRESS_END,
+                message=f"Finished chunking {total_docs} documents into {total_chunks_created} chunks"
+            )
+
         # Update task status for embedding step
         if task_id:
             await self._send_task_update(
@@ -352,7 +393,7 @@ class FileProcessingUseCase:
                 theme_id=theme_id,
                 status="in_progress",
                 current_step=EMBEDDING,
-                progress=60,
+                progress=EMBEDDING_PROGRESS_START,
                 message=f"Creating embeddings for {len(vectors_to_add)} chunks"
             )
 
@@ -376,14 +417,18 @@ class FileProcessingUseCase:
 
                 # Send progress updates for embedding process
                 if task_id:
-                    progress = 60 + int(30 * ((batch_idx + 1) / total_batches))
+                    # Calculate progress within the embedding range
+                    embedding_progress_percent = (batch_idx + 1) / total_batches
+                    actual_progress = EMBEDDING_PROGRESS_START + (
+                                EMBEDDING_PROGRESS_END - EMBEDDING_PROGRESS_START) * embedding_progress_percent
+
                     await self._send_task_update(
                         task_id=task_id,
                         theme_id=theme_id,
-                        user_id=user_id,  # see next item
+                        user_id=user_id,
                         status="in_progress",
                         current_step=EMBEDDING,
-                        progress=progress,
+                        progress=int(actual_progress),
                         message=f"Processed batch {batch_idx + 1}/{total_batches} of embeddings"
                     )
 
@@ -392,10 +437,10 @@ class FileProcessingUseCase:
             await self._send_task_update(
                 task_id=task_id,
                 theme_id=theme_id,
-                user_id=user_id,  # see next item
+                user_id=user_id,
                 status="completed",
                 current_step=EMBEDDING,
-                progress=100,
+                progress=EMBEDDING_PROGRESS_END,
                 message="Processing complete"
             )
 
@@ -416,7 +461,6 @@ class FileProcessingUseCase:
             message: str | None = None,
     ):
         """Send a websocket update via TaskUpdateManager."""
-        from app.api.websockets.task_updates import task_update_manager
         try:
             update_data = {
                 "type": "task_update",
@@ -430,11 +474,12 @@ class FileProcessingUseCase:
                     "message": message,
                 },
             }
-            await task_update_manager.broadcast_task_update(update_data)
+            await self.task_update_manager.broadcast_task_update(update_data)
 
         except Exception as e:
             logger.error(f"Failed to send task update: {e}")
             # Continue processing even if update fails
+
 
 
     async def analyze_document_quality(self, documents: List[Document]) -> Dict[str, Any]:
