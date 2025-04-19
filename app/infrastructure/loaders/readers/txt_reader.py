@@ -21,7 +21,8 @@ class TxtReader(BaseReader):
         str
             Content of the text file.
         """
+
         try:
-            return path.read_text(encoding="utf-8", errors="replace")
+            return self.safe_read_text(path)
         except Exception as e:
             return f"Error reading text file: {str(e)}"

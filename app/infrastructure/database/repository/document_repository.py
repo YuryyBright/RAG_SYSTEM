@@ -85,7 +85,6 @@ class DocumentRepository:
         self.db.add(doc)
         await self.db.commit()
         await self.db.refresh(doc)
-        logger.info(f"Created document (ID: {doc.id}) for user: {doc.owner_id}")
         return doc.id
 
     async def delete_document(self, document_id: str) -> bool:

@@ -26,7 +26,7 @@ class HtmlReader(BaseReader):
             # Try to use BeautifulSoup if available for better parsing
             try:
                 from bs4 import BeautifulSoup
-                content = path.read_text(encoding="utf-8", errors="replace")
+                content = self.safe_read_text(path)
                 soup = BeautifulSoup(content, "html.parser")
                 # Remove script and style elements
                 for script in soup(["script", "style"]):

@@ -337,7 +337,14 @@ class FileProcessor:
             List of warning messages.
         """
         warnings = []
-        if metadata.get("language_error"):
+
+        if not metadata:
+            return warnings
+
+        if "language_error" in metadata:
             warnings.append(f"Language detection issue: {metadata['language_error']}")
-        if metadata.get("error"):
+
+        if "error" in metadata:
             warnings.append(f"Processing error: {metadata['error']}")
+
+        return warnings

@@ -43,9 +43,9 @@ class YamlReader(BaseReader):
         sorted by key.
         """
         try:
-            with open(path, 'r', encoding='utf-8', errors='replace') as f:
-                data = yaml.safe_load(f)
-                return yaml.dump(data, default_flow_style=False, sort_keys=True)
+            content = self.safe_read_text(path)
+            data = yaml.safe_load(content)
+            return yaml.dump(data, default_flow_style=False, sort_keys=True)
         except Exception as e:
             return f"Error reading YAML file: {str(e)}"
 

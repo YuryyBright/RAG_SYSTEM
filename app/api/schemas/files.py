@@ -122,13 +122,20 @@ class FileProcessingReport(BaseModel):
     summary : ProcessedFileSummary
         Summary of the file processing results.
     details : Dict[str, Any]
-        Detailed information about the processing results.
+        Detailed information about each file's processing outcome.
     recommendations : FileProcessingRecommendations
         Recommendations based on the processing results.
     """
     summary: ProcessedFileSummary
     details: Dict[str, Any]
     recommendations: FileProcessingRecommendations
+    detailed_successful_files: Optional[List['ProcessedFileDetails']] = None
+    detailed_unreadable_files: Optional[List['UnreadableFileDetails']] = None
+    detailed_language_detection_failures: Optional[List['LanguageFailureDetails']] = None
+    detailed_files_with_warnings: Optional[List['FileWarningDetails']] = None
+    chunking_stats: Optional['ChunkingStats'] = None
+    vectorization_stats: Optional['VectorizationStats'] = None
+
 
 class FileProcessingResponse(BaseModel):
     """
@@ -136,17 +143,108 @@ class FileProcessingResponse(BaseModel):
 
     Attributes
     ----------
+    task_id : str
+        Task ID associated with the processing.
     success : bool
-        Indicates whether the file processing was successful.
+        Indicates if the process succeeded or not.
     message : str
-        A message describing the result of the file processing.
+        Summary message.
     documents_count : int
-        The number of documents successfully processed.
+        Number of documents successfully processed.
     report : FileProcessingReport
-        A detailed report of the file processing results.
+        Full detailed processing report.
     """
     task_id: str
     success: bool
     message: str
     documents_count: int
     report: FileProcessingReport
+class VectorizationStats(BaseModel):
+    """
+    Statistics related to vectorization during file processing.
+
+    Attributes
+    ----------
+    total_chunks_vectorized : int
+        The total number of chunks successfully vectorized.
+    embedding_batches : int
+        The number of batches used for embedding generation.
+    average_embedding_time_per_batch : Optional[float]
+        The average time taken to process each embedding batch, if available.
+    """
+    total_chunks_vectorized: int
+    embedding_batches: int
+    average_embedding_time_per_batch: Optional[float]
+
+class ChunkingStats(BaseModel):
+    """
+    Statistics related to text chunking during file processing.
+
+    Attributes
+    ----------
+    total_chunks_created : int
+        The total number of chunks created from all files.
+    average_chunks_per_file : Optional[float]
+        The average number of chunks created per file, if available.
+    """
+    total_chunks_created: int
+    average_chunks_per_file: Optional[float]
+
+class FileWarningDetails(BaseModel):
+    """
+    Details of a file with warnings during processing.
+
+    Attributes
+    ----------
+    filename : str
+        The name of the file.
+    warnings : List[str]
+        A list of warnings generated during the file's processing.
+    """
+    filename: str
+    warnings: List[str]
+
+class LanguageFailureDetails(BaseModel):
+    """
+    Details of a file where language detection failed.
+
+    Attributes
+    ----------
+    filename : str
+        The name of the file.
+    error : str
+        A description of the error encountered during language detection.
+    """
+    filename: str
+    error: str
+
+class UnreadableFileDetails(BaseModel):
+    """
+    Details of a file that could not be read.
+
+    Attributes
+    ----------
+    filename : str
+        The name of the unreadable file.
+    error : str
+        A description of the error encountered while reading the file.
+    """
+    filename: str
+    error: str
+
+class ProcessedFileDetails(BaseModel):
+    """
+    Details of a successfully processed file.
+
+    Attributes
+    ----------
+    filename : str
+        The name of the processed file.
+    language : Optional[str]
+        The detected language of the file, if available.
+    metadata : Dict[str, Any]
+        Additional metadata associated with the file.
+    """
+    filename: str
+    language: Optional[str]
+    metadata: Dict[str, Any]

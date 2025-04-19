@@ -521,7 +521,7 @@ export function updateTaskUI(task) {
     addLogMessage("Processing completed successfully!", "success");
 
     // Enable the finish button
-    $("#finish-btn").prop("disabled", false).removeClass("btn-secondary").addClass("btn-primary").show();
+    // $("#finish-btn").prop("disabled", false).removeClass("btn-secondary").addClass("btn-primary").show();
 
     // // Play sound if enabled
     // if (window.Audio && state.userPreferences?.enableSounds) {
@@ -540,40 +540,60 @@ export function updateTaskUI(task) {
   state.processingTask = task;
   saveWorkflowState();
 }
+/**
+ * Handle finish button click
+ * Jump to Step 1 and mark everything completed
+ */
+export function handleFinishButtonClick() {
+  // Mark all steps as completed visually
+  $("#step-theme, #step-upload, #step-process").addClass("completed");
 
+  // Navigate back to Step 1
+  navigateToStep(1, true, true); // saveState=true, animate=true
+
+  // Clear any processing task (optional)
+  state.processingTask = null;
+
+  // Save updated workflow state
+  saveWorkflowState();
+
+  // Show success notification
+  alertify.success("🎉 Workflow completed! Returning to theme selection.");
+}
 /**
  * Show success modal when the workflow is complete
  */
-export function showSuccessModal() {
-  $("#success-modal-theme-name").text(state.selectedTheme);
-  $("#success-modal-file-count").text(state.uploadedFiles.length);
-  $("#workflow-completion-modal").modal("show");
+// export function showSuccessModal() {
+//   $("#success-modal-theme-name").text(state.selectedTheme);
+//   $("#success-modal-file-count").text(state.uploadedFiles.length);
+//   $("#workflow-completion-modal").modal("show");
 
-  // Create a summary API call to finalize the theme processing
-  $.ajax({
-    url: `/api/themes/${state.currentThemeId}/finalize`,
-    method: "POST",
-    headers: {
-      "X-CSRF-Token": getCsrfToken(),
-    },
-    success: function (response) {
-      console.log("Theme processing finalized:", response);
-    },
-    error: function (xhr, status, error) {
-      console.error("Error finalizing theme processing:", error);
-    },
-  });
-}
+//   // Create a summary API call to finalize the theme processing
+//   $.ajax({
+//     url: `/api/themes/${state.currentThemeId}/finalize`,
+//     method: "POST",
+//     headers: {
+//       "X-CSRF-Token": getCsrfToken(),
+//     },
+//     success: function (response) {
+//       console.log("Theme processing finalized:", response);
+//     },
+//     error: function (xhr, status, error) {
+//       console.error("Error finalizing theme processing:", error);
+//     },
+//   });
+// }
 
 /**
  * Enhanced log message function with message types
- * @param {string} message - The message to add to the log
+ * Supports rich content logging (HTML blocks)
+ * @param {string|HTMLElement|jQuery} message - The message text or a DOM node
  * @param {string} type - Message type (info, success, warning, error)
  */
 export function addLogMessage(message, type = "info") {
   const timestamp = new Date().toLocaleTimeString();
 
-  // Format the message based on type
+  // Format message style based on type
   let icon, messageClass;
   switch (type) {
     case "success":
@@ -593,50 +613,62 @@ export function addLogMessage(message, type = "info") {
       messageClass = "log-info";
   }
 
-  const formattedMessage = `[${timestamp}] ${message}`;
+  // Handle if message is string or a DOM element
+  let logEntry;
+  if (typeof message === "string") {
+    const formattedMessage = `[${timestamp}] ${message}`;
+    logEntry = `
+      <div class="log-entry ${messageClass} animate-new-log">
+        <i class="fas ${icon} mr-1"></i>
+        <span>${formattedMessage}</span>
+      </div>
+    `;
+  } else if (message instanceof HTMLElement || message instanceof jQuery) {
+    // Custom DOM element passed
+    logEntry = $(message)
+      .addClass(`log-entry ${messageClass} animate-new-log`)
+      .prepend(`<i class="fas ${icon} mr-1"></i>`);
+  }
 
   // Add to state
   state.processingLogs = state.processingLogs || [];
   state.processingLogs.push({
-    text: formattedMessage,
+    text: typeof message === "string" ? message : "[DOM element]",
     type: type,
     timestamp: new Date().toISOString(),
   });
 
-  // Limit log size to prevent memory issues
+  // Limit memory
   if (state.processingLogs.length > 100) {
     state.processingLogs = state.processingLogs.slice(-100);
   }
 
-  // Create log entry HTML
-  const logEntry = `
-    <div class="log-entry ${messageClass} animate-new-log">
-      <i class="fas ${icon} mr-1"></i>
-      <span>${formattedMessage}</span>
-    </div>
-  `;
+  // Append to DOM
+  if (typeof logEntry === "string") {
+    $("#process-log-content").append(logEntry);
+  } else {
+    $("#process-log-content").append(logEntry); // if it's a jQuery/DOM node
+  }
 
-  // Add to DOM
-  $("#process-log-content").append(logEntry);
-
-  // Show log container if it was hidden
+  // Show container if hidden
   $("#process-log-container").removeClass("d-none");
 
-  // Auto-scroll to bottom of log
+  // Auto-scroll
   const logContainer = document.getElementById("process-log-content");
   if (logContainer) {
     logContainer.scrollTop = logContainer.scrollHeight;
   }
 
-  // Remove animation class after animation completes
+  // Remove animation class after brief animation
   setTimeout(() => {
     $(".animate-new-log").removeClass("animate-new-log");
   }, 1000);
 
-  // Log to console for better debugging
-  console.log(`[${type.toUpperCase()}] ${message}`);
+  // Console logging too
+  if (typeof message === "string") {
+    console.log(`[${type.toUpperCase()}] ${message}`);
+  }
 
-  // Save state
   saveWorkflowState();
 }
 
@@ -655,11 +687,11 @@ export function setupEventListeners() {
     startFileProcessing(); // fire the backend job immediately
   });
   $("#process-back-btn").on("click", () => navigateToStep(2));
-  $("#finish-btn").on("click", showSuccessModal);
+  // $("#finish-btn").on("click", showSuccessModal);
 
   // Process button - direct processing from upload
   $("#start-process-btn").on("click", startFileProcessing);
-
+  $("#finish-btn").on("click", handleFinishButtonClick);
   // Task related buttons
   $("#cancel-task-btn").on("click", cancelCurrentTask);
   $("#resume-task-btn").on("click", resumeCurrentTask);

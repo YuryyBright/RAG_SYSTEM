@@ -57,6 +57,7 @@ from core.services.vector_index_services import VectorIndexService
 from infrastructure.database.repository.file_repository import FileRepository
 from infrastructure.database.repository.task_repository import TaskRepository
 from api.websockets.task_updates import get_task_update_manager, TaskUpdateManager
+from utils.validators import validate_embedding_dimensions
 
 logger = get_logger(__name__)
 
@@ -99,15 +100,9 @@ def get_theme_repository(db: AsyncSession = Depends(get_async_db)) -> ThemeRepos
 
 # === Embedding / Model Services ===
 
-def get_embedding_service() -> EmbeddingInterface:
+async def get_embedding_service() -> EmbeddingInterface:
     """
     Factory function to return the appropriate embedding service with optional caching.
-
-    Args:
-        cache_service (RedisCache, optional): Redis-based caching layer
-
-    Returns:
-        EmbeddingInterface: Configured embedding service
     """
     embedding_service = settings.EMBEDDING_SERVICE.lower()
     logger.debug(f"Initializing embedding service: {embedding_service}")
@@ -131,22 +126,19 @@ def get_embedding_service() -> EmbeddingInterface:
             model_name=settings.SENTENCE_TRANSFORMER_MODEL_NAME,
             batch_size=settings.EMBEDDING_BATCH_SIZE
         )
-    elif embedding_service == "default":
-        service = EmbeddingService(
-            model_name="default",
-            dimensions=settings.EMBEDDING_DIMENSIONS
-        )
     else:
-        available_services = ["instructor", "openai", "sentence_transformer", "default"]
+        available_services = ["instructor", "openai", "sentence_transformer"]
         logger.error(f"Unsupported embedding service: {embedding_service}")
         raise ValueError(
             f"Unsupported embedding service: {embedding_service}. "
             f"Available options: {', '.join(available_services)}"
         )
 
-
+    # ✅ Validate dimension immediately
+    await validate_embedding_dimensions(service, expected_dim=settings.EMBEDDING_DIMENSION)
 
     return service
+
 
 
 def get_llm_service() -> LLMInterface:

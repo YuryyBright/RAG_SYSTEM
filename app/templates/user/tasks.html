@@ -1,0 +1,716 @@
+{% extends "base.html" %} {% block title %}Processing Tasks{% endblock %} {% block header %}
+<div class="row mb-2">
+  <div class="col-sm-6">
+    <h1>Processing Tasks</h1>
+  </div>
+  <div class="col-sm-6">
+    <ol class="breadcrumb float-sm-right">
+      <li class="breadcrumb-item"><a href="#">Home</a></li>
+      <li class="breadcrumb-item active">Tasks</li>
+    </ol>
+  </div>
+</div>
+{% endblock %} {% block content %}
+<section class="content">
+  <div class="container-fluid">
+    <!-- Tasks Overview -->
+    <div class="row">
+      <div class="col-md-12">
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">Active Tasks</h3>
+            <div class="card-tools">
+              <button type="button" class="btn btn-tool" data-card-widget="collapse">
+                <i class="fas fa-minus"></i>
+              </button>
+              <button type="button" class="btn btn-tool" data-card-widget="refresh" id="refresh-tasks">
+                <i class="fas fa-sync-alt"></i>
+              </button>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="table-responsive">
+              <table class="table table-hover" id="active-tasks-table">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Type</th>
+                    <th>Theme</th>
+                    <th>Status</th>
+                    <th>Progress</th>
+                    <th>Created</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="active-tasks-body">
+                  <!-- Tasks will be loaded here -->
+                  <tr id="tasks-loading">
+                    <td colspan="7" class="text-center">
+                      <i class="fas fa-spinner fa-spin"></i>
+                      Loading tasks...
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Task Details -->
+    <div class="row d-none" id="task-details-section">
+      <div class="col-md-12">
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title">
+              Task Details:
+              <span id="task-detail-id"></span>
+            </h3>
+            <div class="card-tools">
+              <button type="button" class="btn btn-tool" data-card-widget="collapse">
+                <i class="fas fa-minus"></i>
+              </button>
+              <button type="button" class="btn btn-tool" id="close-task-details">
+                <i class="fas fa-times"></i>
+              </button>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="row">
+              <div class="col-md-6">
+                <div class="info-box">
+                  <span class="info-box-icon bg-info"><i class="fas fa-info-circle"></i></span>
+                  <div class="info-box-content">
+                    <span class="info-box-text">Status</span>
+                    <span class="info-box-number" id="task-detail-status">Pending</span>
+                  </div>
+                </div>
+              </div>
+              <div class="col-md-6">
+                <div class="info-box">
+                  <span class="info-box-icon bg-primary"><i class="fas fa-tasks"></i></span>
+                  <div class="info-box-content">
+                    <span class="info-box-text">Type</span>
+                    <span class="info-box-number" id="task-detail-type">Unknown</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="row">
+              <div class="col-md-12">
+                <div class="progress mb-3">
+                  <div
+                    id="task-detail-progress"
+                    class="progress-bar progress-bar-striped progress-bar-animated"
+                    role="progressbar"
+                    style="width: 0%"
+                  ></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="row">
+              <div class="col-md-6">
+                <div class="card">
+                  <div class="card-header">
+                    <h3 class="card-title">Processing Steps</h3>
+                  </div>
+                  <div class="card-body p-0">
+                    <ul class="list-group list-group-flush" id="task-detail-steps">
+                      <!-- Steps will be populated here -->
+                    </ul>
+                  </div>
+                </div>
+              </div>
+              <div class="col-md-6">
+                <div class="card">
+                  <div class="card-header">
+                    <h3 class="card-title">Task Log</h3>
+                  </div>
+                  <div class="card-body p-0">
+                    <div
+                      class="task-log p-2 bg-dark text-light"
+                      style="height: 300px; overflow-y: auto; font-family: monospace"
+                    >
+                      <div id="task-detail-logs">
+                        <!-- Logs will be populated here -->
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="row mt-3">
+              <div class="col-md-12">
+                <button type="button" class="btn btn-danger" id="cancel-task-btn-detail">
+                  <i class="fas fa-stop-circle"></i>
+                  Cancel Task
+                </button>
+                <button type="button" class="btn btn-success d-none" id="restart-task-btn-detail">
+                  <i class="fas fa-redo"></i>
+                  Restart Task
+                </button>
+                <button type="button" class="btn btn-primary" id="view-theme-btn-detail">
+                  <i class="fas fa-folder-open"></i>
+                  View Theme
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Completed Tasks -->
+    <div class="row">
+      <div class="col-md-12">
+        <div class="card collapsed-card">
+          <div class="card-header">
+            <h3 class="card-title">Completed Tasks</h3>
+            <div class="card-tools">
+              <button type="button" class="btn btn-tool" data-card-widget="collapse">
+                <i class="fas fa-plus"></i>
+              </button>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="table-responsive">
+              <table class="table table-hover" id="completed-tasks-table">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Type</th>
+                    <th>Theme</th>
+                    <th>Status</th>
+                    <th>Completed</th>
+                    <th>Duration</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="completed-tasks-body">
+                  <!-- Tasks will be loaded here -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %} {% block scripts %}
+<script>
+  // Task types mapping
+  const TaskTypes = {
+    theme_processing: "Theme Processing",
+    document_processing: "Document Processing",
+    embedding_generation: "Embedding Generation",
+    file_download: "File Download",
+    file_reading: "File Reading",
+    text_chunking: "Text Chunking",
+    vector_storage: "Vector Storage",
+  };
+
+  // Status to CSS class mapping
+  const StatusClasses = {
+    pending: "badge-secondary",
+    in_progress: "badge-primary",
+    completed: "badge-success",
+    failed: "badge-danger",
+    cancelled: "badge-warning",
+  };
+
+  // WebSocket for real-time updates
+  let taskSocket;
+
+  $(document).ready(function () {
+    // Load tasks
+    loadTasks();
+
+    // Set up WebSocket connection
+    setupTaskSocket();
+
+    // Set up event listeners
+    setupEventListeners();
+  });
+
+  // Set up event listeners
+  function setupEventListeners() {
+    // Refresh button
+    $("#refresh-tasks").on("click", loadTasks);
+
+    // Close task details
+    $("#close-task-details").on("click", function () {
+      $("#task-details-section").addClass("d-none");
+    });
+
+    // Cancel task from detail view
+    $("#cancel-task-btn-detail").on("click", function () {
+      const taskId = $("#task-detail-id").text();
+      cancelTask(taskId);
+    });
+
+    // Restart task from detail view
+    $("#restart-task-btn-detail").on("click", function () {
+      const taskId = $("#task-detail-id").text();
+      restartTask(taskId);
+    });
+
+    // View theme button
+    $("#view-theme-btn-detail").on("click", function () {
+      const themeId = $(this).data("theme-id");
+      if (themeId) {
+        window.location.href = `/documents_page?theme=${themeId}`;
+      } else {
+        alert("No theme associated with this task");
+      }
+    });
+  }
+
+  // Load all tasks
+  function loadTasks() {
+    // Set loading indicator
+    $("#tasks-loading").removeClass("d-none");
+
+    $.ajax({
+      url: "/api/tasks",
+      method: "GET",
+      headers: {
+        "X-CSRF-Token": AuthManager.getCsrfToken(),
+      },
+      success: function (tasks) {
+        // Split tasks into active and completed
+        const activeTasks = tasks.filter((t) => t.status === "pending" || t.status === "in_progress");
+
+        const completedTasks = tasks.filter(
+          (t) => t.status === "completed" || t.status === "failed" || t.status === "cancelled"
+        );
+
+        // Render active tasks
+        renderActiveTasks(activeTasks);
+
+        // Render completed tasks
+        renderCompletedTasks(completedTasks);
+      },
+      error: function (xhr, status, error) {
+        console.error("Error loading tasks:", error);
+        $("#active-tasks-body").html(
+          `<tr><td colspan="7" class="text-center text-danger">Error loading tasks: ${
+            xhr.responseJSON?.detail || error
+          }</td></tr>`
+        );
+      },
+      complete: function () {
+        $("#tasks-loading").addClass("d-none");
+      },
+    });
+  }
+
+  // Render active tasks
+  function renderActiveTasks(tasks) {
+    const tbody = $("#active-tasks-body");
+    tbody.empty();
+
+    if (tasks.length === 0) {
+      tbody.html(`<tr><td colspan="7" class="text-center">No active tasks found</td></tr>`);
+      return;
+    }
+
+    // Sort by created_at, newest first
+    tasks.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+    tasks.forEach((task) => {
+      const row = `
+        <tr data-task-id="${task.id}">
+          <td><a href="#" class="task-detail-link" data-task-id="${task.id}">${task.id.substring(0, 8)}...</a></td>
+          <td>${TaskTypes[task.type] || task.type}</td>
+          <td>${
+            task.theme_id
+              ? `<a href="/documents_page?theme=${task.theme_id}">${task.theme_id.substring(0, 8)}...</a>`
+              : "-"
+          }</td>
+          <td><span class="badge ${StatusClasses[task.status]}">${formatStatus(task.status)}</span></td>
+          <td>
+            <div class="progress">
+              <div class="progress-bar" role="progressbar" style="width: ${task.progress}%" aria-valuenow="${
+        task.progress
+      }" aria-valuemin="0" aria-valuemax="100"></div>
+            </div>
+          </td>
+          <td>${formatDate(task.created_at)}</td>
+          <td>
+            <button class="btn btn-sm btn-info task-detail-btn" data-task-id="${task.id}">
+              <i class="fas fa-info-circle"></i>
+            </button>
+            <button class="btn btn-sm btn-danger task-cancel-btn" data-task-id="${task.id}">
+              <i class="fas fa-stop-circle"></i>
+            </button>
+          </td>
+        </tr>
+      `;
+      tbody.append(row);
+    });
+
+    // Add event listeners for detail and cancel buttons
+    $(".task-detail-btn, .task-detail-link").on("click", function () {
+      const taskId = $(this).data("task-id");
+      showTaskDetails(taskId);
+    });
+
+    $(".task-cancel-btn").on("click", function () {
+      const taskId = $(this).data("task-id");
+      cancelTask(taskId);
+    });
+  }
+
+  // Render completed tasks
+  function renderCompletedTasks(tasks) {
+    const tbody = $("#completed-tasks-body");
+    tbody.empty();
+
+    if (tasks.length === 0) {
+      tbody.html(`<tr><td colspan="7" class="text-center">No completed tasks found</td></tr>`);
+      return;
+    }
+
+    // Sort by completed_at, newest first
+    tasks.sort((a, b) => new Date(b.completed_at || 0) - new Date(a.completed_at || 0));
+
+    tasks.forEach((task) => {
+      // Calculate duration
+      const startTime = new Date(task.started_at || task.created_at);
+      const endTime = new Date(task.completed_at);
+      const durationMs = endTime - startTime;
+
+      const row = `
+        <tr data-task-id="${task.id}">
+          <td><a href="#" class="task-detail-link" data-task-id="${task.id}">${task.id.substring(0, 8)}...</a></td>
+          <td>${TaskTypes[task.type] || task.type}</td>
+          <td>${
+            task.theme_id
+              ? `<a href="/documents_page?theme=${task.theme_id}">${task.theme_id.substring(0, 8)}...</a>`
+              : "-"
+          }</td>
+          <td><span class="badge ${StatusClasses[task.status]}">${formatStatus(task.status)}</span></td>
+          <td>${formatDate(task.completed_at)}</td>
+          <td>${formatDuration(durationMs)}</td>
+          <td>
+            <button class="btn btn-sm btn-info task-detail-btn" data-task-id="${task.id}">
+              <i class="fas fa-info-circle"></i>
+            </button>
+            ${
+              task.status === "failed" || task.status === "cancelled"
+                ? `<button class="btn btn-sm btn-success task-restart-btn" data-task-id="${task.id}">
+                <i class="fas fa-redo"></i>
+              </button>`
+                : ""
+            }
+          </td>
+        </tr>
+      `;
+      tbody.append(row);
+    });
+
+    // Add event listeners for detail and restart buttons
+    $(".task-detail-btn, .task-detail-link").on("click", function () {
+      const taskId = $(this).data("task-id");
+      showTaskDetails(taskId);
+    });
+
+    $(".task-restart-btn").on("click", function () {
+      const taskId = $(this).data("task-id");
+      restartTask(taskId);
+    });
+  }
+
+  // Show task details
+  function showTaskDetails(taskId) {
+    $.ajax({
+      url: `/api/tasks/${taskId}`,
+      method: "GET",
+      headers: {
+        "X-CSRF-Token": AuthManager.getCsrfToken(),
+      },
+      success: function (task) {
+        renderTaskDetails(task);
+      },
+      error: function (xhr, status, error) {
+        console.error("Error loading task details:", error);
+        alert(`Error loading task details: ${xhr.responseJSON?.detail || error}`);
+      },
+    });
+  }
+
+  // Render task details
+  function renderTaskDetails(task) {
+    // Show the details section
+    $("#task-details-section").removeClass("d-none");
+
+    // Populate basic info
+    $("#task-detail-id").text(task.id);
+    $("#task-detail-status").text(formatStatus(task.status));
+    $("#task-detail-type").text(TaskTypes[task.type] || task.type);
+    $("#task-detail-progress")
+      .css("width", `${task.progress}%`)
+      .text(`${Math.round(task.progress)}%`);
+
+    // Set up theme button
+    if (task.theme_id) {
+      $("#view-theme-btn-detail").removeClass("d-none").data("theme-id", task.theme_id);
+    } else {
+      $("#view-theme-btn-detail").addClass("d-none");
+    }
+
+    // Show/hide action buttons based on status
+    if (task.status === "pending" || task.status === "in_progress") {
+      $("#cancel-task-btn-detail").removeClass("d-none");
+      $("#restart-task-btn-detail").addClass("d-none");
+    } else if (task.status === "failed" || task.status === "cancelled") {
+      $("#cancel-task-btn-detail").addClass("d-none");
+      $("#restart-task-btn-detail").removeClass("d-none");
+    } else {
+      $("#cancel-task-btn-detail").addClass("d-none");
+      $("#restart-task-btn-detail").addClass("d-none");
+    }
+
+    // Render steps
+    renderTaskSteps(task.steps || []);
+
+    // Render logs
+    renderTaskLogs(task.logs || []);
+
+    // Scroll to the details section
+    $("html, body").animate(
+      {
+        scrollTop: $("#task-details-section").offset().top - 20,
+      },
+      500
+    );
+  }
+
+  // Render task steps
+  function renderTaskSteps(steps) {
+    const stepsContainer = $("#task-detail-steps");
+    stepsContainer.empty();
+
+    if (steps.length === 0) {
+      stepsContainer.html(`<li class="list-group-item">No steps defined for this task</li>`);
+      return;
+    }
+
+    steps.forEach((step, index) => {
+      const stepItem = `
+        <li class="list-group-item">
+          <div class="d-flex justify-content-between align-items-center">
+            <div>
+              <span class="badge ${StatusClasses[step.status]}">${formatStatus(step.status)}</span>
+              ${step.name}
+            </div>
+            <div class="progress" style="width: 100px">
+              <div class="progress-bar" role="progressbar" style="width: ${step.progress || 0}%" aria-valuenow="${
+        step.progress || 0
+      }" aria-valuemin="0" aria-valuemax="100"></div>
+            </div>
+          </div>
+        </li>
+      `;
+      stepsContainer.append(stepItem);
+    });
+  }
+
+  // Render task logs
+  function renderTaskLogs(logs) {
+    const logsContainer = $("#task-detail-logs");
+    logsContainer.empty();
+
+    if (logs.length === 0) {
+      logsContainer.html(`<div class="text-muted">No logs available</div>`);
+      return;
+    }
+
+    logs.forEach((log) => {
+      logsContainer.append(`<div>> [${log.timestamp}] ${log.message}</div>`);
+    });
+
+    // Auto-scroll to bottom
+    const logElement = document.querySelector(".task-log");
+    logElement.scrollTop = logElement.scrollHeight;
+  }
+
+  // Cancel a task
+  function cancelTask(taskId) {
+    if (confirm("Are you sure you want to cancel this task? Progress will be lost.")) {
+      $.ajax({
+        url: `/api/tasks/${taskId}`,
+        method: "DELETE",
+        headers: {
+          "X-CSRF-Token": AuthManager.getCsrfToken(),
+        },
+        success: function () {
+          // Refresh the task list
+          loadTasks();
+
+          // If task details are open for this task, refresh them
+          if ($("#task-detail-id").text() === taskId) {
+            showTaskDetails(taskId);
+          }
+        },
+        error: function (xhr, status, error) {
+          console.error("Error cancelling task:", error);
+          alert(`Error cancelling task: ${xhr.responseJSON?.detail || error}`);
+        },
+      });
+    }
+  }
+
+  // Restart a task
+  function restartTask(taskId) {
+    // In a real implementation, this would create a new task based on the old one
+    alert("Restart functionality would be implemented in production");
+
+    // Refresh the task list
+    loadTasks();
+  }
+
+  // Set up WebSocket for real-time task updates
+  function setupTaskSocket() {
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const wsUrl = `${protocol}//${window.location.host}/ws/tasks`;
+
+    try {
+      taskSocket = new WebSocket(wsUrl);
+
+      taskSocket.addEventListener("open", (event) => {
+        console.log("WebSocket connection established");
+
+        // Request all tasks
+        taskSocket.send(
+          JSON.stringify({
+            command: "get_tasks",
+          })
+        );
+      });
+
+      taskSocket.addEventListener("message", (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          handleTaskSocketMessage(data);
+        } catch (error) {
+          console.error("Error parsing WebSocket message:", error);
+        }
+      });
+
+      taskSocket.addEventListener("close", (event) => {
+        console.log("WebSocket connection closed", event.code, event.reason);
+
+        // Try to reconnect after 5 seconds
+        setTimeout(setupTaskSocket, 5000);
+      });
+
+      taskSocket.addEventListener("error", (event) => {
+        console.error("WebSocket error:", event);
+      });
+    } catch (error) {
+      console.error("Failed to initialize WebSocket:", error);
+    }
+  }
+
+  // Handle WebSocket messages
+  function handleTaskSocketMessage(data) {
+    if (data.type === "task_update") {
+      const taskData = data.data;
+
+      // Update task row in the table
+      updateTaskRow(taskData);
+
+      // If task details are open for this task, update them
+      if ($("#task-detail-id").text() === taskData.id) {
+        renderTaskDetails(taskData);
+      }
+    }
+  }
+
+  // Update a specific task row
+  function updateTaskRow(task) {
+    // Determine which table contains the task
+    let tableBody;
+    if (task.status === "pending" || task.status === "in_progress") {
+      tableBody = $("#active-tasks-body");
+
+      // Check if task already exists in this table
+      if (tableBody.find(`tr[data-task-id="${task.id}"]`).length === 0) {
+        // It's a new active task or was moved from completed
+        // Reload the entire table for simplicity
+        loadTasks();
+        return;
+      }
+    } else {
+      tableBody = $("#completed-tasks-body");
+
+      // Check if task already exists in this table
+      if (tableBody.find(`tr[data-task-id="${task.id}"]`).length === 0) {
+        // It's a newly completed task
+        // Reload the entire table for simplicity
+        loadTasks();
+        return;
+      }
+    }
+
+    // Update the existing row
+    const row = tableBody.find(`tr[data-task-id="${task.id}"]`);
+
+    // Update status and progress
+    row
+      .find("td:nth-child(4) span")
+      .removeClass()
+      .addClass(`badge ${StatusClasses[task.status]}`)
+      .text(formatStatus(task.status));
+
+    if (task.status === "pending" || task.status === "in_progress") {
+      // For active tasks - update progress bar
+      row.find("td:nth-child(5) .progress-bar").css("width", `${task.progress}%`);
+    }
+  }
+
+  // Format status string for display
+  function formatStatus(status) {
+    return status
+      .split("_")
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(" ");
+  }
+
+  // Format date for display
+  function formatDate(dateString) {
+    if (!dateString) return "-";
+
+    const date = new Date(dateString);
+    return date.toLocaleString();
+  }
+
+  // Format duration in milliseconds to human-readable string
+  function formatDuration(ms) {
+    if (!ms) return "-";
+
+    // Less than a minute
+    if (ms < 60000) {
+      return `${Math.round(ms / 1000)} seconds`;
+    }
+
+    // Less than an hour
+    if (ms < 3600000) {
+      const minutes = Math.floor(ms / 60000);
+      const seconds = Math.round((ms % 60000) / 1000);
+      return `${minutes} min ${seconds} sec`;
+    }
+
+    // Hours and minutes
+    const hours = Math.floor(ms / 3600000);
+    const minutes = Math.floor((ms % 3600000) / 60000);
+    return `${hours} hr ${minutes} min`;
+  }
+</script>
+{% endblock %}

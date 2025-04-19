@@ -37,8 +37,11 @@ class CsvReader(BaseReader):
             Content of the CSV file as a string.
         """
         try:
-            with open(path, newline='', encoding='utf-8', errors='replace') as f:
-                reader = csv.reader(f)
-                return "\n".join(", ".join(row) for row in reader)
+            content = self.safe_read_text(path)
+            # Use csv reader on the content if needed
+            import io
+            f = io.StringIO(content)
+            reader = csv.reader(f)
+            return "\n".join(", ".join(row) for row in reader)
         except Exception as e:
             return f"Error reading CSV file: {str(e)}"

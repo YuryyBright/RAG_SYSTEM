@@ -169,7 +169,7 @@ class Settings(BaseSettings):
                                    description="Instruction for query embeddings")
     EMBEDDING_BATCH_SIZE: int = Field(8, description="Number of documents to embed in a batch")
     EMBEDDING_DEVICE: str = Field("cpu", description="Device to run embedding model on (cpu or cuda)")
-    EMBEDDING_DIMENSION: int = Field(768, description="Dimension of embedding vectors")
+    EMBEDDING_DIMENSION: int = Field(1536, description="Dimension of embedding vectors")
     OPENAI_EMBEDDING_MODEL: str = Field("text-embedding-3-small", description="OpenAI embedding model")
     OPENAI_API_KEY: Optional[str] = Field(None, description="OpenAI API key")
     OPENAI_BATCH_SIZE: int = Field(5, description="Batch size for OpenAI API calls")
