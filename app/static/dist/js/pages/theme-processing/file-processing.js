@@ -20,12 +20,24 @@ export function startFileProcessing() {
     alertify.error("No theme selected for processing");
     return;
   }
+  state.vectorDBStatus = {
+    dataIngestion: "pending",
+    textChunking: "pending",
+    generateEmbeddings: "pending",
+    storeVectors: "pending",
+  };
+  updateVectorDBStatusUI();
 
   // Disable the process button while processing
   $("#start-process-btn").prop("disabled", true);
   // Clear previous logs
-  $("#process-log-content").empty();
+  // Clear any previous logs and progress
   state.processingLogs = [];
+  $("#process-log-content").empty();
+
+  // Reset progress bars
+  $("#process-progress").css("width", "0%");
+  $("#task-progress-bar").css("width", "0%");
   // Update UI with processing status
   addLogMessage("Starting file processing workflow...");
   state.vectorDBStatus.dataIngestion = "completed";
@@ -54,6 +66,9 @@ export function startFileProcessing() {
       chunk_overlap: 200,
     }),
     success: function (response) {
+      // Enable the process button again
+      $("#start-process-btn").prop("disabled", false);
+
       // Log the complete response to console for debugging
       console.log("Complete processing response:", response);
       addLogMessage("✅ Processing completed successfully");

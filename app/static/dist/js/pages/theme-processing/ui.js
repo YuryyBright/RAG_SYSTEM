@@ -149,12 +149,12 @@ export function navigateToStep(step, saveState = true, animate = true) {
     $("#theme-section, #upload-section, #process-section").addClass("section-transition");
 
     // Apply animation class based on direction
-    $(`#${getSectionId(step)}`).addClass(animationDirection);
+    $(`#${getStepName(step)}`).addClass(animationDirection);
 
     // Remove animation classes after transition completes
     setTimeout(() => {
       $("#theme-section, #upload-section, #process-section").removeClass("section-transition");
-      $(`#${getSectionId(step)}`).removeClass(animationDirection);
+      $(`#${getStepName(step)}`).removeClass(animationDirection);
     }, 500); // Match this with your CSS transition duration
   }
 
@@ -646,7 +646,10 @@ export function setupEventListeners() {
   // Navigation buttons - updated for simplified flow
   $("#theme-next-btn").on("click", () => navigateToStep(2));
   $("#upload-back-btn").on("click", () => navigateToStep(1));
-  $("#upload-next-btn").on("click", () => navigateToStep(3));
+  $("#upload-next-btn").on("click", () => {
+    navigateToStep(3); // switch to the “Process” screen
+    startFileProcessing(); // fire the backend job immediately
+  });
   $("#process-back-btn").on("click", () => navigateToStep(2));
   $("#finish-btn").on("click", showSuccessModal);
 

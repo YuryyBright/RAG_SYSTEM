@@ -27,10 +27,8 @@ export function initializeWebSocketConnection() {
     state.taskSocket = new WebSocket(wsUrl);
 
     state.taskSocket.onopen = function () {
+      state.reconnectAttempts = 0; // Reset reconnection counter on successful connection
       console.log("WebSocket connection established successfully!");
-      $("#connection-status").removeClass("badge-warning badge-danger").addClass("badge-success").text("Connected");
-      $("#connection-error").addClass("d-none");
-      state.reconnectAttempts = 0; // Reset counter on successful connectio
 
       state.taskSocket.send(JSON.stringify({ command: "ping" }));
       console.log("Ping sent to server");
@@ -53,7 +51,6 @@ export function initializeWebSocketConnection() {
 
     state.taskSocket.onclose = function (event) {
       console.log("WebSocket closed", event);
-      $("#connection-status").removeClass("badge-success").addClass("badge-warning").text("Disconnected");
       if (event.code !== 1000) attemptReconnect();
     };
 
@@ -69,26 +66,22 @@ export function initializeWebSocketConnection() {
 /**
  * Attempt to reconnect WebSocket after connection lost
  */
-// Improve the attemptReconnect function
 export function attemptReconnect() {
-  if (state.reconnectAttempts >= state.maxReconnectAttempts) {
-    console.error("Maximum reconnection attempts reached");
-    addLogMessage("Lost connection to server. Please refresh the page.");
-    $("#connection-error").removeClass("d-none").text("Connection lost. Please refresh the page to continue.");
+  // ⬇️  NEW: do we actually need the socket?
+  if (
+    !state.processingTask || // nothing to watch
+    ["completed", "failed", "cancelled"].includes(state.processingTask.status)
+  ) {
+    console.log("No active task – skip WebSocket reconnect");
     return;
   }
 
-  state.reconnectAttempts++;
-  const delay = state.reconnectDelay * Math.pow(1.5, state.reconnectAttempts - 1); // Exponential backoff
-
-  console.log(`Attempting to reconnect (${state.reconnectAttempts}/${state.maxReconnectAttempts}) in ${delay}ms...`);
-  addLogMessage(`Connection lost. Reconnecting (attempt ${state.reconnectAttempts})...`);
-
-  setTimeout(() => {
-    initializeWebSocketConnection();
-  }, delay);
+  if (state.reconnectAttempts >= state.maxReconnectAttempts) {
+    console.error("Maximum reconnection attempts reached");
+    alertify.error("Lost connection to server. Please refresh the page.");
+    return;
+  }
 }
-
 /**
  * Subscribe to theme updates via WebSocket
  * @param {string} themeId
@@ -106,15 +99,15 @@ export function subscribeToThemeUpdates(themeId) {
   }
 
   // Optionally unsubscribe previous
-  if (state.subscribedThemeId && state.subscribedThemeId !== themeId) {
-    const unsubscribeMsg = {
-      command: "unsubscribe",
-      theme_id: state.subscribedThemeId,
-    };
+  // if (state.subscribedThemeId && state.subscribedThemeId !== themeId) {
+  //   const unsubscribeMsg = {
+  //     command: "unsubscribe",
+  //     theme_id: state.subscribedThemeId,
+  //   };
 
-    state.taskSocket.send(JSON.stringify(unsubscribeMsg));
-    console.log(`Unsubscribed from theme ${state.subscribedThemeId}`);
-  }
+  //   state.taskSocket.send(JSON.stringify(unsubscribeMsg));
+  //   console.log(`Unsubscribed from theme ${state.subscribedThemeId}`);
+  // }
 
   // Now send the subscription
   const subscribeMsg = {
@@ -123,6 +116,12 @@ export function subscribeToThemeUpdates(themeId) {
   };
 
   state.taskSocket.send(JSON.stringify(subscribeMsg));
+  const sendMsg = () => state.taskSocket.send(JSON.stringify(subscribeMsg));
+  if (state.taskSocket.readyState === WebSocket.OPEN) {
+    sendMsg();
+  } else {
+    state.pendingSubscription = themeId; // will be flushed on onopen
+  }
   state.subscribedThemeId = themeId; // optimistic update
   console.log(`Subscribed to theme ${themeId}`);
 }
@@ -132,13 +131,9 @@ export function subscribeToThemeUpdates(themeId) {
  * @param {Object} message - Message received from WebSocket
  */
 export function handleWebSocketMessage(message) {
-  // Log all messages for debugging
-  console.log("Received WebSocket message:", message);
-
   if (message.type === "subscription") {
     if (message.status === "success") {
       state.subscribedThemeId = message.theme_id;
-      console.log(`Successfully subscribed to theme ${message.theme_id}`);
     }
     return;
   }
@@ -146,89 +141,87 @@ export function handleWebSocketMessage(message) {
   if (message.type === "task_update" && message.data) {
     const taskData = message.data;
 
-    // Only process updates for the current theme (if theme_id is provided)
-    if (message.theme_id && message.theme_id !== state.currentThemeId) {
-      console.log(`Ignoring update for different theme: ${message.theme_id}`);
-      return;
+    // if (message.theme_id !== state.currentThemeId) return; // <-- Fix here
+    console.log("message update received:", message.theme_id);
+    state.processingTask = taskData;
+    updateTaskUI(taskData);
+    state.processingTask = taskData;
+    const progress = taskData.progress || 0;
+    const step = taskData.current_step;
+
+    let stepDescription = "";
+
+    switch (step) {
+      case 0:
+        stepDescription = `Reading files (${progress}%)`;
+        break;
+      case 1:
+        stepDescription = `Chunking text (${progress}%)`;
+        break;
+      case 2:
+        stepDescription = `Generating embeddings (${progress}%)`;
+        break;
+      case 3:
+        stepDescription = `Storing vectors (${progress}%)`;
+        break;
+      default:
+        stepDescription = `Processing (${progress}%)`;
     }
 
-    // Update global state
-    state.processingTask = taskData;
+    addLogMessage(stepDescription);
 
-    // Update task UI with latest data
-    updateTaskUI(taskData);
+    // Update the live progress bar
+    $("#process-progress").css("width", `${progress}%`);
 
-    // Process step-specific updates
-    processStepUpdate(taskData);
+    // Update vector DB status UI
+    if (taskData.metadata && taskData.metadata.vectorDBStatus) {
+      state.vectorDBStatus = taskData.metadata.vectorDBStatus;
+    } else {
+      // Fallback logic to infer status from step
+      const step = taskData.current_step;
+      state.vectorDBStatus = {
+        dataIngestion: step === 0 ? "in_progress" : "completed",
+        textChunking: step === 1 ? "in_progress" : step > 1 ? "completed" : "pending",
+        generateEmbeddings: step === 2 ? "in_progress" : step > 2 ? "completed" : "pending",
+        storeVectors: taskData.status === "completed" ? "completed" : "pending",
+      };
+    }
+    updateVectorDBStatusUI();
   }
 }
 
 /**
  * Update processing status based on details
  */
-function processStepUpdate(taskData) {
-  const progress = taskData.progress || 0;
-  const step = taskData.current_step;
-
-  // Map steps to vectorDB status fields
-  const stepStatusMapping = {
-    READING: { step: 0, status: "dataIngestion" },
-    CHUNKING: { step: 1, status: "textChunking" },
-    EMBEDDING: { step: 2, status: "generateEmbeddings" },
-  };
-
-  // Mark current step as in_progress and previous steps as completed
-  Object.keys(stepStatusMapping).forEach((stepNum) => {
-    const statusField = stepStatusMapping[stepNum];
-    if (parseInt(stepNum) < step) {
-      state.vectorDBStatus[statusField] = "completed";
-    } else if (parseInt(stepNum) === step) {
-      state.vectorDBStatus[statusField] = "in_progress";
-    }
-  });
-
-  // Add log message based on step
-  let stepDescription = "";
-  switch (step) {
-    case 0:
-      stepDescription = `Reading files (${progress}%)`;
-      break;
-    case 1:
-      stepDescription = `Chunking text (${progress}%)`;
-      break;
-    case 2:
-      stepDescription = `Generating embeddings (${progress}%)`;
-      break;
-    case 3:
-      stepDescription = `Storing vectors (${progress}%)`;
-      break;
-    default:
-      stepDescription = `Processing (${progress}%)`;
+function updateProcessingStatus(details) {
+  // Update state based on processing stage
+  if (details.stage === "reading") {
+    state.vectorDBStatus.dataIngestion = "in_progress";
+    addLogMessage(`Reading files: ${details.progress}% complete`);
+  } else if (details.stage === "chunking") {
+    state.vectorDBStatus.dataIngestion = "completed";
+    state.vectorDBStatus.textChunking = "in_progress";
+    addLogMessage(`Chunking text: ${details.progress}% complete. Created ${details.chunksCreated || 0} chunks.`);
+  } else if (details.stage === "embedding") {
+    state.vectorDBStatus.textChunking = "completed";
+    state.vectorDBStatus.generateEmbeddings = "in_progress";
+    addLogMessage(
+      `Generating embeddings: ${details.progress}% complete. Processed ${details.embeddingsCreated || 0} embeddings.`
+    );
+  } else if (details.stage === "storing") {
+    state.vectorDBStatus.generateEmbeddings = "completed";
+    state.vectorDBStatus.storeVectors = "in_progress";
+    addLogMessage(`Storing vectors: ${details.progress}% complete`);
+  } else if (details.stage === "completed") {
+    state.vectorDBStatus.storeVectors = "completed";
+    addLogMessage(
+      `Processing completed. Total chunks: ${details.totalChunks}, total embeddings: ${details.totalEmbeddings}`
+    );
   }
-
-  addLogMessage(stepDescription);
 
   // Update the UI
   updateVectorDBStatusUI();
-
-  // Update progress bar
-  $("#process-progress").css("width", `${progress}%`);
-
-  // Handle task completion
-  if (taskData.status === "completed") {
-    // Mark all steps as completed when the task is done
-    Object.keys(state.vectorDBStatus).forEach((key) => {
-      state.vectorDBStatus[key] = "completed";
-    });
-
-    addLogMessage("Processing completed successfully!");
-    updateVectorDBStatusUI();
-
-    // Enable finish button
-    $("#finish-btn").prop("disabled", false);
-  }
 }
-
 /**
  * Handle page visibility change to manage WebSocket connection
  */

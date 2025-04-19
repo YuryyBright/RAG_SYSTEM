@@ -244,8 +244,17 @@ class FileProcessingUseCase:
         READING = 0  # scan & load files
         CHUNKING = 1  # split text
         EMBEDDING = 2  # create & store vectors
+
         if not os.path.isdir(directory_path):
             raise ValueError(f"Directory not found: {directory_path}")
+
+        # Define progress ranges for each step
+        READING_PROGRESS_START = 0
+        READING_PROGRESS_END = 25
+        CHUNKING_PROGRESS_START = 25
+        CHUNKING_PROGRESS_END = 60
+        EMBEDDING_PROGRESS_START = 60
+        EMBEDDING_PROGRESS_END = 100
 
         # Step 1: Read directory and produce raw documents
         logger.info(f"Processing {directory_path}")
@@ -258,7 +267,7 @@ class FileProcessingUseCase:
                 user_id=user_id,
                 status="in_progress",
                 current_step=READING,
-                progress=0,
+                progress=READING_PROGRESS_START,
                 message="Starting processing reading files",
             )
 
@@ -282,19 +291,21 @@ class FileProcessingUseCase:
             "details": base_report["details"],
             "recommendations": base_report["recommendations"],
         }
+
         if task_id:
             await self._send_task_update(
                 task_id=task_id,
                 theme_id=theme_id,
                 user_id=user_id,
-                status="completed",  # maybe "in_progress" if not fully done
+                status="in_progress",  # Changed from "completed" to "in_progress" since we're not done yet
                 current_step=READING,
-                progress=100,
+                progress=READING_PROGRESS_END,
                 message=f"Finished processing {extended_report['summary']['total_files']} files: "
                         f"{extended_report['summary']['successful_files']} successful, "
                         f"{extended_report['summary']['unreadable_files']} unreadable, "
                         f"{extended_report['summary']['language_detection_failures']} language detection failures.",
             )
+
         # Step 2: Chunk, store, and embed each document
         total_chunks_created = 0
         chunks_vectorized = 0
@@ -311,8 +322,8 @@ class FileProcessingUseCase:
                 user_id=user_id,
                 status="in_progress",
                 current_step=CHUNKING,
-                progress=0,
-                message="Starting processing",
+                progress=CHUNKING_PROGRESS_START,
+                message="Starting chunking process",
             )
 
         total_docs = len(documents)
@@ -328,14 +339,18 @@ class FileProcessingUseCase:
 
             # Send periodic progress updates
             if task_id and idx % max(1, total_docs // 10) == 0:  # Update roughly every 10% of documents
-                progress = 30 + int(20 * (idx / total_docs))
+                # Calculate progress within the chunking range
+                chunk_progress_percent = idx / total_docs
+                actual_progress = CHUNKING_PROGRESS_START + (
+                            CHUNKING_PROGRESS_END - CHUNKING_PROGRESS_START) * chunk_progress_percent
+
                 await self._send_task_update(
                     task_id=task_id,
                     theme_id=theme_id,
                     user_id=user_id,
                     status="in_progress",
                     current_step=CHUNKING,
-                    progress=progress,
+                    progress=int(actual_progress),
                     message=f"Chunking document {idx + 1}/{total_docs}"
                 )
 
@@ -358,15 +373,18 @@ class FileProcessingUseCase:
                 # We'll collect text for embedding
                 vectors_to_add.append(chunk)
                 vector_ids.append(doc_id)
-        await self._send_task_update(
-            task_id=task_id,
-            theme_id=theme_id,
-            user_id=user_id,
-            status="in_progress",
-            current_step=CHUNKING,
-            progress=100,
-            message=f"Chunking document: {total_docs}"
-        )
+
+        if task_id:
+            await self._send_task_update(
+                task_id=task_id,
+                theme_id=theme_id,
+                user_id=user_id,
+                status="in_progress",
+                current_step=CHUNKING,
+                progress=CHUNKING_PROGRESS_END,
+                message=f"Finished chunking {total_docs} documents into {total_chunks_created} chunks"
+            )
+
         # Update task status for embedding step
         if task_id:
             await self._send_task_update(
@@ -375,7 +393,7 @@ class FileProcessingUseCase:
                 theme_id=theme_id,
                 status="in_progress",
                 current_step=EMBEDDING,
-                progress=60,
+                progress=EMBEDDING_PROGRESS_START,
                 message=f"Creating embeddings for {len(vectors_to_add)} chunks"
             )
 
@@ -399,14 +417,18 @@ class FileProcessingUseCase:
 
                 # Send progress updates for embedding process
                 if task_id:
-                    progress = 60 + int(30 * ((batch_idx + 1) / total_batches))
+                    # Calculate progress within the embedding range
+                    embedding_progress_percent = (batch_idx + 1) / total_batches
+                    actual_progress = EMBEDDING_PROGRESS_START + (
+                                EMBEDDING_PROGRESS_END - EMBEDDING_PROGRESS_START) * embedding_progress_percent
+
                     await self._send_task_update(
                         task_id=task_id,
                         theme_id=theme_id,
-                        user_id=user_id,  # see next item
+                        user_id=user_id,
                         status="in_progress",
                         current_step=EMBEDDING,
-                        progress=progress,
+                        progress=int(actual_progress),
                         message=f"Processed batch {batch_idx + 1}/{total_batches} of embeddings"
                     )
 
@@ -415,10 +437,10 @@ class FileProcessingUseCase:
             await self._send_task_update(
                 task_id=task_id,
                 theme_id=theme_id,
-                user_id=user_id,  # see next item
+                user_id=user_id,
                 status="completed",
                 current_step=EMBEDDING,
-                progress=100,
+                progress=EMBEDDING_PROGRESS_END,
                 message="Processing complete"
             )
 

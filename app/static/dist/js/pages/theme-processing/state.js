@@ -164,9 +164,44 @@ export function restoreWorkflowState() {
     if (parsedState.processingLogs && parsedState.processingLogs.length > 0) {
       state.processingLogs = parsedState.processingLogs;
       $("#process-log-content").empty();
+
       state.processingLogs.forEach((log) => {
-        $("#process-log-content").append(`<div>> ${log}</div>`);
+        const { text, type } = log;
+        let icon, messageClass;
+
+        switch (type) {
+          case "success":
+            icon = "fa-check-circle text-success";
+            messageClass = "log-success";
+            break;
+          case "warning":
+            icon = "fa-exclamation-triangle text-warning";
+            messageClass = "log-warning";
+            break;
+          case "error":
+            icon = "fa-times-circle text-danger";
+            messageClass = "log-error";
+            break;
+          default: // info
+            icon = "fa-info-circle text-info";
+            messageClass = "log-info";
+        }
+
+        const logEntry = `
+      <div class="log-entry ${messageClass}">
+        <i class="fas ${icon} mr-1"></i>
+        <span>${text}</span>
+      </div>
+    `;
+
+        $("#process-log-content").append(logEntry);
       });
+
+      // Auto-scroll to bottom after restoring
+      const logContainer = document.getElementById("process-log-content");
+      if (logContainer) {
+        logContainer.scrollTop = logContainer.scrollHeight;
+      }
     }
 
     // Restore uploaded files if available
