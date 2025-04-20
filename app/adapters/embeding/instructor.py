@@ -1,6 +1,7 @@
 # app/adapters/embedding/instructor.py
 from typing import List
 import os
+
 from sentence_transformers import SentenceTransformer
 
 from core.entities.document import Document
@@ -9,7 +10,7 @@ from utils.logger_util import get_logger
 
 logger = get_logger(__name__)
 
-#TODO create less demission size
+
 class InstructorEmbedding(EmbeddingInterface):
     """
     Implementation of INSTRUCTOR embedding model.
@@ -128,16 +129,26 @@ class InstructorEmbedding(EmbeddingInterface):
 
     async def get_embedding(self, text: str) -> List[float]:
         """
-        Get a single embedding with padding to 1536 dimensions.
+        Get a single embedding using the embed_text logic.
+        Alias method for interface compatibility.
+
+        Args:
+            text (str): The text to embed.
+
+        Returns:
+            List[float]: The generated embedding.
         """
-        embedding = await self.embed_text(text)
-        if len(embedding) < 1536:
-            embedding = embedding + [0.0] * (1536 - len(embedding))
-        return embedding
+        return await self.embed_text(text)
 
     async def get_embeddings(self, texts: List[str]) -> List[List[float]]:
         """
-        Generate embeddings for a list of texts with padding to 1536 dimensions.
+        Generate embeddings for a list of text inputs.
+
+        Args:
+            texts (List[str]): List of text strings to embed.
+
+        Returns:
+            List[List[float]]: List of embedding vectors for the input texts.
         """
         if not texts:
             return []
@@ -147,16 +158,14 @@ class InstructorEmbedding(EmbeddingInterface):
         for i in range(0, len(texts), self.batch_size):
             batch = texts[i:i + self.batch_size]
 
-            # Create instruction pairs
+            # Create instruction pairs for each text in the batch
             instruction_pairs = [[self.instruction, text] for text in batch]
 
+            # Generate embeddings
             batch_embeddings = self.model.encode(instruction_pairs)
 
-            # Convert numpy arrays to lists and pad
-            for emb in batch_embeddings:
-                emb_list = emb.tolist()
-                if len(emb_list) < 1536:
-                    emb_list = emb_list + [0.0] * (1536 - len(emb_list))
-                results.append(emb_list)
+            # Convert numpy arrays to lists
+            batch_embeddings = [emb.tolist() for emb in batch_embeddings]
+            results.extend(batch_embeddings)
 
         return results

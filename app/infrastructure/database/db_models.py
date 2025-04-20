@@ -159,7 +159,7 @@ class Document(Base):
 
     id = Column(String, primary_key=True, default=generate_uuid)
     content = Column(Text, nullable=False)
-    embedding = Column(Vector(1536)) # Store embedding as binary
+    embedding = Column(Vector(768)) # Store embedding as binary
     file_id = Column(String, ForeignKey("files.id"), nullable=False)
     owner_id = Column(String, ForeignKey("users.id"), nullable=False)
     theme_id = Column(String, ForeignKey("themes.id"), nullable=False)

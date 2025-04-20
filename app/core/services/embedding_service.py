@@ -13,7 +13,7 @@ logger = get_logger(__name__)
 class EmbeddingService(EmbeddingInterface):
     """Service for generating embeddings from text."""
 
-    def __init__(self, model_name: str = "default", dimensions: int = 1536):
+    def __init__(self, model_name: str = "default", dimensions: int = 768):
         """
         Initialize the embedding service.
 

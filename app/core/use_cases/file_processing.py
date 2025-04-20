@@ -411,14 +411,7 @@ class FileProcessingUseCase:
                 batch_ids = vector_ids[start_idx:end_idx]
 
                 embeddings = await self.embedding_service.get_embeddings(batch_vectors)
-                fixed_embeddings = []
-                for embedding in embeddings:
-                    if len(embedding) < 1536:
-                        embedding = embedding + [0.0] * (1536 - len(embedding))  # Add zeros
-                    fixed_embeddings.append(embedding)
-
-                await self.vector_index.add_vectors(fixed_embeddings, batch_ids)
-
+                await self.vector_index.add_vectors(embeddings, batch_ids)
                 chunks_vectorized += len(batch_vectors)
 
                 # Send progress updates for embedding process
