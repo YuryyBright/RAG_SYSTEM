@@ -1,15 +1,19 @@
 # app/adapters/embedding/sentence_transformer.py
 from typing import List
 from sentence_transformers import SentenceTransformer
-from app.core.entities.document import Document
-from app.core.interfaces.embedding import EmbeddingInterface
+
+from core.entities.document import Document
+from core.interfaces.base_embedding_service import BaseEmbeddingService
+from utils.logger_util import get_logger
+
+logger = get_logger(__name__)
 
 
-class SentenceTransformerEmbedding(EmbeddingInterface):
+class SentenceTransformerEmbedding(BaseEmbeddingService):
     """
     Implementation of SentenceTransformer-based embeddings.
 
-    This class uses Sentence Transformers to generate embeddings for 
+    This class uses Sentence Transformers to generate embeddings for
     documents and queries.
     """
 
@@ -22,30 +26,57 @@ class SentenceTransformerEmbedding(EmbeddingInterface):
         Initialize the SentenceTransformer embedding service.
 
         Args:
-            model_name (str): Name of the model from Hugging Face
-            batch_size (int): Batch size for processing
+            model_name: Name of the model from Hugging Face
+            batch_size: Batch size for processing
         """
-        self.model_name = model_name
-        self.batch_size = batch_size
+        super().__init__(model_name=model_name, batch_size=batch_size)
+        logger.info(f"Loading SentenceTransformer model: {model_name}")
         self.model = SentenceTransformer(model_name)
+        logger.info(f"SentenceTransformer model loaded successfully")
 
-    async def embed_documents(self, documents: List[Document]) -> List[Document]:
-        """Generate embeddings for a list of documents."""
-        # Process documents in batches
-        for i in range(0, len(documents), self.batch_size):
-            batch = documents[i:i + self.batch_size]
-            texts = [doc.content for doc in batch]
+    async def get_embeddings(self, texts: List[str]) -> List[List[float]]:
+        """
+        Generate embeddings for a list of text inputs.
 
-            # Generate embeddings
-            embeddings = self.model.encode(texts)
+        Args:
+            texts: List of text strings to embed
 
-            # Assign embeddings to documents
-            for j, doc in enumerate(batch):
-                doc.embedding = embeddings[j].tolist()
+        Returns:
+            List of embedding vectors for the input texts
+        """
+        if not texts:
+            return []
 
-        return documents
+        try:
+            # Process in batches
+            results = []
+            for i in range(0, len(texts), self.batch_size):
+                batch = texts[i:i + self.batch_size]
 
-    async def embed_query(self, query: str) -> List[float]:
-        """Generate embedding for a query string."""
-        embedding = self.model.encode(query)
+                # Generate embeddings
+                batch_embeddings = self.model.encode(batch)
+
+                # Convert numpy arrays to lists
+                batch_embeddings = [emb.tolist() for emb in batch_embeddings]
+                results.extend(batch_embeddings)
+
+            return results
+
+        except Exception as e:
+            logger.error(f"Error generating SentenceTransformer embeddings: {str(e)}")
+            raise
+
+    async def embed_text(self, text: str) -> List[float]:
+        """
+        Generate an embedding for a text string.
+
+        Implementation optimized for single text input.
+
+        Args:
+            text: The text string to be embedded
+
+        Returns:
+            List of floats representing the embedding of the text
+        """
+        embedding = self.model.encode(text)
         return embedding.tolist()

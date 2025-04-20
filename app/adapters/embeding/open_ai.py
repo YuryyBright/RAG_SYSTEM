@@ -2,20 +2,18 @@
 import os
 from typing import List
 import openai
-from core.entities.document import Document
-from core.interfaces.embedding import EmbeddingInterface
+from core.interfaces.base_embedding_service import BaseEmbeddingService
+
+from utils.logger_util import get_logger
+
+logger = get_logger(__name__)
 
 
-class OpenAIEmbedding(EmbeddingInterface):
+class OpenAIEmbedding(BaseEmbeddingService):
     """
     OpenAI embedding implementation.
 
     This class uses OpenAI's embedding API to generate embeddings for documents and queries.
-
-    Attributes:
-        model_name (str): The name of the OpenAI embedding model to use.
-        api_key (str): The OpenAI API key for authentication.
-        batch_size (int): The maximum number of documents to process in a single API call.
     """
 
     def __init__(
@@ -28,57 +26,71 @@ class OpenAIEmbedding(EmbeddingInterface):
         Initialize the OpenAI embedding service.
 
         Args:
-            model_name (str): The name of the OpenAI embedding model to use.
-            api_key (str): The OpenAI API key. If None, it will be read from the environment.
-            batch_size (int): The maximum number of documents to process in a single API call.
+            model_name: The name of the OpenAI embedding model to use
+            api_key: The OpenAI API key. If None, it will be read from the environment
+            batch_size: The maximum number of documents to process in a single API call
         """
-        self.model_name = model_name
+        super().__init__(model_name=model_name, batch_size=batch_size)
         self.api_key = api_key or os.getenv("OPENAI_API_KEY")
-        self.batch_size = batch_size
+
+        if not self.api_key:
+            raise ValueError(
+                "OpenAI API key is required. Set it in the environment as OPENAI_API_KEY or pass it directly.")
 
         # Set the API key for the openai package
         openai.api_key = self.api_key
+        logger.info(f"Initialized OpenAI embedding with model: {model_name}")
 
-    async def embed_documents(self, documents: List[Document]) -> List[Document]:
+    async def get_embeddings(self, texts: List[str]) -> List[List[float]]:
         """
-        Generate embeddings for a list of documents using OpenAI's API.
+        Generate embeddings for a list of texts using OpenAI's API.
 
         Args:
-            documents (List[Document]): A list of Document objects to be embedded.
+            texts: List of text strings to embed
 
         Returns:
-            List[Document]: The list of Document objects with their embedding attributes populated.
+            List of embedding vectors (as lists of floats)
         """
-        # Process documents in batches
-        for i in range(0, len(documents), self.batch_size):
-            batch = documents[i:i + self.batch_size]
-            texts = [doc.content for doc in batch]
+        if not texts:
+            return []
 
-            # Call the OpenAI API
-            response = await openai.Embedding.acreate(
-                model=self.model_name,
-                input=texts
-            )
+        results = []
+        # Process in batches to avoid API limits
+        for i in range(0, len(texts), self.batch_size):
+            batch = texts[i:i + self.batch_size]
 
-            # Extract embeddings and assign them to documents
-            for j, doc in enumerate(batch):
-                doc.embedding = response["data"][j]["embedding"]
+            try:
+                # Call the OpenAI API
+                response = await openai.Embedding.acreate(
+                    model=self.model_name,
+                    input=batch
+                )
 
-        return documents
+                # Extract embeddings
+                batch_embeddings = [item["embedding"] for item in response["data"]]
+                results.extend(batch_embeddings)
 
-    async def embed_query(self, query: str) -> List[float]:
+            except Exception as e:
+                logger.error(f"Error generating OpenAI embeddings: {str(e)}")
+                raise
+
+        return results
+
+    async def embed_text(self, text: str) -> List[float]:
         """
-        Generate an embedding for a query string using OpenAI's API.
+        Generate an embedding for a text string using OpenAI's API.
+
+        Implementation optimized for single text input.
 
         Args:
-            query (str): The query string to be embedded.
+            text: The text string to be embedded
 
         Returns:
-            List[float]: A list of floats representing the embedding of the query.
+            List of floats representing the embedding of the text
         """
         response = await openai.Embedding.acreate(
             model=self.model_name,
-            input=query
+            input=text
         )
 
         return response["data"][0]["embedding"]
