@@ -7,7 +7,7 @@ import numpy as np
 from app.core.entities.document import Document
 from app.core.interfaces.document_store import DocumentStoreInterface
 from app.infrastructure.database.repository.document_repository import DocumentRepository
-from core.services.embedding_service import EmbeddingService
+from core.interfaces.embedding import EmbeddingInterface
 
 
 class DocumentStore(DocumentStoreInterface):
@@ -29,7 +29,7 @@ class DocumentStore(DocumentStoreInterface):
     def __init__(
             self,
             document_repository: DocumentRepository,
-            embedding_service: EmbeddingService,
+            embedding_service: EmbeddingInterface,
             storage_path: Path
     ):
         self.document_repository = document_repository
@@ -75,7 +75,6 @@ class DocumentStore(DocumentStoreInterface):
             theme_id=document.theme_id,
             metadata=document.metadata
         )
-        # Link document to the theme via the ThemeDocument table if theme_id is provided
         if document.theme_id:
             await self.document_repository.create_theme_document_link(
                 theme_id=document.theme_id,
@@ -274,24 +273,28 @@ class DocumentStore(DocumentStoreInterface):
 
         return documents
 
-    async def delete(self, document_id: str) -> bool:
+    async def delete(self, document_id: str, owner_id: str, theme_id: str) -> bool:
         """
         Delete a document by its ID (Interface method).
 
         Args:
             document_id: ID of the document to delete
+            owner_id
+            theme_id
 
         Returns:
             bool: True if deleted, False if not found
         """
-        return await self.delete_document(document_id)
+        return await self.delete_document(document_id, owner_id, theme_id)
 
-    async def delete_document(self, document_id: str) -> bool:
+    async def delete_document(self, document_id: str, owner_id: str, theme_id: str) -> bool:
         """
         Delete a document by its ID.
 
         Args:
             document_id: ID of the document to delete
+            owner_id:
+            theme_id
 
         Returns:
             bool: True if deleted, False if not found
@@ -301,7 +304,7 @@ class DocumentStore(DocumentStoreInterface):
 
         # Delete from disk cache if exists
         if deleted:
-            self._delete_document_from_disk(document_id)
+            self._delete_document_from_disk(document_id,owner_id, theme_id)
 
         return deleted
 
@@ -444,10 +447,10 @@ class DocumentStore(DocumentStoreInterface):
 
         return document
 
-    def _delete_document_from_disk(self, document_id: str) -> None:
+    def _delete_document_from_disk(self, document_id: str, owner_id: str, theme_id: str) -> None:
         """Delete document from disk cache."""
-        file_path = self.storage_path / f"{document_id}.json"
-        embedding_path = self.storage_path / f"{document_id}.embedding"
+        file_path = Path(self.storage_path) / owner_id / theme_id / f"{document_id}.json"
+        embedding_path = Path(self.storage_path) / owner_id / theme_id / f"{document_id}.embedding"
 
         if file_path.exists():
             os.remove(file_path)

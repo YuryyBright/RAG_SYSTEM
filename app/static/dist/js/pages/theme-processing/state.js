@@ -232,3 +232,28 @@ export function restoreWorkflowState() {
     return false;
   }
 }
+export function resetThemeState() {
+  state.uploadedFiles = [];
+  state.dropZoneFiles = [];
+  state.downloadedFiles = [];
+  state.processedFiles = [];
+  state.processingTask = null;
+  state.processingLogs = [];
+  state.vectorDBStatus = {
+    dataIngestion: "pending",
+    textChunking: "pending",
+    generateEmbeddings: "pending",
+    storeVectors: "pending",
+  };
+
+  // Update UI
+  $("#upload-files-list").empty();
+  $("#process-log-content").empty();
+  $("#selected-theme-name").text("");
+  $("#upload-next-btn").prop("disabled", true);
+  $("#task-status-area").addClass("d-none");
+  $("#task-error-message").addClass("d-none").text("");
+  $("#task-completion-info").addClass("d-none").text("");
+
+  updateVectorDBStatusUI();
+}

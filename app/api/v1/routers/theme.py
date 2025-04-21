@@ -3,7 +3,7 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from api.schemas.files import FileResponse
-from app.api.dependencies.dependencies import get_theme_use_case
+from app.api.dependencies.dependencies import get_theme_use_case, get_theme_use_case_p
 from app.api.schemas.theme import (
     ThemeCreate,
     ThemeUpdate,
@@ -24,7 +24,7 @@ router = APIRouter()
 async def create_theme(
         theme_data: ThemeCreate,
         user: dict = Depends(get_current_active_user),
-        theme_use_case: ThemeUseCase = Depends(get_theme_use_case)
+        theme_use_case: ThemeUseCase = Depends(get_theme_use_case_p)
 ):
     """
     Create a new theme.
@@ -58,7 +58,7 @@ async def create_theme(
 async def get_themes(
         include_public: bool = False,
         user: dict = Depends(get_current_active_user),
-        theme_use_case: ThemeUseCase = Depends(get_theme_use_case)
+        theme_use_case: ThemeUseCase = Depends(get_theme_use_case_p)
 ):
     """
     Get themes owned by the current user, optionally including public themes.
@@ -96,7 +96,7 @@ async def get_themes(
 async def get_theme(
         theme_id: str,
         user: dict = Depends(get_current_active_user),
-        theme_use_case: ThemeUseCase = Depends(get_theme_use_case)
+        theme_use_case: ThemeUseCase = Depends(get_theme_use_case_p)
 ):
     """
     Get a specific theme by ID.

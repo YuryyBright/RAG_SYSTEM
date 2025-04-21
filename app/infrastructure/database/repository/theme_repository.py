@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import selectinload
 
-from app.infrastructure.database.db_models import Theme, ThemeDocument, Document
+from app.infrastructure.database.db_models import Theme, ThemeDocument, Document, ProcessingTask, ThemeShare
 from app.utils.logger_util import get_logger
 from core.interfaces.theme_repository import ThemeRepositoryInterface
 from app.infrastructure.database.db_models import File, ThemeFile
@@ -137,8 +137,7 @@ class ThemeRepository(ThemeRepositoryInterface):
 
     async def delete_theme(self, theme_id: str) -> bool:
         """
-        Delete a theme and all of its document and file associations,
-        including the actual File records.
+        Delete a theme and all of its related data: documents, files, tasks, etc.
 
         Args:
             theme_id (str): ID of the theme to delete.
@@ -147,27 +146,37 @@ class ThemeRepository(ThemeRepositoryInterface):
             bool: True if deletion succeeded, False otherwise.
         """
         try:
-            # Delete theme-document links
+            # 1. Delete ThemeDocument links (many-to-many table)
             await self.db.execute(
                 delete(ThemeDocument).where(ThemeDocument.theme_id == theme_id)
             )
 
-            # Fetch and delete theme-file links and actual file records
-            file_ids_result = await self.db.execute(
-                select(ThemeFile.file_id).where(ThemeFile.theme_id == theme_id)
+            # 2. Delete Documents (because they depend on Files and Theme)
+            await self.db.execute(
+                delete(Document).where(Document.theme_id == theme_id)
             )
-            file_ids = list(file_ids_result.scalars())
 
-            if file_ids:
-                await self.db.execute(
-                    delete(File).where(File.id.in_(file_ids))
-                )
-
+            # 3. Delete ThemeFile links (many-to-many table)
             await self.db.execute(
                 delete(ThemeFile).where(ThemeFile.theme_id == theme_id)
             )
 
-            # Delete the theme itself
+            # 4. Delete Files (now it's safe because no Documents depend on them)
+            await self.db.execute(
+                delete(File).where(File.theme_id == theme_id)
+            )
+
+            # 5. Delete Tasks (optional, not blocked but good cleanup)
+            await self.db.execute(
+                delete(ProcessingTask).where(ProcessingTask.theme_id == theme_id)
+            )
+
+            # 6. Delete Shares (optional, not blocked but good cleanup)
+            await self.db.execute(
+                delete(ThemeShare).where(ThemeShare.theme_id == theme_id)
+            )
+
+            # 7. Finally delete the Theme
             result = await self.db.execute(
                 delete(Theme).where(Theme.id == theme_id)
             )
@@ -270,6 +279,43 @@ class ThemeRepository(ThemeRepositoryInterface):
             logger.error(f"Error fetching documents for theme {theme_id}: {e}")
             return []
 
+    async def get_files_by_theme(self, theme_id: str) -> List[File]:
+        """
+        Retrieve all files directly associated with a theme.
+
+        Args:
+            theme_id (str): ID of the theme.
+
+        Returns:
+            List[File]: List of files.
+        """
+        try:
+            result = await self.db.execute(
+                select(File).where(File.theme_id == theme_id)
+            )
+            return list(result.scalars())
+        except SQLAlchemyError as e:
+            logger.error(f"Error fetching files for theme {theme_id}: {e}")
+            return []
+
+    async def get_direct_documents_by_theme(self, theme_id: str) -> List[Document]:
+        """
+        Retrieve all documents directly attached to a theme (by theme_id field).
+
+        Args:
+            theme_id (str): ID of the theme.
+
+        Returns:
+            List[Document]: List of documents.
+        """
+        try:
+            result = await self.db.execute(
+                select(Document).where(Document.theme_id == theme_id)
+            )
+            return list(result.scalars())
+        except SQLAlchemyError as e:
+            logger.error(f"Error fetching documents for theme {theme_id}: {e}")
+            return []
     async def count_documents(self, theme_id: str) -> int:
         """
         Count the number of documents associated with a theme.

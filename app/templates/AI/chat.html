@@ -1,0 +1,835 @@
+{% extends "base.html" %} {% block title %}Intelligent Chat{% endblock %} {% block head %}
+<style>
+  :root {
+    --primary-color: #4361ee;
+    --primary-hover: #3a56d4;
+    --secondary-color: #3a0ca3;
+    --text-light: #f8f9fa;
+    --text-dark: #212529;
+    --bg-dark: #121212;
+    --bg-card: #1e1e1e;
+    --border-color: #2d2d2d;
+    --muted-color: #6c757d;
+    --success-color: #10b981;
+    --warning-color: #f59e0b;
+    --danger-color: #ef4444;
+  }
+
+  body {
+    background-color: var(--bg-dark);
+    color: var(--text-light);
+  }
+
+  .card {
+    background-color: var(--bg-card);
+    border: 1px solid var(--border-color);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+
+  .card-header,
+  .card-footer {
+    background-color: rgba(0, 0, 0, 0.2);
+    border-color: var(--border-color);
+  }
+
+  .chat-container {
+    height: 65vh;
+    overflow-y: auto;
+    padding: 1rem;
+    background-color: var(--bg-card);
+    scrollbar-width: thin;
+    scrollbar-color: var(--primary-color) var(--bg-card);
+  }
+
+  .chat-container::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .chat-container::-webkit-scrollbar-thumb {
+    background-color: var(--primary-color);
+    border-radius: 3px;
+  }
+
+  .message {
+    margin-bottom: 1rem;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    max-width: 80%;
+  }
+
+  .user-message {
+    align-self: flex-end;
+    margin-left: auto;
+  }
+
+  .ai-message {
+    align-self: flex-start;
+    margin-right: auto;
+  }
+
+  .message-content {
+    padding: 0.75rem 1rem;
+    border-radius: 18px;
+    position: relative;
+    word-break: break-word;
+    line-height: 1.5;
+  }
+
+  .user-message .message-content {
+    background-color: var(--primary-color);
+    color: white;
+    border-top-right-radius: 4px;
+  }
+
+  .ai-message .message-content {
+    background-color: rgba(255, 255, 255, 0.1);
+    border-top-left-radius: 4px;
+  }
+
+  .message-time {
+    font-size: 0.7rem;
+    color: var(--muted-color);
+    margin-top: 0.2rem;
+    align-self: flex-end;
+  }
+
+  .ai-message .message-time {
+    align-self: flex-start;
+  }
+
+  .typing-indicator {
+    display: none;
+    margin-bottom: 1rem;
+    padding: 0.75rem 1rem;
+    background-color: rgba(255, 255, 255, 0.1);
+    border-radius: 18px;
+    width: max-content;
+    border-top-left-radius: 4px;
+  }
+
+  .typing-indicator span {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    background-color: var(--text-light);
+    border-radius: 50%;
+    margin-right: 4px;
+    animation: typing 1.5s infinite ease-in-out;
+  }
+
+  .typing-indicator span:nth-child(2) {
+    animation-delay: 0.2s;
+  }
+
+  .typing-indicator span:nth-child(3) {
+    animation-delay: 0.4s;
+    margin-right: 0;
+  }
+
+  @keyframes typing {
+    0%,
+    100% {
+      transform: translateY(0);
+    }
+    50% {
+      transform: translateY(-5px);
+    }
+  }
+
+  /* Input and controls */
+  .form-control {
+    background-color: rgba(255, 255, 255, 0.1);
+    border-color: var(--border-color);
+    color: var(--text-light);
+    border-radius: 20px;
+    padding: 0.75rem 1rem;
+    resize: none;
+  }
+
+  .form-control:focus {
+    background-color: rgba(255, 255, 255, 0.15);
+    border-color: var(--primary-color);
+    color: var(--text-light);
+    box-shadow: 0 0 0 0.2rem rgba(67, 97, 238, 0.25);
+  }
+
+  .btn-primary {
+    background-color: var(--primary-color);
+    border-color: var(--primary-color);
+  }
+
+  .btn-primary:hover {
+    background-color: var(--primary-hover);
+    border-color: var(--primary-hover);
+  }
+
+  /* Switch */
+  .switch-container {
+    display: flex;
+    align-items: center;
+    column-gap: 8px;
+  }
+
+  .switch {
+    position: relative;
+    display: inline-block;
+    width: 46px;
+    height: 24px;
+  }
+
+  .switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+
+  .slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(255, 255, 255, 0.2);
+    transition: 0.4s;
+    border-radius: 34px;
+  }
+
+  .slider:before {
+    position: absolute;
+    content: "";
+    height: 18px;
+    width: 18px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    transition: 0.4s;
+    border-radius: 50%;
+  }
+
+  input:checked + .slider {
+    background-color: var(--primary-color);
+  }
+
+  input:focus + .slider {
+    box-shadow: 0 0 1px var(--primary-color);
+  }
+
+  input:checked + .slider:before {
+    transform: translateX(22px);
+  }
+
+  /* File upload */
+  .file-upload-area {
+    border: 2px dashed rgba(255, 255, 255, 0.3);
+    border-radius: 10px;
+    padding: 1.2rem;
+    text-align: center;
+    margin-bottom: 1rem;
+    background-color: rgba(255, 255, 255, 0.05);
+    transition: all 0.3s ease;
+  }
+
+  .file-upload-area:hover {
+    border-color: var(--primary-color);
+    background-color: rgba(67, 97, 238, 0.1);
+  }
+
+  .file-upload-area.dragover {
+    border-color: var(--success-color);
+    background-color: rgba(16, 185, 129, 0.1);
+  }
+
+  .attached-files {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .attached-file {
+    background-color: rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    padding: 0.5rem 0.75rem;
+    display: flex;
+    align-items: center;
+    max-width: 200px;
+    transition: all 0.2s ease;
+  }
+
+  .attached-file:hover {
+    background-color: rgba(255, 255, 255, 0.15);
+  }
+
+  .attached-file span {
+    margin-right: 8px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .attached-file button {
+    background: none;
+    border: none;
+    color: var(--danger-color);
+    cursor: pointer;
+    opacity: 0.8;
+    transition: opacity 0.2s;
+  }
+
+  .attached-file button:hover {
+    opacity: 1;
+  }
+
+  /* Advanced settings */
+  .toggle-settings {
+    cursor: pointer;
+    user-select: none;
+    color: var(--primary-color);
+    display: inline-flex;
+    align-items: center;
+    font-weight: 500;
+    transition: color 0.2s;
+  }
+
+  .toggle-settings:hover {
+    color: var(--primary-hover);
+  }
+
+  .toggle-settings i {
+    margin-right: 0.5rem;
+  }
+
+  .advanced-settings {
+    display: none;
+    background-color: rgba(0, 0, 0, 0.2);
+    border-radius: 10px;
+    padding: 1.25rem;
+    margin-bottom: 1rem;
+    transform-origin: top;
+    transition: all 0.3s ease;
+  }
+
+  .advanced-settings.active {
+    display: block;
+    animation: slideDown 0.3s forwards;
+  }
+
+  @keyframes slideDown {
+    from {
+      opacity: 0;
+      transform: translateY(-10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .parameter-sliders {
+    margin-bottom: 1rem;
+    background-color: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    padding: 1rem;
+  }
+
+  .slider-container {
+    margin-bottom: 1rem;
+  }
+
+  .slider-container:last-child {
+    margin-bottom: 0;
+  }
+
+  .slider-container label {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 0.5rem;
+    font-weight: 500;
+  }
+
+  .slider-container .slider-value {
+    color: var(--primary-color);
+    font-weight: 600;
+  }
+
+  .form-control-range {
+    width: 100%;
+    -webkit-appearance: none;
+    height: 6px;
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.2);
+    outline: none;
+  }
+
+  .form-control-range::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--primary-color);
+    cursor: pointer;
+    border: 2px solid white;
+  }
+
+  .form-control-range::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--primary-color);
+    cursor: pointer;
+    border: 2px solid white;
+  }
+
+  /* Instructions area */
+  .instructions-area {
+    margin-bottom: 0;
+  }
+
+  .instructions-area h5 {
+    margin-bottom: 0.75rem;
+  }
+
+  .instructions-area textarea {
+    width: 100%;
+    background-color: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border-color);
+    color: var(--text-light);
+    padding: 0.75rem;
+    border-radius: 8px;
+    resize: vertical;
+    min-height: 80px;
+    transition: all 0.2s;
+  }
+
+  .instructions-area textarea:focus {
+    background-color: rgba(255, 255, 255, 0.1);
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 0.2rem rgba(67, 97, 238, 0.25);
+  }
+
+  /* Themes and pills */
+  .theme-pill {
+    cursor: pointer;
+    padding: 0.5rem 0.8rem !important;
+    border-radius: 50px;
+    margin: 0.25rem !important;
+    font-weight: 500;
+    font-size: 0.9rem;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    border: 1px solid transparent;
+  }
+
+  .badge-secondary {
+    background-color: rgba(255, 255, 255, 0.1);
+    color: #e9ecef;
+  }
+
+  .badge-info {
+    background-color: var(--primary-color);
+    color: white;
+  }
+
+  .theme-pill:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+  }
+
+  /* Chat history */
+  .list-group-item {
+    background-color: rgba(255, 255, 255, 0.05);
+    border-color: var(--border-color);
+    color: var(--text-light);
+    padding: 0.75rem 1rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .list-group-item:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+  }
+
+  .badge-pill {
+    font-size: 0.7rem;
+    font-weight: 500;
+    padding: 0.35em 0.65em;
+  }
+
+  /* Code formatting */
+  pre {
+    background-color: rgba(0, 0, 0, 0.3);
+    border-radius: 6px;
+    padding: 1rem;
+    color: #e9ecef;
+    margin: 0.75rem 0;
+    overflow-x: auto;
+    font-size: 0.9rem;
+  }
+
+  code {
+    font-family: "Source Code Pro", monospace;
+    color: #10b981;
+    background-color: rgba(16, 185, 129, 0.1);
+    padding: 0.2rem 0.4rem;
+    border-radius: 4px;
+    font-size: 0.9em;
+  }
+
+  pre code {
+    background-color: transparent;
+    color: inherit;
+    padding: 0;
+    font-size: inherit;
+  }
+
+  /* Message attachments */
+  .message-attachments {
+    margin-top: 0.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .message-attachment {
+    background-color: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.85rem;
+    display: flex;
+    align-items: center;
+  }
+
+  .message-attachment i {
+    margin-right: 0.5rem;
+    color: var(--muted-color);
+  }
+
+  /* Responsive adjustments */
+  @media (max-width: 992px) {
+    .message {
+      max-width: 90%;
+    }
+
+    .chat-container {
+      height: 50vh;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .message {
+      max-width: 95%;
+    }
+
+    .chat-container {
+      height: 45vh;
+    }
+  }
+</style>
+{% endblock %} {% block header %}
+<div class="row mb-3">
+  <div class="col-md-7">
+    <h1 class="m-0">
+      <i class="fas fa-robot mr-2 text-primary"></i>
+      Intelligent Chat
+    </h1>
+  </div>
+  <div class="col-md-5">
+    <ol class="breadcrumb float-md-right">
+      <li class="breadcrumb-item"><a href="{{ url_for('dashboard_home') }}">Dashboard</a></li>
+      <li class="breadcrumb-item active">Chat</li>
+    </ol>
+  </div>
+</div>
+{% endblock %} {% block content %}
+<!-- Main content -->
+<section class="content">
+  <div class="container-fluid">
+    <div class="row">
+      <!-- Chat column -->
+      <div class="col-lg-8">
+        <div class="card mb-4">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <h3 class="card-title mb-0 d-flex align-items-center">
+              <i class="fas fa-comments mr-2"></i>
+              <span>Conversation</span>
+            </h3>
+            <div class="switch-container">
+              <span class="small">Standard</span>
+              <label class="switch mx-2">
+                <input type="checkbox" id="ragModeToggle" />
+                <span class="slider"></span>
+              </label>
+              <span class="small">RAG Mode</span>
+            </div>
+          </div>
+
+          <div class="card-body p-0">
+            <!-- Chat messages -->
+            <div class="chat-container" id="chatContainer">
+              <div class="message ai-message">
+                <div class="message-content">Hello! I'm your AI assistant. How can I help you today?</div>
+                <div class="message-time">Now</div>
+              </div>
+
+              <!-- Typing indicator -->
+              <div class="typing-indicator" id="typingIndicator">
+                <span></span>
+                <span></span>
+                <span></span>
+              </div>
+            </div>
+          </div>
+
+          <div class="card-footer">
+            <div class="mb-3">
+              <p class="toggle-settings" id="toggleAdvancedSettings">
+                <i class="fas fa-sliders-h"></i>
+                Advanced Settings
+              </p>
+
+              <div class="advanced-settings" id="advancedSettings">
+                <!-- Parameter sliders -->
+                <div class="parameter-sliders">
+                  <h5 class="text-light mb-3">Response Parameters</h5>
+
+                  <div class="slider-container">
+                    <label for="temperatureSlider">
+                      Temperature
+                      <span class="slider-value" id="temperatureValue">0.7</span>
+                    </label>
+                    <input
+                      type="range"
+                      class="form-control-range"
+                      id="temperatureSlider"
+                      min="0"
+                      max="1"
+                      step="0.1"
+                      value="0.7"
+                    />
+                  </div>
+
+                  <div class="slider-container">
+                    <label for="creativitySlider">
+                      Creativity
+                      <span class="slider-value" id="creativityValue">0.5</span>
+                    </label>
+                    <input
+                      type="range"
+                      class="form-control-range"
+                      id="creativitySlider"
+                      min="0"
+                      max="1"
+                      step="0.1"
+                      value="0.5"
+                    />
+                  </div>
+
+                  <div class="slider-container">
+                    <label for="contextSlider">
+                      Context Length
+                      <span class="slider-value" id="contextValue">5</span>
+                    </label>
+                    <input
+                      type="range"
+                      class="form-control-range"
+                      id="contextSlider"
+                      min="1"
+                      max="10"
+                      step="1"
+                      value="5"
+                    />
+                  </div>
+                </div>
+
+                <!-- Custom instructions -->
+                <div class="instructions-area">
+                  <h5 class="text-light mb-2">Custom Instructions</h5>
+                  <textarea
+                    id="customInstructions"
+                    placeholder="Add custom instructions for the AI (e.g., 'Respond as a technical expert' or 'Explain concepts simply')"
+                  ></textarea>
+                </div>
+              </div>
+            </div>
+
+            <!-- File upload area (only in standard mode) -->
+            <div id="fileUploadContainer" class="mb-3">
+              <div class="file-upload-area" id="fileDropArea">
+                <i class="fas fa-cloud-upload-alt fa-2x mb-2 text-primary"></i>
+                <p class="mb-0">Drag & drop files here or click to upload</p>
+                <small class="text-muted">Supported: PDF, TXT, DOCX, MD, HTML, CSV, JSON (Max 10MB)</small>
+                <input type="file" id="fileInput" multiple style="display: none" />
+              </div>
+
+              <div class="attached-files" id="attachedFilesList"></div>
+            </div>
+
+            <form id="chatForm">
+              <div class="input-group">
+                <textarea
+                  id="messageInput"
+                  class="form-control"
+                  placeholder="Type your message..."
+                  rows="2"
+                  autofocus
+                ></textarea>
+                <div class="input-group-append">
+                  <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-paper-plane mr-1"></i>
+                    Send
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sidebar column -->
+      <div class="col-lg-4">
+        <!-- Themes card -->
+        <div class="card mb-4">
+          <div class="card-header">
+            <h3 class="card-title mb-0">
+              <i class="fas fa-lightbulb mr-2 text-warning"></i>
+              Knowledge Themes
+            </h3>
+            <div class="card-tools">
+              <button type="button" class="btn btn-tool" data-card-widget="collapse">
+                <i class="fas fa-minus"></i>
+              </button>
+            </div>
+          </div>
+
+          <div class="card-body">
+            <p class="text-muted small mb-3">Select a theme to enhance AI responses with specific knowledge:</p>
+
+            <div id="themesContainer" class="d-flex flex-wrap">
+              <!-- Themes will be loaded here -->
+              <div class="badge badge-info theme-pill" data-theme-id="1">General Knowledge</div>
+              <div class="badge badge-secondary theme-pill" data-theme-id="2">Technology</div>
+              <div class="badge badge-secondary theme-pill" data-theme-id="3">Business</div>
+              <div class="badge badge-secondary theme-pill" data-theme-id="4">Health</div>
+              <div class="badge badge-secondary theme-pill" data-theme-id="5">Science</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Chat history card -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title mb-0">
+              <i class="fas fa-history mr-2 text-info"></i>
+              Recent Conversations
+            </h3>
+            <div class="card-tools">
+              <button type="button" class="btn btn-tool" data-card-widget="collapse">
+                <i class="fas fa-minus"></i>
+              </button>
+            </div>
+          </div>
+
+          <div class="card-body p-0">
+            <ul class="list-group list-group-flush" id="chatHistoryList">
+              <!-- Chat history will be loaded here -->
+              <li
+                class="list-group-item d-flex justify-content-between align-items-center chat-history-item"
+                data-id="1"
+              >
+                <span>Project Brainstorming</span>
+                <span class="badge badge-primary badge-pill">2h ago</span>
+              </li>
+              <li
+                class="list-group-item d-flex justify-content-between align-items-center chat-history-item"
+                data-id="2"
+              >
+                <span>Research Summary</span>
+                <span class="badge badge-primary badge-pill">5h ago</span>
+              </li>
+              <li
+                class="list-group-item d-flex justify-content-between align-items-center chat-history-item"
+                data-id="3"
+              >
+                <span>Code Review Session</span>
+                <span class="badge badge-primary badge-pill">1d ago</span>
+              </li>
+            </ul>
+          </div>
+
+          <div class="card-footer text-center">
+            <button class="btn btn-sm btn-outline-danger" id="clearHistoryBtn">
+              <i class="fas fa-trash-alt mr-1"></i>
+              Clear History
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %} {% block scripts %}
+<!-- Add external dependencies -->
+
+<!-- Load modular JavaScript files -->
+
+<script type="module" src="{{ url_for('static', path='dist/js/pages/chat/ui-handlers.js') }}"></script>
+<script type="module" src="{{ url_for('static', path='dist/js/pages/chat/message-handlers.js') }}"></script>
+<script type="module" src="{{ url_for('static', path='dist/js/pages/chat/file-handlers.js') }}"></script>
+<script type="module" src="{{ url_for('static', path='dist/js/pages/chat/api-service.js') }}"></script>
+<script type="module" src="{{ url_for('static', path='dist/js/pages/chat/advanced-settings.js') }}"></script>
+<script type="module" src="{{ url_for('static', path='dist/js/pages/chat/main.js') }}"></script>
+
+{% endblock %} {% block footer %}
+<script>
+  // Initialize code highlighting for code blocks
+  document.addEventListener("DOMContentLoaded", function () {
+    // Set up event delegation for theme selection
+    document.getElementById("themesContainer").addEventListener("click", function (e) {
+      if (e.target.classList.contains("theme-pill")) {
+        document.querySelectorAll(".theme-pill").forEach((pill) => {
+          pill.classList.remove("badge-info");
+          pill.classList.add("badge-secondary");
+        });
+        e.target.classList.remove("badge-secondary");
+        e.target.classList.add("badge-info");
+
+        // Update active theme ID
+        ChatState.activeThemeId = parseInt(e.target.getAttribute("data-theme-id"));
+      }
+    });
+
+    // Set up event delegation for chat history
+    document.getElementById("chatHistoryList").addEventListener("click", function (e) {
+      const chatItem = e.target.closest(".chat-history-item");
+      if (chatItem) {
+        const chatId = chatItem.getAttribute("data-id");
+        MessageHandlers.loadChat(chatId);
+      }
+    });
+
+    // Set up clear history button
+    document.getElementById("clearHistoryBtn").addEventListener("click", function () {
+      APIService.clearChatHistory()
+        .then(() => {
+          document.getElementById("chatHistoryList").innerHTML = "";
+          alertify.success("Chat history cleared");
+        })
+        .catch(() => {
+          alertify.error("Failed to clear chat history");
+        });
+    });
+
+    // Add keyboard shortcut for sending messages (Ctrl+Enter)
+    document.getElementById("messageInput").addEventListener("keydown", function (e) {
+      if (e.ctrlKey && e.key === "Enter") {
+        e.preventDefault();
+        document.getElementById("chatForm").dispatchEvent(new Event("submit"));
+      }
+    });
+  });
+</script>
+{% endblock %}

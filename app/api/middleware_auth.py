@@ -38,18 +38,23 @@ async def get_current_user(
         HTTPException: If token is invalid
     """
     auth_service = AuthService(db)
-
     try:
         if token:
-            logger.info(f"Authentication check successful by token: {token[:4]}...")
+            logger.info(
+                "Authentication with bearer token succeeded for %s",
+                request.url.path,
+            )
             return await auth_service.verify_token(token)
+
         cookie_token = request.cookies.get("auth_token")
         if cookie_token:
-            logger.info(f"Authentication check successful by cookie_token: {cookie_token[:4]}...")
+            logger.info(
+                "Authentication with session cookie succeeded for %s",
+                request.url.path,
+            )
             return await auth_service.verify_token(cookie_token)
-
     except Exception as e:
-        logger.error(f"Authentication error: {str(e)}")
+        logger.error("Authentication error: %s", e)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials",

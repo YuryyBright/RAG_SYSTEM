@@ -260,3 +260,40 @@ async def admin_users_page(
             "page_title": "User Management"
         }
     )
+
+@router.get("/chat", response_class=HTMLResponse)
+async def chat(
+        request: Request,
+        current_user: User = Depends(get_current_active_user)
+):
+    """
+    Admin user management page.
+
+    Parameters
+    ----------
+    request : Request
+        The FastAPI request object
+    current_user : User
+        The current authenticated user from JWT token
+
+    Returns
+    -------
+    HTMLResponse
+        Rendered admin users page template
+
+    Raises
+    ------
+    HTTPException
+        If the user is not an admin
+    """
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    return templates.TemplateResponse(
+        "AI/chat.html",
+        {
+            "request": request,
+            "username": current_user.username,
+            "page_title": "User Management"
+        }
+    )

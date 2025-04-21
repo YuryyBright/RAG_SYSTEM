@@ -91,3 +91,93 @@
 
 
 > ✨ These settings ensure your RAG system performs with **high semantic retrieval quality**, **low latency**, and **optimized memory usage**.
+ 
+# 📦 Models Management - RAG System
+
+Welcome to the `models/` directory! This folder stores **locally downloaded models** for **offline RAG operations**.
+
+We manage two major categories of models:
+- **Embedding models** (for vectorization)
+- **LLM models** (for generating answers)
+
+---
+
+## 📂 Folder Structure
+
+```bash
+models/
+├── embedding/          # Embedding models
+│   ├── instructor-xl/  # Downloaded Instructor model
+│   └── all-MiniLM/     # Other sentence-transformer model
+│
+├── llm/                # LLM models (Chat models)
+│   ├── mistral-7b/     # Mistral-7B (GGUF or bin)
+│   └── llama-2-7b/     # Llama-2 (HF or Ollama)
+```
+
+---
+
+## 🛠 Downloading Models
+
+### ➡️ Download HuggingFace Models
+Use:
+```bash
+python scripts/setup_llm_model.py --source hf --model-name TheBloke/Mistral-7B-Instruct-v0.1-GGUF --file-types gguf --backend ollama --env-key LOCAL_LLM_MODEL_PATH
+```
+
+### ➡️ Pull Ollama Models
+Use:
+```bash
+python scripts/setup_llm_model.py --source ollama --model-name mistral
+```
+
+### ➡️ Download Embedding Models
+Use:
+```bash
+python scripts/setup_instructor_model.py --type instructor
+```
+
+---
+
+## 🔑 Environment Variables (.env)
+
+| Key | Meaning |
+|:----|:--------|
+| `INSTRUCTOR_MODEL_NAME` | Path to local embedding model |
+| `SENTENCE_TRANSFORMER_MODEL_NAME` | Path to local sentence-transformer |
+| `LOCAL_LLM_MODEL_PATH` | Path to local LLM model folder |
+| `EMBEDDING_SERVICE` | Which embedding service to use |
+| `LLM_BACKEND` | Ollama / Transformers |
+
+Always **PATCH the correct path** automatically when downloading using our setup scripts.
+
+---
+
+## ⚡ Best Practices
+
+- **One model = One folder** under correct category (`embedding/` or `llm/`)
+- Always use **lowercase, hyphenated** folder names (e.g., `mistral-7b-instruct`)
+- **Never mix** LLMs and embeddings into the same subfolder.
+- Prefer `.gguf` format for Ollama-based models.
+- After download, check size — avoid >16GB models unless you have enough RAM.
+- Regularly **backup** the `models/` folder.
+
+---
+
+## 🛑 Common Mistakes
+
+- ❌ Putting multiple different models inside the same folder.
+- ❌ Forgetting to update `.env` when switching models.
+- ❌ Using incompatible model format (e.g., trying `.bin` with Ollama instead of `.gguf`).
+
+---
+
+## 🚀 Future Improvements
+
+- Add model version control.
+- Automatically check quantization levels.
+- Scan models for required minimum VRAM.
+
+---
+
+> ✨ With clean model management, your RAG system stays blazing fast, portable, and reliable!

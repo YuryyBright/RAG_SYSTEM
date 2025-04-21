@@ -327,35 +327,31 @@ async def refresh_session(
         response: Response,
         request: Request,
         session_id: str = Cookie(..., alias=COOKIE_NAME),
-        db: AsyncSession = Depends(get_async_db)
+        csrf_token: str = Header(..., alias="X-CSRF-Token"),
+        db: AsyncSession = Depends(get_async_db),
 ):
     """Refresh a session for web interface."""
     auth_service = AuthService(db)
 
-    # Verify and refresh session
-    user_id, username, new_session_id, csrf_token, expire = await auth_service.refresh_session(
-        session_id,
-        request=request
+    valid_csrf = await auth_service.get_csrf_token_for_session(session_id)
+    if csrf_token != valid_csrf:
+        raise HTTPException(status_code=403, detail="Invalid CSRF token")
+
+    user_id, username, new_session_id, new_csrf, expire = await auth_service.refresh_session(
+        session_id, request=request
     )
-
-
     if not new_session_id:
-        # Clear invalid cookies
         clear_auth_cookies(response)
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired session"
-        )
+        raise HTTPException(status_code=401, detail="Invalid or expired session")
 
-    # Set new cookies
     create_session_cookie(response, new_session_id, expire, True, True)
-    set_csrf_cookie(response, csrf_token, False, True)
+    set_csrf_cookie(response, new_csrf, False, True)
 
     return {
-        "csrf_token": csrf_token,
+        "csrf_token": new_csrf,
         "expires_at": expire,
         "user_id": user_id,
-        "username": username
+        "username": username,
     }
 
 

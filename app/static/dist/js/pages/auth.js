@@ -51,85 +51,66 @@ const AuthManager = {
    * @param {Object} response - Session response from login
    */
   storeSession: function (response) {
-    // Store CSRF token (cookies are handled by the browser)
     if (response.csrf_token) {
       sessionStorage.setItem("csrfToken", response.csrf_token);
     }
     if (response.access_token) {
-      sessionStorage.setItem("accsesToken", response.access_token);
+      sessionStorage.setItem("accessToken", response.access_token); // typo fixed
     }
-
-    // Store user info for convenience
     const userData = {
       userId: response.user_id,
       username: response.username,
       expiresAt: response.expires_at,
     };
     sessionStorage.setItem("userData", JSON.stringify(userData));
-
-    // Schedule session refresh if expiration is provided
     if (response.expires_at) {
       this.setupSessionRefresh(new Date(response.expires_at));
     }
   },
 
   /**
-   * Setup timer to refresh token before expiration
-   * @param {Date} expiryDate - Token expiration date
+   * Setup a timer to refresh the authentication token before it expires.
+   * It clears any existing timers, calculates the appropriate time to refresh,
+   * and sets a new timer to refresh the token.
+   *
+   * @param {Date} expiryDate - The expiration date of the current token
    */
   setupTokenRefresh: function (expiryDate) {
     if (!expiryDate) return;
+    if (this.tokenRefreshTimer) clearTimeout(this.tokenRefreshTimer);
 
-    // Clear any existing refresh timer
-    if (this.sessionRefreshTimer) {
-      clearTimeout(this.sessionRefreshTimer);
-    }
+    const timeUntilExpiry = expiryDate.getTime() - Date.now();
+    const refreshTime = Math.max(timeUntilExpiry * 0.8, TOKEN_EXPIRY_THRESHOLD);
 
-    const now = new Date();
-    const timeUntilExpiry = expiryDate.getTime() - now.getTime();
-
-    // If token expires in more than 5 minutes, set timer to refresh at 80% of lifetime
-    if (timeUntilExpiry > TOKEN_EXPIRY_THRESHOLD) {
-      const refreshTime = timeUntilExpiry * 0.8;
-      this.sessionRefreshTimer = setTimeout(() => this.refreshToken(), refreshTime);
-      console.log(`Token refresh scheduled in ${Math.round(refreshTime / 600000)} minutes`);
-    }
-    // If expiring soon but still valid, refresh now
-    else if (timeUntilExpiry > 0) {
-      console.log("Token expiring soon, refreshing now");
-      this.refreshToken();
-    }
-    // If already expired, force re-authentication
-    else {
-      console.log("Token expired, redirecting to login");
-      this.handleSessionExpiration();
-    }
+    this.tokenRefreshTimer = setTimeout(() => {
+      if (Date.now() < expiryDate.getTime()) {
+        this.refreshToken();
+      } else {
+        this.handleSessionExpiration();
+      }
+    }, refreshTime);
   },
 
   /**
-   * Setup timer to refresh session before expiration
-   * @param {Date} expiryDate - Session expiration date
+   * Setup a timer to refresh the session before it expires.
+   * Similar to token refresh, it manages timers and schedules a session refresh.
+   *
+   * @param {Date} expiryDate - The expiration date of the current session
    */
   setupSessionRefresh: function (expiryDate) {
     if (!expiryDate) return;
+    if (this.sessionRefreshTimer) clearTimeout(this.sessionRefreshTimer);
 
-    // Clear any existing refresh timer
-    if (this.sessionRefreshTimer) {
-      clearTimeout(this.sessionRefreshTimer);
-    }
+    const timeUntilExpiry = expiryDate.getTime() - Date.now();
+    const refreshTime = Math.max(timeUntilExpiry * 0.8, TOKEN_EXPIRY_THRESHOLD);
 
-    const now = new Date();
-    const timeUntilExpiry = expiryDate.getTime() - now.getTime();
-
-    // If session expires in more than 5 minutes, set timer to refresh at 80% of lifetime
-    if (timeUntilExpiry > TOKEN_EXPIRY_THRESHOLD) {
-      const refreshTime = timeUntilExpiry * 0.8;
-      this.sessionRefreshTimer = setTimeout(() => this.refreshSession(), refreshTime);
-    } else if (timeUntilExpiry > 0) {
-      this.refreshSession();
-    } else {
-      this.handleSessionExpiration();
-    }
+    this.sessionRefreshTimer = setTimeout(() => {
+      if (Date.now() < expiryDate.getTime()) {
+        this.refreshSession();
+      } else {
+        this.handleSessionExpiration();
+      }
+    }, refreshTime);
   },
 
   /**
@@ -563,17 +544,14 @@ const AuthManager = {
       clearTimeout(this.tokenRefreshTimer);
       this.tokenRefreshTimer = null;
     }
-
     if (this.sessionRefreshTimer) {
       clearTimeout(this.sessionRefreshTimer);
       this.sessionRefreshTimer = null;
     }
-
     if (this.csrfRefreshTimer) {
       clearTimeout(this.csrfRefreshTimer);
       this.csrfRefreshTimer = null;
     }
-
     if (this.sessionValidatorTimer) {
       clearInterval(this.sessionValidatorTimer);
       this.sessionValidatorTimer = null;

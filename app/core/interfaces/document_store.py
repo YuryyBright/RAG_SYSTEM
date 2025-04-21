@@ -126,7 +126,7 @@ class DocumentStoreInterface(ABC):
         pass
 
     @abstractmethod
-    async def delete(self, document_id: str) -> bool:
+    async def delete(self, document_id: str, owner_id: str, theme_id: str) -> bool:
         """
         Delete a document by ID.
 
@@ -134,6 +134,9 @@ class DocumentStoreInterface(ABC):
         ----------
         document_id : str
             The ID of the document to delete.
+        owner_id:
+
+        theme_id
 
         Returns
         -------

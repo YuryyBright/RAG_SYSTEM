@@ -11,7 +11,7 @@ from typing import Annotated
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-
+from adapters.embeding.embedding_factory import get_embedding_service
 from adapters.embeding.instructor import InstructorEmbedding
 from adapters.embeding.open_ai import OpenAIEmbedding
 from adapters.embeding.sentence_transformer import SentenceTransformerEmbedding
@@ -50,7 +50,7 @@ from app.infrastructure.database.repository import get_async_db
 from app.utils.logger_util import get_logger
 from core.services.auth_service import AuthService
 from core.services.chunking_service import ChunkingService
-from core.services.embedding_service import EmbeddingService
+
 
 from core.services.task_services import TaskManager
 from core.services.vector_index_services import VectorIndexService
@@ -98,46 +98,12 @@ def get_theme_repository(db: AsyncSession = Depends(get_async_db)) -> ThemeRepos
     return ThemeRepository(db)
 
 
+def get_file_manager() -> FileManager:
+    """Return a new FileManager instance."""
+    return FileManager()
 # === Embedding / Model Services ===
 
-async def get_embedding_service() -> EmbeddingInterface:
-    """
-    Factory function to return the appropriate embedding service with optional caching.
-    """
-    embedding_service = settings.EMBEDDING_SERVICE.lower()
-    logger.debug(f"Initializing embedding service: {embedding_service}")
 
-    if embedding_service == "instructor":
-        service = InstructorEmbedding(
-            model_name=settings.INSTRUCTOR_MODEL_NAME,
-            instruction=settings.EMBEDDING_INSTRUCTION,
-            query_instruction=settings.QUERY_INSTRUCTION,
-            batch_size=settings.EMBEDDING_BATCH_SIZE,
-            device=settings.EMBEDDING_DEVICE
-        )
-    elif embedding_service == "openai":
-        service = OpenAIEmbedding(
-            model_name=settings.OPENAI_EMBEDDING_MODEL,
-            api_key=settings.OPENAI_API_KEY,
-            batch_size=settings.OPENAI_BATCH_SIZE
-        )
-    elif embedding_service == "sentence_transformer":
-        service = SentenceTransformerEmbedding(
-            model_name=settings.SENTENCE_TRANSFORMER_MODEL_NAME,
-            batch_size=settings.EMBEDDING_BATCH_SIZE
-        )
-    else:
-        available_services = ["instructor", "openai", "sentence_transformer"]
-        logger.error(f"Unsupported embedding service: {embedding_service}")
-        raise ValueError(
-            f"Unsupported embedding service: {embedding_service}. "
-            f"Available options: {', '.join(available_services)}"
-        )
-
-    # ✅ Validate dimension immediately
-    await validate_embedding_dimensions(service, expected_dim=settings.EMBEDDING_DIMENSION)
-
-    return service
 
 
 
@@ -167,27 +133,32 @@ def get_document_store(
 
 # === Use Cases ===
 
-# def get_theme_use_case_p(
-#     theme_repository: ThemeRepositoryInterface = Depends(get_theme_repository),
-#     document_store: DocumentStoreInterface = Depends(get_document_store)
-# ) -> ThemeUseCase:
-#     """Provides the ThemeUseCase with repository + store dependencies."""
-#     return ThemeUseCase(
-#         theme_repository=theme_repository,
-#         document_store=document_store
-#     )
-
-def get_files_store(db: AsyncSession = Depends(get_async_db))-> FileRepository:
-    return FileRepository(db)
-
-def get_theme_use_case(
-        theme_repository: ThemeRepositoryInterface = Depends(get_theme_repository),
-        # document_store: DocumentStoreInterface = Depends(get_document_store),
+def get_theme_use_case_p(
+        theme_repository: ThemeRepository = Depends(get_theme_repository),
+        # document_store: DocumentStore = Depends(get_document_store),
+        # file_manager: FileManager = Depends(get_file_manager)
 ) -> ThemeUseCase:
     """Provides the ThemeUseCase with repository + store dependencies."""
     return ThemeUseCase(
         theme_repository=theme_repository,
         document_store=None,
+        file_manager=None
+    )
+
+
+def get_files_store(db: AsyncSession = Depends(get_async_db))-> FileRepository:
+    return FileRepository(db)
+
+def get_theme_use_case(
+        theme_repository: ThemeRepository = Depends(get_theme_repository),
+        document_store: DocumentStore = Depends(get_document_store),
+        file_manager: FileManager = Depends(get_file_manager)
+) -> ThemeUseCase:
+    """Provides the ThemeUseCase with repository + store dependencies."""
+    return ThemeUseCase(
+        theme_repository=theme_repository,
+        document_store=document_store,
+        file_manager=file_manager
     )
 
 
@@ -256,9 +227,6 @@ def get_query_processor(
     )
 
 
-def get_file_manager() -> FileManager:
-    """Return a new FileManager instance."""
-    return FileManager()
 
 def get_file_processor(db: AsyncSession = Depends(get_async_db)) -> FileProcessor:
     file_repo = FileRepository(db)
@@ -267,7 +235,7 @@ def get_file_processor(db: AsyncSession = Depends(get_async_db)) -> FileProcesso
 async def file_processing_use_case(
         file_processor: FileProcessor = Depends(get_file_processor),
         chunking_service: ChunkingService = Depends(get_chunking_service),
-        embedding_service: EmbeddingService = Depends(get_embedding_service),
+        embedding_service: EmbeddingInterface = Depends(get_embedding_service),
         document_store: DocumentStore = Depends(get_document_store),
         vector_index: VectorIndexService = Depends(get_vector_index),
         task_update_manager: TaskUpdateManager = Depends(get_task_update_manager)

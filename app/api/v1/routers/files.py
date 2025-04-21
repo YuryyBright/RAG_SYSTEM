@@ -1,6 +1,4 @@
 # app/api/routes/files.py
-from pathlib import Path
-from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from fastapi.responses import FileResponse

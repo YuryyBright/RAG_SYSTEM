@@ -1,9 +1,9 @@
 # app/infrastructure/database/repository/file_repository.py
 from typing import Optional
 
-from sqlalchemy import select
+from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.infrastructure.database.db_models import File
+from app.infrastructure.database.db_models import File, ThemeFile, Document
 from app.utils.logger_util import get_logger
 
 logger = get_logger(__name__)
@@ -144,30 +144,37 @@ class FileRepository:
 
     async def delete_file(self, file_id: str) -> bool:
         """
-        Delete a file from the database by its ID.
+        Delete a file and all related data: documents, theme links, and metadata.
 
-        Parameters
-        ----------
-        file_id : str
-            The unique identifier of the file to delete.
+        Args:
+            file_id (str): The ID of the file to delete.
 
-        Returns
-        -------
-        bool
-            True if the file was successfully deleted, False otherwise.
+        Returns:
+            bool: True if deletion succeeded, False otherwise.
         """
-        try:
-            file = await self.get_by_id(file_id)
-            if not file:
-                logger.warning(f"[FileRepository] File not found: {file_id}")
-                return False
 
-            await self.db.delete(file)
+        try:
+            # 1. Delete Theme-File junctions
+            await self.db.execute(
+                delete(ThemeFile).where(ThemeFile.file_id == file_id)
+            )
+
+            # 2. Delete Documents linked to this file (will cascade delete their metadata)
+            await self.db.execute(
+                delete(Document).where(Document.file_id == file_id)
+            )
+
+            # 3. Delete the File itself
+            await self.db.execute(
+                delete(File).where(File.id == file_id)
+            )
+
             await self.db.commit()
-            logger.info(f"[FileRepository] Deleted file: {file_id}")
+            logger.info(f"[FileRepository] Successfully deleted file and all related data: {file_id}")
             return True
 
         except Exception as e:
+            await self.db.rollback()
             logger.exception(f"[FileRepository] Error deleting file {file_id}: {e}")
             return False
 

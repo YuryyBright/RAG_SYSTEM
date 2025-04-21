@@ -3,11 +3,14 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime
 
 from adapters.storage.document_store import DocumentStore
+from adapters.storage.file_manager import FileManager
 from app.core.entities.theme import Theme
 from app.core.entities.document import Document
 from infrastructure.database.db_models import File
 from infrastructure.database.repository.theme_repository import ThemeRepository
+from utils.logger_util import get_logger
 
+logger = get_logger(__name__)
 
 class ThemeUseCase:
     """
@@ -23,6 +26,7 @@ class ThemeUseCase:
             self,
             theme_repository: ThemeRepository,
             document_store: DocumentStore,
+            file_manager: FileManager,
     ):
         """
         Initialize the theme use cases.
@@ -33,6 +37,7 @@ class ThemeUseCase:
         """
         self.theme_repository = theme_repository
         self.document_store = document_store
+        self.file_manager = file_manager
 
     async def create_theme(
             self,
@@ -127,15 +132,35 @@ class ThemeUseCase:
 
     async def delete_theme(self, theme_id: str) -> bool:
         """
-        Delete a theme.
+        Delete a theme along with its files and documents from disk and database.
 
         Args:
-            theme_id: ID of the theme to delete
+            theme_id (str): ID of the theme to delete
 
         Returns:
             bool: True if deleted successfully, False otherwise
         """
-        return await self.theme_repository.delete_theme(theme_id)
+        try:
+            # 1. Delete files from disk
+            files = await self.theme_repository.get_files_by_theme(theme_id)
+            for file in files:
+                await self.file_manager.delete_file(file.file_path)
+
+            # 2. Delete documents from disk
+            documents = await self.theme_repository.get_direct_documents_by_theme(theme_id)
+            for doc in documents:
+                self.document_store._delete_document_from_disk(
+                    document_id=doc.id,
+                    owner_id=doc.owner_id,
+                    theme_id=doc.theme_id
+                )
+
+            # 3. Finally delete everything in DB
+            return await self.theme_repository.delete_theme(theme_id)
+
+        except Exception as e:
+            logger.exception(f"Failed to delete theme {theme_id}: {e}")
+            return False
 
     async def add_document_to_theme(self, theme_id: str, document_id: str) -> bool:
         """
