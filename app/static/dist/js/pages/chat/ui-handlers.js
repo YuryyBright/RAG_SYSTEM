@@ -1,64 +1,45 @@
-// UI related functionality
+// UI related functionality with jQuery
 
 const UIHandlers = {
   // DOM Element references
   elements: {
-    chatContainer: document.getElementById("chatContainer"),
-    typingIndicator: document.getElementById("typingIndicator"),
-    messageInput: document.getElementById("messageInput"),
-    chatForm: document.getElementById("chatForm"),
-    ragModeToggle: document.getElementById("ragModeToggle"),
-    themesContainer: document.getElementById("themesContainer"),
-    chatHistoryList: document.getElementById("chatHistoryList"),
-    clearHistoryBtn: document.getElementById("clearHistoryBtn"),
-    fileUploadContainer: document.getElementById("fileUploadContainer"),
+    $chatContainer: $("#chatContainer"),
+    $typingIndicator: $("#typingIndicator"),
+    $messageInput: $("#messageInput"),
+    $chatForm: $("#chatForm"),
+    $ragModeToggle: $("#ragModeToggle"),
+    $themesContainer: $("#themesContainer"),
+    $chatHistoryList: $("#chatHistoryList"),
+    $clearHistoryBtn: $("#clearHistoryBtn"),
+    $fileUploadContainer: $("#fileUploadContainer"),
   },
 
-  // Format chat message with markdown and code highlighting
-  formatMessage(text) {
+  formatMessage: function (text) {
     if (!text) return "";
 
-    // Basic formatting - replace code blocks with proper syntax highlighting
     let formatted = text
-      // Code blocks with language
-      .replace(/```(\w+)\n([\s\S]*?)```/g, (match, lang, code) => {
-        return `<pre><code class="language-${lang}">${this.escapeHtml(code.trim())}</code></pre>`;
-      })
-      // Code blocks without language
-      .replace(/```([\s\S]*?)```/g, (match, code) => {
-        return `<pre><code>${this.escapeHtml(code.trim())}</code></pre>`;
-      })
-      // Inline code
-      .replace(/`([^`]+)`/g, (match, code) => {
-        return `<code>${this.escapeHtml(code)}</code>`;
-      })
-      // Bold
+      .replace(
+        /```(\w+)\n([\s\S]*?)```/g,
+        (match, lang, code) => `<pre><code class="language-${lang}">${this.escapeHtml(code.trim())}</code></pre>`
+      )
+      .replace(/```([\s\S]*?)```/g, (match, code) => `<pre><code>${this.escapeHtml(code.trim())}</code></pre>`)
+      .replace(/`([^`]+)`/g, (match, code) => `<code>${this.escapeHtml(code)}</code>`)
       .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
-      // Italic
       .replace(/\*([^*]+)\*/g, "<em>$1</em>")
-      // Links
       .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')
-      // Lists (unordered)
       .replace(/^\s*[\-\*]\s+(.+)$/gm, "<li>$1</li>")
-      // Lists (ordered)
       .replace(/^\s*(\d+)\.\s+(.+)$/gm, "<li>$2</li>")
-      // Line breaks
       .replace(/\n/g, "<br>");
 
-    // Handle sequential list items
     formatted = formatted.replace(/<\/li>\s*<br><li>/g, "</li><li>");
-    formatted = formatted.replace(/<li>(.+?)(<br>)?<\/li>/g, function (match) {
-      if (match.includes("<li>") && !match.includes("<ul>")) {
-        return "<ul>" + match + "</ul>";
-      }
-      return match;
-    });
+    formatted = formatted.replace(/<li>(.+?)(<br>)?<\/li>/g, (match) =>
+      match.includes("<ul>") ? match : "<ul>" + match + "</ul>"
+    );
 
     return formatted;
   },
 
-  // Escape HTML for code blocks
-  escapeHtml(unsafe) {
+  escapeHtml: function (unsafe) {
     return unsafe
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
@@ -67,184 +48,129 @@ const UIHandlers = {
       .replace(/'/g, "&#039;");
   },
 
-  // Add a message to the chat
-  addMessage(text, sender, isError = false, attachments = []) {
+  addMessage: function (text, sender, isError = false, attachments = []) {
     const now = new Date();
     const timeString = now.getHours().toString().padStart(2, "0") + ":" + now.getMinutes().toString().padStart(2, "0");
-
-    // Format message with markdown
     const formattedText = this.formatMessage(text);
 
-    // Create message element
     const messageClass = sender === "user" ? "user-message" : "ai-message";
     const errorClass = isError ? " text-danger" : "";
 
-    let messageHtml = `
+    let $message = $(`
       <div class="message ${messageClass}${errorClass}">
         <div class="message-content">${formattedText}</div>
-    `;
-
-    // Add attachments if any
-    if (attachments && attachments.length > 0) {
-      messageHtml += `<div class="message-attachments">`;
-
-      attachments.forEach((attachment) => {
-        // Get file icon based on extension
-        const extension = attachment.name.split(".").pop().toLowerCase();
-        let icon = "fa-file";
-
-        if (["pdf"].includes(extension)) icon = "fa-file-pdf";
-        if (["doc", "docx"].includes(extension)) icon = "fa-file-word";
-        if (["xls", "xlsx", "csv"].includes(extension)) icon = "fa-file-excel";
-        if (["txt", "md"].includes(extension)) icon = "fa-file-alt";
-        if (["html", "css", "js"].includes(extension)) icon = "fa-file-code";
-        if (["jpg", "jpeg", "png", "gif", "svg"].includes(extension)) icon = "fa-file-image";
-
-        messageHtml += `
-          <div class="message-attachment">
-            <i class="fas ${icon}"></i>
-            ${attachment.name} (${this.formatFileSize(attachment.size)})
-          </div>
-        `;
-      });
-
-      messageHtml += `</div>`;
-    }
-
-    messageHtml += `
-        <div class="message-time">${timeString}</div>
       </div>
-    `;
+    `);
 
-    // Insert before typing indicator
-    this.elements.typingIndicator.insertAdjacentHTML("beforebegin", messageHtml);
+    if (attachments.length > 0) {
+      let $attachments = $('<div class="message-attachments"></div>');
+      attachments.forEach((attachment) => {
+        let icon = "fa-file";
+        const ext = attachment.name.split(".").pop().toLowerCase();
+        if (["pdf"].includes(ext)) icon = "fa-file-pdf";
+        if (["doc", "docx"].includes(ext)) icon = "fa-file-word";
+        if (["xls", "xlsx", "csv"].includes(ext)) icon = "fa-file-excel";
+        if (["txt", "md"].includes(ext)) icon = "fa-file-alt";
+        if (["html", "css", "js"].includes(ext)) icon = "fa-file-code";
+        if (["jpg", "jpeg", "png", "gif", "svg"].includes(ext)) icon = "fa-file-image";
 
-    // Apply syntax highlighting if available
+        $attachments.append(`
+          <div class="message-attachment">
+            <i class="fas ${icon}"></i> ${attachment.name} (${this.formatFileSize(attachment.size)})
+          </div>
+        `);
+      });
+      $message.append($attachments);
+    }
+
+    $message.append(`<div class="message-time">${timeString}</div>`);
+
+    this.elements.$typingIndicator.before($message);
+
     if (window.hljs) {
-      const codeBlocks = document.querySelectorAll("pre code");
-      codeBlocks.forEach((block) => {
-        hljs.highlightElement(block);
+      $("pre code").each(function () {
+        hljs.highlightElement(this);
       });
     }
 
-    // Scroll to bottom
     this.scrollToBottom();
 
-    // Clear message input (only for user messages)
     if (sender === "user") {
-      this.elements.messageInput.value = "";
-      this.elements.messageInput.style.height = "auto";
-      this.elements.messageInput.focus();
+      this.elements.$messageInput.val("").css("height", "auto").focus();
     }
   },
 
-  // Format file size nicely
-  formatFileSize(bytes) {
+  formatFileSize: function (bytes) {
     if (bytes < 1024) return bytes + " B";
-    else if (bytes < 1048576) return (bytes / 1024).toFixed(1) + " KB";
-    else return (bytes / 1048576).toFixed(1) + " MB";
+    if (bytes < 1048576) return (bytes / 1024).toFixed(1) + " KB";
+    return (bytes / 1048576).toFixed(1) + " MB";
   },
 
-  // Toggle typing indicator
-  showTypingIndicator(show = true) {
-    this.elements.typingIndicator.style.display = show ? "block" : "none";
-
-    // Also scroll to bottom when showing the typing indicator
-    if (show) {
-      this.scrollToBottom();
-    }
+  showTypingIndicator: function (show = true) {
+    this.elements.$typingIndicator.css("display", show ? "block" : "none");
+    if (show) this.scrollToBottom();
   },
 
-  // Scroll chat to bottom with smooth animation
-  scrollToBottom() {
-    this.elements.chatContainer.scrollTo({
-      top: this.elements.chatContainer.scrollHeight,
-      behavior: "smooth",
-    });
+  scrollToBottom: function () {
+    this.elements.$chatContainer.animate({ scrollTop: this.elements.$chatContainer.prop("scrollHeight") }, 300);
   },
 
-  // Format time ago for chat history
-  formatTimeAgo(date) {
+  formatTimeAgo: function (date) {
     const now = new Date();
-    const diffMs = now - date;
-    const diffSecs = Math.floor(diffMs / 1000);
+    const diffSecs = Math.floor((now - date) / 1000);
     const diffMins = Math.floor(diffSecs / 60);
     const diffHours = Math.floor(diffMins / 60);
     const diffDays = Math.floor(diffHours / 24);
 
-    if (diffSecs < 60) {
-      return "just now";
-    } else if (diffMins < 60) {
-      return `${diffMins}m ago`;
-    } else if (diffHours < 24) {
-      return `${diffHours}h ago`;
-    } else if (diffDays < 7) {
-      return `${diffDays}d ago`;
-    } else {
-      return date.toLocaleDateString();
-    }
+    if (diffSecs < 60) return "just now";
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return date.toLocaleDateString();
   },
 
-  // Toggle visibility of file upload based on RAG mode with animation
-  updateFileUploadVisibility(isRagMode) {
+  updateFileUploadVisibility: function (isRagMode) {
     if (isRagMode) {
-      // Fade out and hide
-      this.elements.fileUploadContainer.style.opacity = "0";
-      setTimeout(() => {
-        this.elements.fileUploadContainer.style.display = "none";
-      }, 300);
+      this.elements.$fileUploadContainer.fadeOut(300);
     } else {
-      // Show and fade in
-      this.elements.fileUploadContainer.style.display = "block";
-      setTimeout(() => {
-        this.elements.fileUploadContainer.style.opacity = "1";
-      }, 10);
+      this.elements.$fileUploadContainer.fadeIn(300);
     }
   },
 
-  // Auto-resize textarea as content grows
-  initAutoResizeTextarea() {
-    const textarea = this.elements.messageInput;
-    textarea.addEventListener("input", function () {
-      this.style.height = "auto";
-      const maxHeight = 150; // max height in pixels
+  initAutoResizeTextarea: function () {
+    const $textarea = this.elements.$messageInput;
+    $textarea.on("input", function () {
+      $(this).css("height", "auto");
+      const maxHeight = 150;
       const scrollHeight = this.scrollHeight;
-      this.style.height = (scrollHeight > maxHeight ? maxHeight : scrollHeight) + "px";
+      $(this).css("height", (scrollHeight > maxHeight ? maxHeight : scrollHeight) + "px");
     });
   },
 
-  // Show a toast notification
-  showToast(message, type = "success") {
-    // Check if alertify is available
+  showToast: function (message, type = "success") {
     if (window.alertify) {
       alertify[type](message);
       return;
     }
 
-    // Fallback simple toast implementation
-    const toast = document.createElement("div");
-    toast.className = `toast toast-${type}`;
-    toast.textContent = message;
-    document.body.appendChild(toast);
+    const $toast = $(`<div class="toast toast-${type}">${message}</div>`).appendTo("body");
 
     setTimeout(() => {
-      toast.classList.add("show");
+      $toast.addClass("show");
       setTimeout(() => {
-        toast.classList.remove("show");
-        setTimeout(() => document.body.removeChild(toast), 300);
+        $toast.removeClass("show");
+        setTimeout(() => $toast.remove(), 300);
       }, 3000);
     }, 100);
   },
 };
 
-// Initialize auto-resize for textarea
-document.addEventListener("DOMContentLoaded", function () {
+// Initialize on document ready
+$(function () {
   UIHandlers.initAutoResizeTextarea();
 
-  // Add CSS for toast notifications (fallback if alertify not available)
   if (!window.alertify) {
-    const style = document.createElement("style");
-    style.textContent = `
+    const style = `<style>
       .toast {
         position: fixed;
         bottom: 20px;
@@ -262,17 +188,11 @@ document.addEventListener("DOMContentLoaded", function () {
         opacity: 1;
         transform: translateY(0);
       }
-      .toast-success {
-        background-color: #10b981;
-      }
-      .toast-error {
-        background-color: #ef4444;
-      }
-      .toast-info {
-        background-color: #3b82f6;
-      }
-    `;
-    document.head.appendChild(style);
+      .toast-success { background-color: #10b981; }
+      .toast-error { background-color: #ef4444; }
+      .toast-info { background-color: #3b82f6; }
+    </style>`;
+    $("head").append(style);
   }
 });
 

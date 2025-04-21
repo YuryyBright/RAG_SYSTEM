@@ -74,14 +74,20 @@ const APIService = {
       return response.json();
     });
   },
-
+  loadModels() {
+    return fetch("/api/v1/models", {
+      method: "GET",
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error("Failed to load models");
+        return res.json();
+      })
+      .then((data) => data.models); // expects { models: [ {id, name}, … ] }
+  },
   // Clear chat history
   clearChatHistory() {
     return fetch("/api/v1/chat/history", {
       method: "DELETE",
-      headers: {
-        "X-CSRF-TOKEN": document.querySelector('input[name="csrf_token"]').value,
-      },
     }).then((response) => {
       if (!response.ok) {
         throw new Error("Network response was not ok");
