@@ -104,7 +104,6 @@ export function startFileProcessing() {
 
       addLogMessage("File processing completed successfully!");
       alertify.success("Processing complete. Your data is ready to use.");
-      finalizeProcessingTask();
       // Save the final state
       saveWorkflowState();
       setTimeout(() => {
@@ -118,54 +117,129 @@ export function startFileProcessing() {
     },
   });
 }
+export function showProcessingReportDetails(report) {
+  if (!report) {
+    console.warn("No report to display");
+    return null;
+  }
 
+  const $container = $("<div></div>").addClass("processing-report-block");
+
+  // Summary block
+  const summary = `
+    <div class="mb-2">
+      <h5>📋 Summary</h5>
+      <ul>
+        <li>Total files: ${report.summary.total_files}</li>
+        <li>Successfully processed: ${report.summary.successful}</li>
+        <li>Unreadable files: ${report.summary.unreadable}</li>
+        <li>Language detection failures: ${report.summary.language_detection_failures}</li>
+        <li>Files with warnings: ${report.summary.files_with_warnings}</li>
+        <li>Total chunks created: ${report.summary.total_chunks_created}</li>
+        <li>Total chunks vectorized: ${report.summary.chunks_vectorized}</li>
+      </ul>
+    </div>
+  `;
+  $container.append(summary);
+
+  // Successful files
+  if (report.details.successful_files?.length > 0) {
+    const successList = report.details.successful_files
+      .map(
+        (file) => `
+      <li><strong>${file.filename}</strong> (${file.language || "Unknown Language"})</li>
+    `
+      )
+      .join("");
+    $container.append(`<div class="mb-2"><h5>✅ Successful Files</h5><ul>${successList}</ul></div>`);
+  }
+
+  // Unreadable files
+  if (report.details.unreadable_files?.length > 0) {
+    const unreadableList = report.details.unreadable_files
+      .map(
+        (file) => `
+      <li><strong>${file.filename}</strong>: ${file.error}</li>
+    `
+      )
+      .join("");
+    $container.append(`<div class="mb-2"><h5>❌ Unreadable Files</h5><ul>${unreadableList}</ul></div>`);
+  }
+
+  // Files with warnings
+  if (report.details.files_with_warnings?.length > 0) {
+    const warningsList = report.details.files_with_warnings
+      .map(
+        (file) => `
+      <li><strong>${file.filename}</strong>: ${file.warnings.join(", ")}</li>
+    `
+      )
+      .join("");
+    $container.append(`<div class="mb-2"><h5>⚠️ Files with Warnings</h5><ul>${warningsList}</ul></div>`);
+  }
+
+  // Recommendations
+  if (report.recommendations.files_to_review?.length > 0) {
+    const reviewList = report.recommendations.files_to_review.map((f) => `<li>${f}</li>`).join("");
+    $container.append(`<div class="mb-2"><h5>🧐 Files Recommended for Review</h5><ul>${reviewList}</ul></div>`);
+  }
+  if (report.recommendations.files_to_consider_removing?.length > 0) {
+    const removeList = report.recommendations.files_to_consider_removing.map((f) => `<li>${f}</li>`).join("");
+    $container.append(`<div class="mb-2"><h5>🗑️ Files Recommended for Removal</h5><ul>${removeList}</ul></div>`);
+  }
+
+  // Small footer
+  $container.append(`<hr><small>Report generated on ${new Date().toLocaleString()}</small>`);
+
+  return $container[0]; // Return as pure DOM element
+}
 /**
  * Connect function to UI button
  */
-export function finalizeProcessingTask() {
-  if (!state.processingTask) return;
+// export function finalizeProcessingTask() {
+//   if (!state.processingTask) return;
 
-  console.log("[Task] Finalizing processing task...");
+//   console.log("[Task] Finalizing processing task...");
 
-  // Mark task status explicitly as completed
-  state.processingTask.status = "completed";
+//   // Mark task status explicitly as completed
+//   state.processingTask.status = "completed";
 
-  // Clear WebSocket subscription if active
-  if (state.taskSocket && state.taskSocket.readyState === WebSocket.OPEN) {
-    state.taskSocket.close();
-    state.taskSocket = null;
-  }
+//   // Clear WebSocket subscription if active
+//   if (state.taskSocket && state.taskSocket.readyState === WebSocket.OPEN) {
+//     state.taskSocket.close();
+//     state.taskSocket = null;
+//   }
 
-  // Clear vector DB status
-  state.vectorDBStatus = {
-    dataIngestion: "completed",
-    textChunking: "completed",
-    generateEmbeddings: "completed",
-    storeVectors: "completed",
-  };
+//   // Clear vector DB status
+//   state.vectorDBStatus = {
+//     dataIngestion: "completed",
+//     textChunking: "completed",
+//     generateEmbeddings: "completed",
+//     storeVectors: "completed",
+//   };
 
-  // Clear drop zone files if needed
-  state.dropZoneFiles = [];
+//   // Clear drop zone files if needed
+//   state.dropZoneFiles = [];
 
-  // Reset UI parts
-  $("#start-process-btn").prop("disabled", false).show();
-  $("#task-status-area").addClass("d-none");
-  $("#process-progress").css("width", "0%");
-  $("#task-progress-bar").css("width", "0%");
-  $("#task-error-message").addClass("d-none").text("");
-  $("#task-completion-info").addClass("d-none").empty();
-  $("#process-log-content").empty();
-  $("#process-log-container").addClass("d-none");
+//   // Reset UI parts
+//   $("#start-process-btn").prop("disabled", false).show();
+//   $("#task-status-area").addClass("d-none");
+//   $("#process-progress").css("width", "0%");
+//   $("#task-progress-bar").css("width", "0%");
+//   $("#task-error-message").addClass("d-none").text("");
+//   $("#task-completion-info").addClass("d-none").empty();
+//   $("#process-log-content").empty();
+//   $("#process-log-container").addClass("d-none");
 
-  // Navigate to the first step
-  import("./ui.js").then(({ navigateToStep }) => {
-    navigateToStep(1);
-  });
+//   // Navigate to the first step
+//   import("./ui.js").then(({ navigateToStep }) => {
+//     navigateToStep(1);
+//   });
 
-  // Save updated workflow
-  state.processingTask = null;
-  saveWorkflowState();
+//   // Save updated workflow
+//   state.processingTask = null;
+//   saveWorkflowState();
 
-  // Show success
-  alertify.success("🎉 Task finalized. Ready for a new theme!");
-}
+//   // Show success
+//   alertify.success("🎉 Task finalized. Ready for a new theme!");
+// }

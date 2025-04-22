@@ -83,7 +83,6 @@ async def get_themes(
                 "updated_at": theme.updated_at.isoformat() if theme.updated_at else None,
                 "document_count": len(document_ids)
             })
-
         return result
     except Exception as e:
         raise HTTPException(

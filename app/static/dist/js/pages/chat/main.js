@@ -3,26 +3,55 @@
  * Handles Chat Initialization, Event Binding, and Dynamic Model Loading
  */
 
-// Define global chat state
-const ChatState = {
+import { AdvancedSettings } from "./advanced-settings.js";
+import { APIService } from "./api-service.js";
+import { FileHandlers } from "./file-handlers.js";
+import { UIHandlers } from "./ui-handlers.js";
+import { MessageHandlers } from "./message-handlers.js";
+import { SidebarHandlers } from "./sidebar-handlers.js"; // Import the new module
+
+// Global ChatState for application state management
+window.ChatState = {
   activeThemeId: 1, // Default: General Knowledge theme
   isRagMode: false,
   conversationId: null,
+  activeModelId: null, // Will be set when models are loaded
 };
+
+// Export services to global scope for compatibility
+window.APIService = APIService;
+window.UIHandlers = UIHandlers;
+window.MessageHandlers = MessageHandlers;
+window.FileHandlers = FileHandlers;
+window.SidebarHandlers = SidebarHandlers; // Export to global scope
 
 $(document).ready(function () {
   // Initialize modules
   FileHandlers.init();
   AdvancedSettings.init();
+  SidebarHandlers.init(); // Initialize the sidebar handlers
+  UIHandlers.initToastSystem();
 
   // Load initial themes and chat history
   APIService.loadThemes().catch(() => alertify.error("Failed to load knowledge themes"));
   APIService.loadChatHistory().catch(() => alertify.error("Failed to load chat history"));
+
+  // Always attach model click
+  $("#LLMContainer").on("click", ".model-pill", function () {
+    $(".model-pill", $("#LLMContainer")).removeClass("badge-info").addClass("badge-secondary");
+    $(this).removeClass("badge-secondary").addClass("badge-info");
+
+    window.ChatState.activeModelId = $(this).data("model-id");
+
+    alertify.success(`Model switched to: ${$(this).text().trim()}`);
+  });
+
+  // Load models and render if possible
   APIService.loadModels()
     .then(renderModels)
     .catch(() => alertify.error("Failed to load models"));
 
-  // Setup event handlers
+  // Setup other handlers (excluding those now in SidebarHandlers)
   setupEventHandlers();
 
   // Scroll chat to bottom
@@ -33,9 +62,9 @@ $(document).ready(function () {
  * Setup all event handlers
  */
 function setupEventHandlers() {
-  const $chatForm = $(UIHandlers.elements.chatForm);
-  const $messageInput = $(UIHandlers.elements.messageInput);
-  const $ragToggle = $(UIHandlers.elements.ragModeToggle);
+  const $chatForm = $(UIHandlers.elements.$chatForm);
+  const $messageInput = $(UIHandlers.elements.$messageInput);
+  const $ragToggle = $(UIHandlers.elements.$ragModeToggle);
 
   // Submit message handler
   $chatForm.on("submit", function (e) {
@@ -56,58 +85,9 @@ function setupEventHandlers() {
 
   // RAG mode toggle
   $ragToggle.on("change", function () {
-    ChatState.isRagMode = this.checked;
-    UIHandlers.updateFileUploadVisibility(ChatState.isRagMode);
-    alertify.success(`Switched to ${ChatState.isRagMode ? "RAG Mode" : "Standard Mode"}`);
-  });
-
-  // Ctrl+Enter or Cmd+Enter to send
-  $messageInput.on("keydown", function (e) {
-    if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
-      e.preventDefault();
-      $chatForm.submit();
-    }
-  });
-
-  // Theme selection
-  $("#themesContainer").on("click", ".theme-pill", function () {
-    $(".theme-pill").removeClass("badge-info").addClass("badge-secondary");
-    $(this).removeClass("badge-secondary").addClass("badge-info");
-    ChatState.activeThemeId = parseInt($(this).data("theme-id"));
-
-    if (ChatState.isRagMode) {
-      alertify.success(`Theme switched to "${$(this).text().trim()}"`);
-    }
-  });
-
-  // Chat history load
-  $("#chatHistoryList").on("click", ".chat-history-item", function () {
-    const chatId = $(this).data("id");
-    MessageHandlers.loadChat(chatId);
-
-    $(".chat-history-item").removeClass("active");
-    $(this).addClass("active");
-  });
-
-  // Clear chat history
-  $("#clearHistoryBtn").on("click", function () {
-    if (confirm("Are you sure you want to clear all chat history?")) {
-      APIService.clearChatHistory()
-        .then(() => {
-          $("#chatHistoryList").empty();
-          alertify.success("Chat history cleared");
-          location.reload();
-        })
-        .catch(() => alertify.error("Failed to clear chat history"));
-    }
-  });
-
-  // Handle Enter vs Shift+Enter
-  $messageInput.on("keydown", function (e) {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      $chatForm.submit();
-    }
+    window.ChatState.isRagMode = this.checked;
+    UIHandlers.updateFileUploadVisibility(window.ChatState.isRagMode);
+    alertify.success(`Switched to ${window.ChatState.isRagMode ? "RAG Mode" : "Standard Mode"}`);
   });
 
   // Syntax highlighting observer
@@ -125,67 +105,53 @@ function setupEventHandlers() {
     });
   });
 
-  observer.observe(UIHandlers.elements.chatContainer[0], { childList: true, subtree: true });
+  // Use the jQuery object's get() method to access the DOM element
+  observer.observe(UIHandlers.elements.$chatContainer.get(0), { childList: true, subtree: true });
 
   // Handle window resize
   $(window).on("resize", UIHandlers.scrollToBottom);
-
-  // New chat button
-  const $newChatBtn = $(
-    '<button class="btn btn-sm btn-outline-primary mr-2"><i class="fas fa-plus mr-1"></i> New Chat</button>'
-  );
-  $newChatBtn.on("click", function () {
-    location.reload();
-  });
-  $("#clearHistoryBtn").before($newChatBtn);
 }
 
 /**
- * Render models dynamically into the LLM container
- * @param {Array} models - Array of models [{id, name}]
+ * Render available models dynamically into the LLM container.
+ * @param {Array} models - Array of model objects [{ id: string, name: string }]
  */
 function renderModels(models) {
+  if (!models || models.length === 0) {
+    console.error("No models available to render");
+    return;
+  }
+
   const $container = $("#LLMContainer");
+  // Clear any existing content (including placeholders)
   $container.empty();
 
   models.forEach((model, index) => {
-    const $badge = $("<div></div>", {
-      class: "badge badge-secondary theme-pill m-1",
-      "data-theme-id": model.id,
-      text: model.name,
-    });
-
-    if (index === 0) $badge.removeClass("badge-secondary").addClass("badge-info");
-
-    $container.append($badge);
+    const badgeClass = index === 0 ? "badge-info" : "badge-secondary";
+    $container.append(`
+      <div class="badge ${badgeClass} theme-pill m-1 p-2" data-model-id="${model.id}">
+        ${model.name}
+      </div>
+    `);
   });
+
+  // Set the active model to the first one by default
+  window.ChatState.activeModelId = models[0].id;
 }
 
-/**
- * API Service for fetching backend data
- */
-const APIService = {
-  loadThemes() {
-    return fetch("/api/v1/themes").then((res) => (res.ok ? res.json() : Promise.reject()));
-  },
-
-  loadChatHistory() {
-    return fetch("/api/v1/chat/history").then((res) => (res.ok ? res.json() : Promise.reject()));
-  },
-
-  clearChatHistory() {
-    return fetch("/api/v1/chat/clear", { method: "POST" }).then((res) => (res.ok ? res.json() : Promise.reject()));
-  },
-
-  loadModels() {
-    return fetch("/api/v1/models")
-      .then((res) => {
-        if (!res.ok) throw new Error("Failed to load models");
-        return res.json();
-      })
-      .then((data) => data.models);
-  },
+// Initialize toast system if alertify is not available
+UIHandlers.initToastSystem = function () {
+  if (!window.alertify) {
+    window.alertify = {
+      success: function (message) {
+        UIHandlers.showToast(message, "success");
+      },
+      error: function (message) {
+        UIHandlers.showToast(message, "error");
+      },
+      info: function (message) {
+        UIHandlers.showToast(message, "info");
+      },
+    };
+  }
 };
-
-// Export ChatState globally
-window.ChatState = ChatState;

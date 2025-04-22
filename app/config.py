@@ -148,6 +148,8 @@ class Settings(BaseSettings):
     EMBEDDING_CACHE_TTL: int = Field(3600, description="Embedding cache TTL in seconds")
     MAX_CHUNK_SIZE: int = Field(1000, description="Maximum chunk size for document splitting")
     CHUNK_OVERLAP: int = Field(200, description="Overlap between chunks when splitting documents")
+    RERANKER_TYPE:str = Field("RERANKER", description="RERANKER type")
+    CROSS_ENCODER_MODEL: str = Field()
 
     # File storage
     UPLOAD_DIR: Path = Field(Path("./data/uploads"), description="Upload directory")
@@ -162,7 +164,7 @@ class Settings(BaseSettings):
 
     EMBEDDING_SERVICE: str = Field("instructor",
                                    description="Embedding service to use (instructor, openai, sentence_transformer)")
-    INSTRUCTOR_MODEL_NAME: str = Field("models/instructor-xl", description="Instructor model name")
+    INSTRUCTOR_MODEL_NAME: str = Field("app/models/instructors/instructor-xl", description="Instructor model name")
     EMBEDDING_INSTRUCTION: str = Field("Represent the document for retrieval:",
                                        description="Instruction for document embeddings")
     QUERY_INSTRUCTION: str = Field("Represent the question for retrieving relevant documents:",
@@ -176,7 +178,14 @@ class Settings(BaseSettings):
     SENTENCE_TRANSFORMER_MODEL_NAME: str = Field("all-MiniLM-L6-v2", description="SentenceTransformer model name")
 
     # LLM and Reranker configuration
-    LLM_MODEL: str = Field("mistral/mistral-7b-instruct-v0.2", description="LLM model name")
+
+    # Ollama settings for Mistral
+    OLLAMA_API_URL: str = "http://localhost:11434/api"
+
+    # Hugging Face settings
+    HUGGINGFACE_TOKEN: Optional[str] = None  # Set this in .env or environment variables
+    LLM_MODEL: str = Field("mistral:latest", description="LLM model name")
+    MODELS_BASE_DIR: str = Field('models', description="Model base directory")
     RERANKER_MODEL: str = Field("cross-encoder/ms-marco-MiniLM-L-6-v2", description="Cross-encoder model for reranking")
     SCORE_THRESHOLD: float = Field(0.3, description="Minimum similarity score for retrieval")
     # Email

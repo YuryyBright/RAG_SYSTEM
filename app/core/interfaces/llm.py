@@ -1,18 +1,10 @@
-
+# core/interfaces/llm.py
 from abc import ABC, abstractmethod
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional
 
 class LLMInterface(ABC):
     """
-    Interface for large language models.
-
-    This interface defines the contract for generating responses from a large language model
-    based on a given prompt and context.
-
-    Methods
-    -------
-    generate(prompt: str, context: List[Dict[str, Any]], max_tokens: Optional[int] = None) -> str
-        Asynchronously generates a response based on the provided prompt and context.
+    Core interface for all LLM adapters.
     """
 
     @abstractmethod
@@ -23,20 +15,12 @@ class LLMInterface(ABC):
         max_tokens: Optional[int] = None
     ) -> str:
         """
-        Generate a response based on the provided prompt and context.
-
-        Parameters
-        ----------
-        prompt : str
-            The input text to generate a response for.
-        context : List[Dict[str, Any]]
-            A list of dictionaries containing additional context information.
-        max_tokens : Optional[int], optional
-            The maximum number of tokens to generate in the response (default is None).
-
-        Returns
-        -------
-        str
-            The generated response as a string.
+        Send `prompt` + optional `context` to the model and return its completion.
         """
         pass
+
+    async def generate_text(self, prompt: str) -> str:
+        """
+        Convenience method for simple prompt→text calls without external context.
+        """
+        return await self.generate(prompt, context=[], max_tokens=None)

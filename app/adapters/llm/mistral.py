@@ -1,7 +1,8 @@
 # app/adapters/llm/mistral.py
 import httpx
+import os
 from typing import List, Dict, Any, Optional
-from core.interfaces.llm import LLMInterface
+from app.core.interfaces.llm import LLMInterface
 from app.config import settings
 
 
@@ -60,3 +61,49 @@ class MistralLLM(LLMInterface):
             response.raise_for_status()
             data = response.json()
             return data["response"]
+
+    @classmethod
+    async def list_available_models(cls) -> List[Dict[str, Any]]:
+        """
+        List all available Mistral models from Ollama.
+
+        Returns
+        -------
+        List[Dict[str, Any]]
+            List of available models with their details
+        """
+        api_url = settings.OLLAMA_API_URL
+        async with httpx.AsyncClient() as client:
+            response = await client.get(f"{api_url}/tags")
+            response.raise_for_status()
+            data = response.json()
+
+            # Filter for only Mistral models
+            mistral_models = [model for model in data.get("models", [])
+                              if "mistral" in model.get("name", "").lower()]
+
+            return mistral_models
+
+    @classmethod
+    async def download_model(cls, model_name: str) -> Dict[str, Any]:
+        """
+        Download a specific Mistral model.
+
+        Parameters
+        ----------
+        model_name : str
+            Name of the model to download
+
+        Returns
+        -------
+        Dict[str, Any]
+            Information about the downloaded model
+        """
+        api_url = settings.OLLAMA_API_URL
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{api_url}/pull",
+                json={"name": model_name}
+            )
+            response.raise_for_status()
+            return {"status": "success", "model": model_name}

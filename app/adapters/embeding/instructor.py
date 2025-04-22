@@ -22,7 +22,7 @@ class InstructorEmbedding(BaseEmbeddingService):
 
     def __init__(
             self,
-            model_name: str = "models/instructor-xl",
+            model_name: str = "models/instructors/instructor-xl",
             instruction: str = "Represent the document for retrieval:",
             query_instruction: str = "Represent the question for retrieving relevant documents:",
             batch_size: int = 8,

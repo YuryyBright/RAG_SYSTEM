@@ -3,10 +3,11 @@ from typing import List, Dict, Any
 import re
 import math
 from collections import Counter
-from core.interfaces.reranking import RerankerInterface
+
+from core.interfaces.reranking import RerankingService
 
 
-class BM25Reranker(RerankerInterface):
+class BM25Reranker(RerankingService):
     """
     Implementation of BM25 algorithm for document reranking.
 

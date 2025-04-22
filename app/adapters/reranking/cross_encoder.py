@@ -1,104 +1,80 @@
-# app/adapters/reranking/cross_encoder.py
-from typing import List, Dict, Any
-import torch
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
-from core.interfaces.reranking import RerankerInterface
+# app/adapters/reranking/cross_encoder_reranker.py
+import numpy as np
+from typing import List, Optional, Dict, Any, Tuple
+from app.core.interfaces.reranking import RerankingService
 
 
-class CrossEncoderReranker(RerankerInterface):
+class CrossEncoderReranker(RerankingService):
     """
-    Implementation of a cross-encoder model for document reranking.
+    A reranking service implementation using a cross-encoder model.
 
-    This class uses a pre-trained cross-encoder model to rerank documents based on
-    their relevance to a given query.
+    Cross-encoders score query-document pairs as a single input for more accurate
+    relevance scoring than bi-encoders used in initial retrieval.
 
     Attributes:
-        model_name (str): The name/path of the cross-encoder model to use.
-        tokenizer: The tokenizer for the cross-encoder model.
-        model: The pre-trained cross-encoder model.
-        device (str): The device to run the model on ('cpu' or 'cuda').
-        max_length (int): The maximum sequence length for the model.
+        model: The cross-encoder model for scoring query-document pairs.
+        tokenizer: The tokenizer for the model.
+        max_length: Maximum input sequence length.
+        device: The computation device to use.
     """
 
     def __init__(
             self,
             model_name: str = "cross-encoder/ms-marco-MiniLM-L-6-v2",
             max_length: int = 512,
-            device: str = None
+            batch_size: int = 8,
+            device: str = "cpu"
     ):
         """
-        Initialize the cross-encoder reranker.
+        Initialize the CrossEncoderReranker.
 
         Args:
-            model_name (str): The name/path of the cross-encoder model to use.
-            max_length (int): The maximum sequence length for the model.
-            device (str): The device to run the model on. If None, will use CUDA if available.
+            model_name: The name of the cross-encoder model.
+            max_length: Maximum input sequence length.
+            batch_size: Batch size for processing multiple documents.
+            device: The device to use for computations ('cpu' or 'cuda').
         """
-        self.model_name = model_name
-        self.max_length = max_length
-
-        # Determine device
-        if device is None:
-            self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        else:
-            self.device = device
-
-        # Load tokenizer and model
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-        self.model = AutoModelForSequenceClassification.from_pretrained(model_name)
-        self.model.to(self.device)
+        try:
+            from sentence_transformers import CrossEncoder
+            self.model = CrossEncoder(model_name, max_length=max_length, device=device)
+            self.batch_size = batch_size
+        except ImportError:
+            raise ImportError(
+                "CrossEncoderReranker requires sentence-transformers. "
+                "Install with: pip install sentence-transformers"
+            )
 
     async def rerank(
             self,
             query: str,
-            documents: List[Dict[str, Any]],
-            top_k: int = 3
-    ) -> List[Dict[str, Any]]:
+            documents: List[str],
+            top_k: Optional[int] = None
+    ) -> List[int]:
         """
-        Rerank documents based on relevance to the query.
+        Rerank documents based on their relevance to the query.
 
         Args:
-            query (str): The query string to evaluate the relevance of the documents.
-            documents (List[Dict[str, Any]]): A list of dictionaries, each representing a document.
-            top_k (int): The number of top relevant documents to return.
+            query: The query text.
+            documents: List of document contents to rerank.
+            top_k: The number of top documents to return (default: all documents).
 
         Returns:
-            List[Dict[str, Any]]: A list of dictionaries representing the top-k most relevant documents.
+            List of indices of the original documents, ordered by relevance.
         """
         if not documents:
             return []
 
-        # Extract document contents
-        doc_contents = [doc.get("content", "") for doc in documents]
+        # Prepare query-document pairs for scoring
+        pairs = [(query, doc) for doc in documents]
 
-        # Create query-document pairs
-        pairs = [[query, doc] for doc in doc_contents]
+        # Score the pairs using the cross-encoder model
+        scores = self.model.predict(pairs)
 
-        # Tokenize pairs
-        features = self.tokenizer(
-            pairs,
-            padding=True,
-            truncation=True,
-            max_length=self.max_length,
-            return_tensors="pt"
-        ).to(self.device)
+        # Sort document indices by scores in descending order
+        sorted_indices = np.argsort(scores)[::-1]
 
-        # Get model predictions
-        with torch.no_grad():
-            scores = self.model(**features).logits.flatten()
+        # Return top-k indices if specified
+        if top_k is not None:
+            sorted_indices = sorted_indices[:min(top_k, len(sorted_indices))]
 
-        # Convert scores to CPU if necessary and to list
-        scores = scores.cpu().tolist() if self.device == "cuda" else scores.tolist()
-
-        # Create list of documents with scores
-        scored_documents = []
-        for i, doc in enumerate(documents):
-            scored_doc = doc.copy()
-            scored_doc["score"] = scores[i]
-            scored_documents.append(scored_doc)
-
-        # Sort by score in descending order
-        scored_documents.sort(key=lambda x: x.get("score", 0), reverse=True)
-
-        # Return top_k documents
-        return scored_documents[:top_k]
+        return sorted_indices.tolist()

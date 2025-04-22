@@ -1,42 +1,30 @@
-from abc import ABC, abstractmethod
-from typing import List, Dict, Any
+# app/core/interfaces/reranking.py
+from typing import List, Optional
 
-class RerankerInterface(ABC):
+class RerankingService:
     """
-    Interface for reranking retrieved documents.
+    Interface for reranking services that can reorder retrieved documents
+    based on their relevance to a query.
 
-    This interface defines the contract for reranking a list of documents based on their relevance
-    to a given query. Implementations of this interface should provide functionality to rerank
-    documents and return the top-k most relevant documents.
-
-    Methods
-    -------
-    rerank(query: str, documents: List[Dict[str, Any]], top_k: int = 3) -> List[Dict[str, Any]]
-        Asynchronously reranks the provided documents based on their relevance to the query.
+    Methods:
+        rerank: Reranks documents based on relevance to a query.
     """
 
-    @abstractmethod
     async def rerank(
-        self,
-        query: str,
-        documents: List[Dict[str, Any]],
-        top_k: int = 3
-    ) -> List[Dict[str, Any]]:
+        self, 
+        query: str, 
+        documents: List[str], 
+        top_k: Optional[int] = None
+    ) -> List[int]:
         """
-        Rerank documents based on relevance to the query.
+        Reranks documents based on their relevance to the query.
 
-        Parameters
-        ----------
-        query : str
-            The query string to evaluate the relevance of the documents.
-        documents : List[Dict[str, Any]]
-            A list of dictionaries, each representing a document with its attributes.
-        top_k : int, optional
-            The number of top relevant documents to return (default is 3).
+        Args:
+            query: The query text.
+            documents: List of document contents to rerank.
+            top_k: The number of top documents to return.
 
-        Returns
-        -------
-        List[Dict[str, Any]]
-            A list of dictionaries representing the top-k most relevant documents.
+        Returns:
+            List of indices of the original documents list, ordered by relevance.
         """
-        pass
+        raise NotImplementedError

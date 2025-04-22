@@ -16,8 +16,8 @@ from starlette.responses import RedirectResponse
 from starlette.status import HTTP_302_FOUND
 
 
-from api.v1.routers import auth, documents, queries, files, pages, auth_pages, dashboard_pages, admin_pages, user_api, \
-    theme, task_pages, tasks
+from api.v1.routers import auth, documents, files, pages, auth_pages, dashboard_pages, admin_pages, user_api, \
+    theme, task_pages, tasks, conversations
 from api.websockets import task_updates
 from api.websockets.task_updates import handle_task_websocket
 
@@ -49,10 +49,9 @@ api_router = APIRouter(prefix="/api")
 # Register route modules
 api_router.include_router(auth.router, prefix="/auth", tags=["Authentication"])
 api_router.include_router(documents.router, prefix="/documents", tags=["Documents"])
-api_router.include_router(queries.router, prefix="/queries", tags=["Queries"])
 api_router.include_router(files.router, prefix="/files", tags=["Files"])
 
-
+api_router.include_router(conversations.router, prefix="/conversations", tags=["Conversations"])
 # Include page routers - note these are protected by auth
 app.include_router(pages.router, prefix="/pages", tags=["Pages"])
 
@@ -64,7 +63,6 @@ api_router.include_router(user_api.router, prefix="/user", tags=["User"])
 api_router.include_router(theme.router, prefix="/themes", tags=["Themes"])
 
 api_router.include_router(tasks.router,prefix="/tasks",tags=["Tasks"])
-api_router.include_router(task_updates.router)
 # Add page routes
 api_router.include_router(task_pages.router,prefix="")
 

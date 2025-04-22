@@ -491,3 +491,183 @@ class Session(Base):
         # Placeholder logic for determining if the session is the current one
         # Implement actual logic based on application context
         return False
+
+
+# Adding to app/models/db_models.py
+
+class Conversation(Base):
+    """
+    Represents a chat conversation session.
+
+    Attributes
+    ----------
+    id : str
+        Unique identifier for the conversation (UUID).
+    title : str
+        Title or summary of the conversation.
+    user_id : str
+        ID of the user who owns the conversation.
+    created_at : datetime
+        Timestamp when the conversation was created.
+    updated_at : datetime
+        Timestamp when the conversation was last updated.
+    is_active : bool
+        Flag indicating if the conversation is active.
+    theme_id : str
+        Optional ID of the knowledge theme associated with this conversation.
+    model_id : str
+        ID of the AI model used for this conversation.
+    conversation_metadata : str
+        JSON string containing additional conversation metadata.
+    """
+    __tablename__ = "conversations"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    title = Column(String, nullable=False, default="New Conversation")
+    user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
+    is_active = Column(Boolean, default=True)
+    theme_id = Column(String, ForeignKey("themes.id"), nullable=True)
+    model_id = Column(String, nullable=True)  # ID of the AI model used
+    conversation_metadata = Column(Text, nullable=True)  # Column stays
+
+    # Relationships
+    user = relationship("User", backref="conversations")
+    theme = relationship("Theme", backref="conversations")
+    messages = relationship("Message", back_populates="conversation", cascade="all, delete-orphan")
+    contexts = relationship("ConversationContext", back_populates="conversation", cascade="all, delete-orphan")
+
+    @property
+    def conversation_metadata_dict(self):
+        """Deserialize metadata from JSON string to dict."""
+        if self.conversation_metadata:
+            return json.loads(self.conversation_metadata)
+        return {}
+
+    @conversation_metadata_dict.setter
+    def conversation_metadata_dict(self, value):
+        """Serialize metadata from dict to JSON string."""
+        self.conversation_metadata = json.dumps(value)
+
+
+
+class Message(Base):
+    """
+    Represents an individual message in a conversation.
+
+    Attributes
+    ----------
+    id : str
+        Unique identifier for the message (UUID).
+    conversation_id : str
+        ID of the conversation this message belongs to.
+    role : str
+        Role of the message sender (user, assistant, system).
+    content : str
+        Content of the message.
+    created_at : datetime
+        Timestamp when the message was created.
+    tokens : int
+        Number of tokens in the message (for quota tracking).
+    is_hidden : bool
+        Flag indicating if the message should be hidden from UI.
+    references : str
+        JSON string containing document references used for this message.
+    metadata : str
+        JSON string containing additional message metadata.
+    """
+    __tablename__ = "messages"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    conversation_id = Column(String, ForeignKey("conversations.id"), nullable=False)
+    role = Column(String, nullable=False)  # user, assistant, system
+    content = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    tokens = Column(Integer, default=0)  # Track token usage
+    is_hidden = Column(Boolean, default=False)  # For system messages or internal context
+    references = Column(Text, nullable=True)  # JSON string for document references
+    message_metadata = Column(Text, nullable=True)  # JSON string for additional metadata
+
+    # Relationships
+    conversation = relationship("Conversation", back_populates="messages")
+
+    @property
+    def references_list(self):
+        """Deserialize references from JSON string to list."""
+        if self.references:
+            return json.loads(self.references)
+        return []
+
+    @references_list.setter
+    def references_list(self, value):
+        """Serialize references from list to JSON string."""
+        self.references = json.dumps(value)
+
+    @property
+    def metadata_dict(self):
+        """Deserialize metadata from JSON string to dict."""
+        if self.message_metadata:
+            return json.loads(self.message_metadata)
+        return {}
+
+    @metadata_dict.setter
+    def metadata_dict(self, value):
+        """Serialize metadata from dict to JSON string."""
+        self.message_metadata = json.dumps(value)
+
+
+class ConversationContext(Base):
+    """
+    Stores semantic context information for a conversation.
+
+    This model is designed to store embeddings, summaries, or other
+    processed information to maintain context over time.
+
+    Attributes
+    ----------
+    id : str
+        Unique identifier for the context entry (UUID).
+    conversation_id : str
+        ID of the conversation this context belongs to.
+    context_type : str
+        Type of context (embedding, summary, key_points, etc.).
+    content : str
+        Textual content of the context.
+    embedding : Vector
+        Vector embedding of the context for semantic search.
+    created_at : datetime
+        Timestamp when the context was created.
+    updated_at : datetime
+        Timestamp when the context was last updated.
+    priority : int
+        Priority level for this context (higher is more important).
+    metadata : str
+        JSON string containing additional context metadata.
+    """
+    __tablename__ = "conversation_contexts"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    conversation_id = Column(String, ForeignKey("conversations.id"), nullable=False)
+    context_type = Column(String, nullable=False)  # embedding, summary, key_points, etc.
+    content = Column(Text, nullable=True)  # Can be null for pure embedding contexts
+    embedding = Column(Vector(768), nullable=True)  # Vector embedding for semantic search
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    priority = Column(Integer, default=1)  # Higher priority contexts are more important
+    conversation_metadata = Column(Text, nullable=True)  # JSON string for additional metadata
+
+    # Relationships
+    conversation = relationship("Conversation", back_populates="contexts")
+
+    @property
+    def metadata_dict(self):
+        """Deserialize metadata from JSON string to dict."""
+        if self.conversation_metadata:
+            return json.loads(self.conversation_metadata)
+        return {}
+
+    @metadata_dict.setter
+    def metadata_dict(self, value):
+        """Serialize metadata from dict to JSON string."""
+        self.conversation_metadata = json.dumps(value)

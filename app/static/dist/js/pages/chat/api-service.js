@@ -1,101 +1,103 @@
-// API Service for handling backend communication
+// API Service for handling backend communication (jQuery version)
 
-const APIService = {
+export const APIService = {
   // Load available themes
   loadThemes() {
-    return fetch("/api/v1/themes")
+    return $.ajax({
+      url: "/api/themes",
+      method: "GET",
+      dataType: "json",
+    })
       .then((response) => {
-        if (!response.ok) {
-          throw new Error("Network response was not ok");
-        }
-        return response.json();
-      })
-      .then((response) => {
-        if (response.themes && response.themes.length > 0) {
-          const themesContainer = document.getElementById("themesContainer");
-          themesContainer.innerHTML = "";
+        if (response && response.length > 0) {
+          const $themesContainer = $("#themesContainer");
+          $themesContainer.empty();
 
           // Add themes to container
-          response.themes.forEach((theme, index) => {
+          response.forEach((theme, index) => {
             const badgeClass = index === 0 ? "badge-info" : "badge-secondary";
-            themesContainer.insertAdjacentHTML(
-              "beforeend",
-              `
-              <div class="badge ${badgeClass} theme-pill m-1 p-2" data-theme-id="${theme.id}">
-                ${theme.name}
-              </div>
-            `
-            );
+            $themesContainer.append(`
+            <div class="badge ${badgeClass} theme-pill m-1 p-2" data-theme-id="${theme.id}">
+              ${theme.name}
+            </div>
+          `);
           });
         }
         return response.themes;
+      })
+      .catch((error) => {
+        console.error("Error loading themes:", error);
+        throw new Error("Network response was not ok");
       });
   },
 
   // Load chat history
   loadChatHistory() {
-    return fetch("/api/v1/chat/history")
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error("Network response was not ok");
-        }
-        return response.json();
-      })
+    return $.ajax({
+      url: "/api/conversations/history",
+      method: "GET",
+      dataType: "json",
+    })
       .then((response) => {
         if (response.history && response.history.length > 0) {
-          const chatHistoryList = document.getElementById("chatHistoryList");
-          chatHistoryList.innerHTML = "";
+          const $chatHistoryList = $("#chatHistoryList");
+          $chatHistoryList.empty();
 
           // Add history items
           response.history.forEach((chat) => {
             const timeAgo = UIHandlers.formatTimeAgo(new Date(chat.created_at));
-            chatHistoryList.insertAdjacentHTML(
-              "beforeend",
-              `
-              <li class="list-group-item d-flex justify-content-between align-items-center chat-history-item" 
-                  data-id="${chat.id}">
-                <span>${chat.title || "Chat Session"}</span>
-                <span class="badge badge-primary badge-pill">${timeAgo}</span>
-              </li>
-            `
-            );
+            $chatHistoryList.append(`
+            <li class="list-group-item d-flex justify-content-between align-items-center chat-history-item" 
+                data-id="${chat.id}">
+              <span>${chat.title || "Chat Session"}</span>
+              <span class="badge badge-primary badge-pill">${timeAgo}</span>
+            </li>
+          `);
           });
         }
         return response.history;
+      })
+      .catch((error) => {
+        console.error("Error loading chat history:", error);
+        throw new Error("Network response was not ok");
       });
   },
 
   // Get a specific chat
   getChat(chatId) {
-    return fetch(`/api/v1/chat/${chatId}`).then((response) => {
-      if (!response.ok) {
-        throw new Error("Network response was not ok");
-      }
-      return response.json();
+    return $.ajax({
+      url: `/api/v1/chat/${chatId}`,
+      method: "GET",
+      dataType: "json",
+    }).catch((error) => {
+      console.error("Error loading chat:", error);
+      throw new Error("Network response was not ok");
     });
   },
+
+  // Load models
   loadModels() {
-    return fetch("/api/v1/models", {
+    return $.ajax({
+      url: "/api/v1/models",
       method: "GET",
+      dataType: "json",
     })
-      .then((res) => {
-        if (!res.ok) throw new Error("Failed to load models");
-        return res.json();
-      })
-      .then((data) => data.models); // expects { models: [ {id, name}, … ] }
+      .then((data) => data.models)
+      .catch((error) => {
+        console.error("Failed to load models:", error);
+        throw new Error("Failed to load models");
+      });
   },
+
   // Clear chat history
   clearChatHistory() {
-    return fetch("/api/v1/chat/history", {
+    return $.ajax({
+      url: "/api/v1/chat/history",
       method: "DELETE",
-    }).then((response) => {
-      if (!response.ok) {
-        throw new Error("Network response was not ok");
-      }
-      return response.json();
+      dataType: "json",
+    }).catch((error) => {
+      console.error("Error clearing chat history:", error);
+      throw new Error("Network response was not ok");
     });
   },
 };
-
-// Export the module
-window.APIService = APIService;

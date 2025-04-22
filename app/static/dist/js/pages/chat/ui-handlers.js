@@ -1,6 +1,6 @@
 // UI related functionality with jQuery
 
-const UIHandlers = {
+export const UIHandlers = {
   // DOM Element references
   elements: {
     $chatContainer: $("#chatContainer"),
@@ -112,7 +112,8 @@ const UIHandlers = {
   },
 
   scrollToBottom: function () {
-    this.elements.$chatContainer.animate({ scrollTop: this.elements.$chatContainer.prop("scrollHeight") }, 300);
+    // Add safety check to prevent errors
+    $(window).on("resize", this.scrollToBottom.bind(this)); // Bind to preserve context
   },
 
   formatTimeAgo: function (date) {
@@ -195,6 +196,3 @@ $(function () {
     $("head").append(style);
   }
 });
-
-// Export the module
-window.UIHandlers = UIHandlers;
