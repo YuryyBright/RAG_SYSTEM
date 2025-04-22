@@ -4,7 +4,7 @@ from fastapi.responses import HTMLResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.v1.routers.auth import get_current_active_user
-from infrastructure.repositories.repository import get_async_db
+from infrastructure.repositories import get_async_db
 from utils.security import COOKIE_NAME
 
 router = APIRouter()

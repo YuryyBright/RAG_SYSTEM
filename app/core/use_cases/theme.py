@@ -2,7 +2,7 @@
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 
-from infrastructure.repositories.repository.theme_repository import ThemeRepository
+from infrastructure.repositories.theme_repository import ThemeRepository
 from modules.storage.document_store import DocumentStore
 from modules.storage.file_manager import FileManager
 

@@ -56,7 +56,6 @@ class LLMFactory:
         """
         models_dir = Path(settings.MODELS_BASE_DIR)
         models = []
-
         if not models_dir.exists():
             logger.warning(f"Models directory not found: {models_dir}")
             cls._model_registry = {"models": []}
@@ -67,7 +66,7 @@ class LLMFactory:
         # First scan for model files with known extensions
         for ext in [".gguf", ".bin", ".onnx", ".safetensors"]:
             for model_file in models_dir.glob(f"**/*{ext}"):
-                model_name = model_file.stem
+                model_name = model_file.name
                 model_type = ext[1:]  # Remove the dot
 
                 models.append({
@@ -134,10 +133,12 @@ class LLMFactory:
         # Find the model in the registry
         registry = cls.get_model_registry()
         model_info = None
+        model_found = False
 
         for model in registry.get("models", []):
-            if model["name"] == name:
+            if model["name"] == name or model["name"] == name.rstrip(".gguf"):
                 model_info = model
+                model_found = True
                 break
 
         if not model_info:

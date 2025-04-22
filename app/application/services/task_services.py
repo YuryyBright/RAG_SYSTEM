@@ -8,7 +8,7 @@ from fastapi import BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.schemas.task import TaskTypeEnum, TaskStatusEnum
-from infrastructure.repositories.repository.task_repository import TaskRepository
+from infrastructure.repositories.task_repository import TaskRepository
 
 logger = logging.getLogger(__name__)
 

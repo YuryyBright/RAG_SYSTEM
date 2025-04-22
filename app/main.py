@@ -23,7 +23,7 @@ from api.websockets.task_updates import handle_task_websocket
 from app.config import settings
 from app.api.middlewares import setup_middlewares
 from application.services.auth_service import AuthService
-from infrastructure.repositories.repository import get_async_db
+from infrastructure.repositories import get_async_db
 from utils.logger_util import get_logger
 from utils.security import COOKIE_NAME
 

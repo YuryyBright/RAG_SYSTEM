@@ -6,12 +6,9 @@ from domain.entities.document import Document
 
 from domain.interfaces.embedding import EmbeddingInterface
 from domain.interfaces.indexing import IndexInterface
-from app.api.dependencies.dependencies import (
-    get_document_repository,
-    get_embedding_service,
-    get_vector_index
-)
-from infrastructure.repositories.repository.document_repository import DocumentRepository
+from app.api.dependencies.infrastructure_dependencies import get_document_repository
+from app.api.dependencies.ai_dependencies import (get_embedding_service,get_vector_index)
+from infrastructure.repositories.document_repository import DocumentRepository
 
 router = APIRouter()
 

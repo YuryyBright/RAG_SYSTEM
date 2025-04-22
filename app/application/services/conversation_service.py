@@ -1,9 +1,8 @@
 from typing import List, Optional, Dict, Any, Tuple
 from datetime import datetime
 
-from infrastructure.repositories.repository.message_repository import MessageRepository
 from app.infrastructure.database.db_models import Conversation, Message
-from infrastructure.repositories.repository.conversation_repository import ConversationRepository
+from infrastructure.repositories.conversation_repository import ConversationRepository
 from app.modules.llm.factory import LLMFactory
 from domain.interfaces.llm import LLMInterface
 

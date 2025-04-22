@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 
 from application.services.auth_service import AuthService
-from infrastructure.repositories.repository import get_async_db
+from infrastructure.repositories import get_async_db
 from app.infrastructure.database.db_models import User
 from app.utils.logger_util import get_logger
 from app.utils.security import COOKIE_NAME, clear_auth_cookies

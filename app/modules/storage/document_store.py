@@ -8,23 +8,13 @@ from domain.entities.document import Document
 from domain.interfaces.document_store import DocumentStoreInterface
 
 from domain.interfaces.embedding import EmbeddingInterface
-from infrastructure.repositories.repository.document_repository import DocumentRepository
+from infrastructure.repositories.document_repository import DocumentRepository
+from utils.logger_util import get_logger
 
 
 class DocumentStore(DocumentStoreInterface):
     """
     Document store implementation that handles document storage, retrieval, and embedding operations.
-
-    This class provides methods to:
-    - Store documents with their embeddings
-    - Retrieve documents by ID
-    - Search for documents using vector similarity
-    - Delete documents
-
-    Attributes:
-        document_repository: Repository for database operations
-        embedding_service: Service for creating document embeddings
-        storage_path: Path to store processed documents and metadata
     """
 
     def __init__(
@@ -35,22 +25,170 @@ class DocumentStore(DocumentStoreInterface):
     ):
         self.document_repository = document_repository
         self.embedding_service = embedding_service
-        self.storage_path = storage_path
+        self.storage_path = Path(storage_path)  # Ensure it's a Path object
+        self.logger = get_logger(__name__)
 
         # Create storage directory if it doesn't exist
-        os.makedirs(self.storage_path, exist_ok=True)
+        try:
+            os.makedirs(self.storage_path, exist_ok=True)
+        except Exception as e:
+            self.logger.error(f"Failed to create storage directory: {str(e)}", exc_info=True)
 
-    async def save(self, document: Document) -> str:
+    async def semantic_search(
+            self,
+            query_embedding: List[float],
+            limit: int = 5,
+            owner_id: Optional[str] = None,
+            theme_id: Optional[str] = None,
+            threshold: float = 0.7,
+            metadata_filters: Optional[Dict[str, Any]] = None
+    ) -> List[Document]:
         """
-        Store a document with its embedding (Interface method).
+        Perform semantic search using a pre-computed query embedding.
 
         Args:
-            document: Document entity to store
+            query_embedding: The pre-computed query embedding vector
+            limit: Maximum number of results to return
+            owner_id: Optional filter for document owner
+            theme_id: Optional filter for document theme
+            threshold: Minimum similarity score (0-1) for results
+            metadata_filters: Optional dictionary of metadata key-value pairs to filter on
 
         Returns:
-            str: ID of the stored document
+            List[Document]: List of matching Document objects with similarity scores
         """
-        return await self.store_document(document)
+        try:
+            # Search documents in repository
+            results = await self.document_repository.search_similar(
+                embedding=query_embedding,
+                limit=limit * 2,  # Get more than needed to allow for filtering
+                owner_id=owner_id,
+                theme_id=theme_id
+            )
+
+            # Convert to Document entities with similarity scores
+            documents = []
+            for result in results:
+                # Extract similarity score if available in result
+                similarity = getattr(result, 'similarity', None)
+
+                # If similarity not provided by repository, calculate it
+                if similarity is None and result.embedding is not None:
+                    similarity = self._calculate_similarity(query_embedding, result.embedding)
+
+                # Skip results below threshold
+                if similarity is None or similarity < threshold:
+                    continue
+
+                # Create document object
+                document = Document(
+                    id=result.id,
+                    content=result.content,
+                    embedding=result.embedding,
+                    owner_id=result.owner_id,
+                    theme_id=getattr(result, 'theme_id', theme_id),
+                    metadata=self._extract_metadata(result),
+                    created_at=result.created_at.isoformat(),
+                    updated_at=result.updated_at.isoformat()
+                )
+                document.score = similarity  # Add score to document
+
+                # Apply metadata filters if provided
+                if metadata_filters and not self._matches_metadata_filters(document, metadata_filters):
+                    continue
+
+                documents.append(document)
+
+            # Sort by similarity score (highest first)
+            documents.sort(key=lambda x: getattr(x, 'score', 0), reverse=True)
+
+            # Limit results
+            return documents[:limit]
+        except Exception as e:
+            self.logger.error(f"Error in semantic search: {str(e)}", exc_info=True)
+            return []
+
+    def _save_document_to_disk(self, document_id: str, document: Document) -> None:
+        """Save document to disk for faster retrieval."""
+        try:
+            # Construct file path
+            file_path = self.storage_path / document.owner_id / document.theme_id / f"{document_id}.json"
+
+            # Create directory if it doesn't exist
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+
+            # Convert document to serializable dict
+            doc_dict = {
+                "id": document.id,
+                "content": document.content,
+                "owner_id": document.owner_id,
+                "metadata": document.metadata,
+                "created_at": document.created_at.isoformat() if hasattr(document.created_at, 'isoformat') else None,
+                "updated_at": document.updated_at.isoformat() if hasattr(document.updated_at, 'isoformat') else None,
+                "has_embedding": document.embedding is not None
+            }
+
+            # Write JSON file
+            with open(file_path, "w") as f:
+                json.dump(doc_dict, f)
+
+            # Store embedding separately if present
+            if document.embedding is not None:
+                embedding_path = self.storage_path / document.owner_id / document.theme_id / f"{document_id}.embedding.npy"
+                np.save(embedding_path, np.array(document.embedding))
+        except Exception as e:
+            self.logger.error(f"Error saving document to disk: {str(e)}", exc_info=True)
+
+    def _load_document_from_disk(self, document_id: str, owner_id: str, theme_id: str) -> Optional[Document]:
+        """Load document from disk."""
+        try:
+            # Construct file path
+            file_path = self.storage_path / owner_id / theme_id / f"{document_id}.json"
+
+            # Check if file exists
+            if not file_path.exists():
+                return None
+
+            # Load document data
+            with open(file_path, "r") as f:
+                doc_dict = json.load(f)
+
+            # Load embedding if available
+            embedding = None
+            if doc_dict.get("has_embedding", False):
+                embedding_path = self.storage_path / owner_id / theme_id / f"{document_id}.embedding.npy"
+                if embedding_path.exists():
+                    embedding = np.load(embedding_path).tolist()
+
+            # Create Document object
+            document = Document(
+                id=doc_dict["id"],
+                content=doc_dict["content"],
+                owner_id=doc_dict["owner_id"],
+                metadata=doc_dict.get("metadata", {}),
+                embedding=embedding,
+                theme_id=theme_id
+            )
+
+            # Parse dates if present
+            if doc_dict.get("created_at"):
+                try:
+                    from datetime import datetime
+                    document.created_at = datetime.fromisoformat(doc_dict["created_at"])
+                except ValueError:
+                    pass
+
+            if doc_dict.get("updated_at"):
+                try:
+                    from datetime import datetime
+                    document.updated_at = datetime.fromisoformat(doc_dict["updated_at"])
+                except ValueError:
+                    pass
+
+            return document
+        except Exception as e:
+            self.logger.error(f"Error loading document from disk: {str(e)}", exc_info=True)
+            return None
 
     async def store_document(self, document: Document) -> str:
         """
@@ -82,11 +220,8 @@ class DocumentStore(DocumentStoreInterface):
                 document_id=doc_id
             )
 
-
         # Save content to file system for faster retrieval
         self._save_document_to_disk(doc_id, document)
-
-
 
         return doc_id
 
@@ -182,8 +317,8 @@ class DocumentStore(DocumentStoreInterface):
                     embedding=db_doc.embedding,
                     owner_id=db_doc.owner_id,
                     metadata=self._extract_metadata(db_doc),
-                    created_at=db_doc.created_at,
-                    updated_at=db_doc.updated_at
+                    created_at=db_doc.created_at.isoformat(),
+                    updated_at=db_doc.updated_at.isoformat()
                 )
                 documents.append(document)
                 # Save to disk cache for future retrievals
@@ -226,8 +361,8 @@ class DocumentStore(DocumentStoreInterface):
                 embedding=result.embedding,
                 owner_id=result.owner_id,
                 metadata=self._extract_metadata(result),
-                created_at=result.created_at,
-                updated_at=result.updated_at
+                created_at=result.created_at.isoformat(),
+                updated_at=result.updated_at.isoformat()
             )
             documents.append(document)
             # Cache the document for future use
@@ -271,8 +406,8 @@ class DocumentStore(DocumentStoreInterface):
                 embedding=result.embedding,
                 owner_id=result.owner_id,
                 metadata=self._extract_metadata(result),
-                created_at=result.created_at,
-                updated_at=result.updated_at
+                created_at=result.created_at.isoformat(),
+                updated_at=result.updated_at.isoformat()
             )
             documents.append(document)
 
@@ -299,7 +434,8 @@ class DocumentStore(DocumentStoreInterface):
         Args:
             document_id: ID of the document to delete
             owner_id:
-            theme_id
+            theme_id:
+
 
         Returns:
             bool: True if deleted, False if not found
@@ -380,78 +516,6 @@ class DocumentStore(DocumentStoreInterface):
                 # If all else fails, return 0
                 return 0
 
-    def _save_document_to_disk(self, document_id: str, document: Document) -> None:
-        """Save document to disk for faster retrieval."""
-
-        # Construct file path
-        file_path = self.storage_path / document.owner_id / document.theme_id / f"{document.id}.json"
-
-        # Create directory if it doesn't exist
-        file_path.parent.mkdir(parents=True, exist_ok=True)
-
-        # Convert document to serializable dict
-        doc_dict = {
-            "id": document.id,
-            "content": document.content,
-            "owner_id": document.owner_id,
-            "metadata": document.metadata,
-            "created_at": document.created_at.isoformat() if document.created_at else None,
-            "updated_at": document.updated_at.isoformat() if document.updated_at else None,
-            "has_embedding": document.embedding is not None
-        }
-
-        # Write JSON file
-        with open(file_path, "w") as f:
-            json.dump(doc_dict, f)
-
-        # Store embedding separately if present
-        if document.embedding is not None:
-            embedding_path = self.storage_path / document.owner_id / document.theme_id / f"{document.id}.embedding"
-            embedding_path.parent.mkdir(parents=True, exist_ok=True)  # Ensure directory exists
-            with open(embedding_path, "wb") as f:
-                np.save(f, np.array(document.embedding))
-
-    def _load_document_from_disk(self, document_id: str, owner_id: str, theme_id: str) -> Document:
-        """Load document from disk."""
-
-        # Construct file path
-        file_path = Path(self.storage_path) / owner_id / theme_id / f"{document_id}.json"
-
-        # Check if file exists
-        if not file_path.exists():
-            return None
-
-        # Load document data
-        with open(file_path, "r") as f:
-            doc_dict = json.load(f)
-
-        # Load embedding if available
-        embedding = None
-        if doc_dict.get("has_embedding", False):
-            embedding_path = Path(self.storage_path) / owner_id / theme_id / f"{document_id}.embedding"
-            if embedding_path.exists():
-                with open(embedding_path, "rb") as f:
-                    embedding = np.load(f).tolist()
-
-        # Create Document object
-        document = Document(
-            id=doc_dict["id"],
-            content=doc_dict["content"],
-            owner_id=doc_dict["owner_id"],
-            metadata=doc_dict["metadata"],
-            embedding=embedding
-        )
-
-        if doc_dict.get("created_at"):
-            from datetime import datetime
-            document.created_at = datetime.fromisoformat(doc_dict["created_at"])
-
-        if doc_dict.get("updated_at"):
-            from datetime import datetime
-            document.updated_at = datetime.fromisoformat(doc_dict["updated_at"])
-
-        return document
-
     def _delete_document_from_disk(self, document_id: str, owner_id: str, theme_id: str) -> None:
         """Delete document from disk cache."""
         file_path = Path(self.storage_path) / owner_id / theme_id / f"{document_id}.json"
@@ -480,83 +544,7 @@ class DocumentStore(DocumentStoreInterface):
 
         return metadata
 
-    async def semantic_search(
-            self,
-            document_store,
-            query: str,
-            limit: int = 5,
-            owner_id: Optional[str] = None,
-            theme_id: Optional[str] = None,
-            threshold: float = 0.7,
-            metadata_filters: Optional[Dict[str, Any]] = None
-    ) -> List[Dict[str, Any]]:
-        """
-        Perform semantic search against the document store.
 
-        Args:
-            document_store: An instance of DocumentStore
-            query: The search query text
-            limit: Maximum number of results to return
-            owner_id: Optional filter for document owner
-            theme_id: Optional filter for document theme
-            threshold: Minimum similarity score (0-1) for results
-            metadata_filters: Optional dictionary of metadata key-value pairs to filter on
-
-        Returns:
-            List[Dict[str, Any]]: List of result items with document and similarity score
-        """
-        # Generate query embedding
-        query_embedding = await document_store.embedding_service.get_embedding(query)
-
-        # Search documents in repository
-        results = await document_store.document_repository.search_similar(
-            embedding=query_embedding,
-            limit=limit * 2,  # Get more than needed to allow for filtering
-            owner_id=owner_id,
-            theme_id=theme_id
-        )
-
-        # Convert to Document entities with similarity scores
-        documents_with_scores = []
-        for result in results:
-            # Extract similarity score if available in result
-            similarity = getattr(result, 'similarity', None)
-
-            # If similarity not provided by repository, calculate it
-            if similarity is None and result.embedding is not None:
-                similarity = self._calculate_similarity(query_embedding, result.embedding)
-
-            # Skip results below threshold
-            if similarity is None or similarity < threshold:
-                continue
-
-            # Create document object
-            document = Document(
-                id=result.id,
-                content=result.content,
-                embedding=result.embedding,
-                owner_id=result.owner_id,
-                theme_id=getattr(result, 'theme_id', theme_id),
-                metadata=document_store._extract_metadata(result),
-                created_at=result.created_at,
-                updated_at=result.updated_at
-            )
-
-            # Apply metadata filters if provided
-            if metadata_filters and not self._matches_metadata_filters(document, metadata_filters):
-                continue
-
-            documents_with_scores.append({
-                'document': document,
-                'similarity': similarity,
-                'relevance_score': similarity  # Alias for clarity in API responses
-            })
-
-        # Sort by similarity score (highest first)
-        documents_with_scores.sort(key=lambda x: x['similarity'], reverse=True)
-
-        # Limit results
-        return documents_with_scores[:limit]
 
     def _calculate_similarity(self, embedding1: List[float], embedding2: List[float]) -> float:
         """
@@ -610,38 +598,3 @@ class DocumentStore(DocumentStoreInterface):
                 return False
 
         return True
-
-    async def batch_semanticsearch(
-            self,
-            document_store,
-            queries: List[str],
-            limit_per_query: int = 3,
-            owner_id: Optional[str] = None,
-            theme_id: Optional[str] = None
-    ) -> Dict[str, List[Dict[str, Any]]]:
-        """
-        Perform multiple semantic searches in a batch.
-
-        Args:
-            document_store: An instance of DocumentStore
-            queries: List of search query strings
-            limit_per_query: Maximum number of results per query
-            owner_id: Optional filter for document owner
-            theme_id: Optional filter for document theme
-
-        Returns:
-            Dict[str, List[Dict[str, Any]]]: Dictionary mapping queries to their results
-        """
-        results = {}
-
-        for query in queries:
-            query_results = await self.semantic_search(
-                document_store=document_store,
-                query=query,
-                limit=limit_per_query,
-                owner_id=owner_id,
-                theme_id=theme_id
-            )
-            results[query] = query_results
-
-        return results

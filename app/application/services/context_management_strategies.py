@@ -2,11 +2,11 @@ import json
 from typing import List, Optional, Any
 from datetime import datetime
 
-from infrastructure.repositories.repository.message_repository import MessageRepository
+from infrastructure.repositories.message_repository import MessageRepository
 from app.infrastructure.database.db_models import ConversationContext, Message
 from app.modules.llm.base import BaseLLMService
 
-from infrastructure.repositories.repository.conv_cont_repository import ConversationContextRepository
+from infrastructure.repositories.conv_cont_repository import ConversationContextRepository
 
 
 class ConversationSummarizer:
@@ -46,37 +46,40 @@ class ConversationSummarizer:
         Returns:
             The created ConversationContext or None on failure.
         """
-        messages: List[Message] = await self.message_repo.get_by_conversation_id(
-            conversation_id, include_hidden=False
-        )[-message_count:]
-
-        if not messages:
-            return None
-
-        message_text = "\n".join(f"{msg.role}: {msg.content}" for msg in messages)
-        prompt = (
-            "Summarize this conversation segment concisely while preserving key information:\n\n"
-            f"{message_text}\n\nSummary:"
-        )
-
         try:
+            messages: List[Message] = await self.message_repo.get_by_conversation_id(
+                conversation_id, include_hidden=False
+            )[-message_count:]
+
+            if not messages:
+                return None
+
+            message_text = "\n".join(f"{msg.role}: {msg.content}" for msg in messages)
+            prompt = (
+                "Summarize this conversation segment concisely while preserving key information:\n\n"
+                f"{message_text}\n\nSummary:"
+            )
+
             summary_text = await self.llm_service.generate_text(prompt)
+
+            # Serialize only JSON-compatible data
+            metadata = {
+                "message_ids": [str(msg.id) for msg in messages],  # Ensure IDs are strings
+                "message_count": len(messages),
+                "start_time": messages[0].created_at.isoformat() if messages else None,
+                "end_time": messages[-1].created_at.isoformat() if messages else None,
+            }
+
             context = ConversationContext(
                 conversation_id=conversation_id,
                 context_type="summary",
                 content=summary_text,
                 priority=summary_priority,
-                metadata=json.dumps({
-                    "message_ids": [msg.id for msg in messages],
-                    "message_count": len(messages),
-                    "start_time": messages[0].created_at.isoformat(),
-                    "end_time": messages[-1].created_at.isoformat(),
-                }),
+                metadata=json.dumps(metadata),
             )
             return await self.context_repo.create(context)
         except Exception as e:
-            # Log or handle error as needed
-            print(f"Error creating summary: {e}")
+            logging.error(f"Error creating summary: {str(e)}", exc_info=True)
             return None
 
     async def create_progressive_summary(
@@ -92,51 +95,42 @@ class ConversationSummarizer:
         Returns:
             The new consolidated ConversationContext or None.
         """
-        summaries = await self.context_repo.get_by_conversation_id(
-            conversation_id=conversation_id,
-            context_type="summary",
-            limit=3,
-            order_by_priority=True,
-        )
-
-        if not summaries or len(summaries) < 2:
-            return None
-
-        combined_text = "\n\n".join(s.content for s in summaries)
-        prompt = (
-            "Create a consolidated summary from these individual conversation summaries:\n\n"
-            f"{combined_text}\n\nConsolidated Summary:"
-        )
-
         try:
+            summaries = await self.context_repo.get_by_conversation_id(
+                conversation_id=conversation_id,
+                context_type="summary",
+                limit=3,
+                order_by_priority=True,
+            )
+
+            if not summaries or len(summaries) < 2:
+                return None
+
+            combined_text = "\n\n".join(s.content for s in summaries)
+            prompt = (
+                "Create a consolidated summary from these individual conversation summaries:\n\n"
+                f"{combined_text}\n\nConsolidated Summary:"
+            )
+
             prog_text = await self.llm_service.generate_text(prompt)
+
+            # Use consistent datetime format
+            metadata = {
+                "source_summary_ids": [str(s.id) for s in summaries],  # Ensure IDs are strings
+                "created_at": datetime.now().isoformat(),
+            }
+
             context = ConversationContext(
                 conversation_id=conversation_id,
                 context_type="progressive_summary",
                 content=prog_text,
                 priority=15,
-                metadata=json.dumps({
-                    "source_summary_ids": [s.id for s in summaries],
-                    "created_at": datetime.now().isoformat(),
-                }),
+                metadata=json.dumps(metadata),
             )
             return await self.context_repo.create(context)
         except Exception as e:
-            print(f"Error creating progressive summary: {e}")
+            logger.error(f"Error creating progressive summary: {str(e)}", exc_info=True)
             return None
-
-    async def extra_functionality(
-            self,
-            conversation_id: str,
-            **kwargs: Any,
-    ) -> Any:
-        """
-        Placeholder for additional summarization extensions (e.g., notifications, metrics).
-
-        Must be implemented by subclasses or via monkey-patching.
-        """
-        raise NotImplementedError("`extra_functionality` is not implemented.")
-
 
 class KeyPointsExtractor:
     """
@@ -243,26 +237,43 @@ class SlidingWindowManager:
             max_contexts: Maximum contexts to keep.
             min_high_priority: Threshold for high-priority contexts.
         """
-        contexts = await self.context_repo.get_by_conversation_id(conversation_id)
-        if len(contexts) <= max_contexts:
-            return
+        try:
+            contexts = await self.context_repo.get_by_conversation_id(conversation_id)
+            if len(contexts) <= max_contexts:
+                return
 
-        high = [c for c in contexts if c.priority >= min_high_priority]
-        low = [c for c in contexts if c.priority < min_high_priority]
-        to_remove = len(contexts) - max_contexts
+            high = [c for c in contexts if c.priority >= min_high_priority]
+            low = [c for c in contexts if c.priority < min_high_priority]
+            to_remove = len(contexts) - max_contexts
 
-        if len(low) >= to_remove:
-            low.sort(key=lambda c: c.created_at)
-            for c in low[:to_remove]:
-                await self.context_repo.delete(c.id)
-        else:
-            for c in low:
-                await self.context_repo.delete(c.id)
-                to_remove -= 1
-            if to_remove > 0:
-                high.sort(key=lambda c: c.created_at)
-                for c in high[:to_remove]:
-                    await self.context_repo.delete(c.id)
+            # Sort by both priority (ascending) and created_at (ascending)
+            # This ensures consistent removal order
+            low.sort(key=lambda c: (c.priority, c.created_at))
+
+            # Track deletion results
+            deletion_results = []
+
+            if len(low) >= to_remove:
+                for c in low[:to_remove]:
+                    result = await self.context_repo.delete(c.id)
+                    deletion_results.append(result)
+            else:
+                for c in low:
+                    result = await self.context_repo.delete(c.id)
+                    deletion_results.append(result)
+                    to_remove -= 1
+                if to_remove > 0:
+                    high.sort(key=lambda c: (c.priority, c.created_at))
+                    for c in high[:to_remove]:
+                        result = await self.context_repo.delete(c.id)
+                        deletion_results.append(result)
+
+            # Check if any deletions failed
+            if False in deletion_results:
+                logger.warning(f"Some context deletions failed for conversation {conversation_id}")
+
+        except Exception as e:
+            logger.error(f"Error maintaining context window: {str(e)}", exc_info=True)
 
     async def extra_functionality(
             self,

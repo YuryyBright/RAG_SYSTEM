@@ -16,11 +16,11 @@ from app.api.schemas.user_api import (
 from app.infrastructure.database.db_models import User
 # TODO IT later
 # ApiKey, UserNotificationSettings)
-from infrastructure.repositories.repository.user_repository import UserRepository
-from infrastructure.repositories.repository.activity_repository import ActivityRepository
-from infrastructure.repositories.repository.token_repository import TokenRepository
+from infrastructure.repositories.user_repository import UserRepository
+from infrastructure.repositories.activity_repository import ActivityRepository
+from infrastructure.repositories.token_repository import TokenRepository
 from app.utils.security import verify_password, get_password_hash, generate_api_key
-from infrastructure.repositories.repository.session_repository import SessionRepository
+from infrastructure.repositories.session_repository import SessionRepository
 from utils.logger_util import get_logger
 
 logger = get_logger(__name__)

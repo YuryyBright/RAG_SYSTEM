@@ -9,7 +9,7 @@ from sqlalchemy.orm import sessionmaker
 from starlette.websockets import WebSocketState
 
 from api.dependencies.task_dependencies import get_task_repository
-from infrastructure.repositories.repository.task_repository import TaskRepository
+from infrastructure.repositories.task_repository import TaskRepository
 from config import settings
 from application.services.auth_service import AuthService
 from utils.security import COOKIE_NAME

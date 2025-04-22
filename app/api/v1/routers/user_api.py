@@ -14,7 +14,7 @@ from app.api.schemas.user_api import (
     ProfileUpdate, PasswordChange, AccountAction, SessionInfo, NotificationSettings
 )
 from app.infrastructure.database.db_models import User
-from infrastructure.repositories.repository import get_async_db
+from infrastructure.repositories import get_async_db
 from app.api.middleware_auth import get_current_active_user, get_session_id_from_cookie
 from utils.logger_util import get_logger
 

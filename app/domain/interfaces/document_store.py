@@ -1,7 +1,4 @@
 # core/interfaces/document_store.py
-from abc import ABC, abstractmethod
-from typing import List, Dict, Any, Optional
-from domain.entities.document import Document
 
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Optional
@@ -28,7 +25,7 @@ class DocumentStoreInterface(ABC):
         pass
 
     @abstractmethod
-    async def delete_document(self, document_id: str) -> bool:
+    async def delete_document(self, document_id: str, owner_id: str, theme_id: str) -> bool:
         pass
 
     @abstractmethod

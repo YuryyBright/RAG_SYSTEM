@@ -15,6 +15,7 @@ from fastapi import (
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.dependencies.use_case_dependencies import get_theme_use_case
 from api.middleware_auth import get_current_active_user
 # Schemas for creating and updating tasks/logs
 from api.schemas.task import (
@@ -24,16 +25,12 @@ from api.schemas.task import (
     TaskStatusEnum,
     TaskResponse
 )
+from infrastructure.repositories import get_async_db
 
 # Repository for Task objects
-from infrastructure.repositories.repository.task_repository import TaskRepository
+from infrastructure.repositories.task_repository import TaskRepository
 from api.dependencies.task_dependencies import get_task_repository
 # Example dependencies for injecting DB sessions, repositories, etc.
-from app.api.dependencies.dependencies import (
-    get_async_db,
-    get_theme_use_case,
-    # get_processing_service    # If your system uses a separate processing service
-)
 
 # A logger utility for debugging
 from app.utils.logger_util import get_logger

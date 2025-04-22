@@ -12,8 +12,12 @@
 │   │   ├─ dependencies
 │   │   │   ├─ __init__.py
 │   │   │   ├─ __pycache__
+│   │   │   ├─ ai_dependencies.py
 │   │   │   ├─ dependencies.py
-│   │   │   └─ task_dependencies.py
+│   │   │   ├─ document_dependency.py
+│   │   │   ├─ infrastructure_dependencies.py
+│   │   │   ├─ task_dependencies.py
+│   │   │   └─ use_case_dependencies.py
 │   │   ├─ middleware_auth.py
 │   │   ├─ middlewares.py
 │   │   ├─ schemas
@@ -133,6 +137,7 @@
 │   │   │   └─ db_models.py
 │   │   ├─ files
 │   │   │   ├─ __init__.py
+│   │   │   ├─ __pycache__
 │   │   │   └─ readers
 │   │   │       ├─ __init__.py
 │   │   │       ├─ __pycache__
@@ -163,20 +168,17 @@
 │   │   └─ repositories
 │   │       ├─ __init__.py
 │   │       ├─ __pycache__
-│   │       └─ repository
-│   │           ├─ __init__.py
-│   │           ├─ __pycache__
-│   │           ├─ activity_repository.py
-│   │           ├─ conv_cont_repository.py
-│   │           ├─ conversation_repository.py
-│   │           ├─ document_repository.py
-│   │           ├─ file_repository.py
-│   │           ├─ message_repository.py
-│   │           ├─ session_repository.py
-│   │           ├─ task_repository.py
-│   │           ├─ theme_repository.py
-│   │           ├─ token_repository.py
-│   │           └─ user_repository.py
+│   │       ├─ activity_repository.py
+│   │       ├─ conv_cont_repository.py
+│   │       ├─ conversation_repository.py
+│   │       ├─ document_repository.py
+│   │       ├─ file_repository.py
+│   │       ├─ message_repository.py
+│   │       ├─ session_repository.py
+│   │       ├─ task_repository.py
+│   │       ├─ theme_repository.py
+│   │       ├─ token_repository.py
+│   │       └─ user_repository.py
 │   ├─ main.py
 │   ├─ models
 │   ├─ modules

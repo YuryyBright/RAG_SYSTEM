@@ -2,16 +2,17 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Path
 from sqlalchemy.orm import Session
 
+from api.dependencies.ai_dependencies import get_conversation_service, get_context_service, get_rag_context_retriever, \
+    get_llm_service
 from api.middleware_auth import get_current_active_user
 from app.api.schemas.conversation import (
     ConversationCreate, ConversationUpdate, ConversationResponse,
-    ConversationDetailResponse, MessageCreate, MessageResponse, ConversationContextResponse, RerankingConfig
+    ConversationDetailResponse, MessageCreate, MessageResponse, ConversationContextResponse, RerankingConfig, ModelInfo
 )
 
-from app.api.dependencies.dependencies import get_conversation_service, get_context_service, get_rag_context_retriever
 from application.services.context_management_service import ContextManagementService
 from application.services.conversation_service import ConversationService
-from infrastructure.repositories.repository import get_async_db
+from infrastructure.repositories import get_async_db
 
 router = APIRouter()
 
@@ -41,11 +42,29 @@ async def list_conversations(
         conversation_service: ConversationService = Depends(get_conversation_service)
 ):
     """Get all conversations for the current user."""
-    return conversation_service.get_user_conversations(
+    return await conversation_service.get_user_conversations(
         user_id=current_user.id,
         active_only=active_only
     )
+@router.get("/models", summary="List available LLM models", response_model=List[ModelInfo])
+async def list_available_models(
+    current_user=Depends(get_current_active_user),
+    llm_services = Depends(get_llm_service)
+) -> List[ModelInfo]:
+    models = llm_services.list_available_models()
+    model_infos = []
 
+    for idx, model in enumerate(models):
+        model_info = ModelInfo(
+            id=str(idx),  # Generate a dummy ID (you can improve this later)
+            name=model["name"],
+            provider=model.get("type", "unknown"),  # map 'type' as 'provider'
+            file_path=model["file_path"],
+            size=model["size"]
+        )
+        model_infos.append(model_info)
+
+    return model_infos
 
 @router.get("/{conversation_id}", response_model=ConversationDetailResponse)
 async def get_conversation(
@@ -270,21 +289,27 @@ async def get_conversation_context(
     context_data = await rag_context_retriever.get_context_for_query(conversation_id, query=query)
     return context_data
 
-@router.get("/history", response_model=List[ConversationResponse])
-async def get_user_chat_history(
-        active_only: bool = Query(False, description="Filter only active conversations"),
-        limit: Optional[int] = Query(None, description="Maximum number of conversations to return"),
-        offset: Optional[int] = Query(None, description="Number of conversations to skip"),
-        current_user=Depends(get_current_active_user),
-        conversation_service: ConversationService = Depends(get_conversation_service)
-):
-    """
-    Get conversation history for the current user (optionally active-only).
-    """
-    conversations = await conversation_service.get_user_conversations(
-        user_id=current_user.id,
-        active_only=active_only,
-        limit=limit,
-        offset=offset
-    )
-    return conversations
+
+# @router.get("/history", response_model=List[ConversationResponse])
+# async def get_user_chat_history(
+#     active_only: bool = Query(False, description="Filter only active conversations"),
+#     limit: Optional[int] = Query(None, description="Maximum number of conversations to return"),
+#     offset: Optional[int] = Query(None, description="Number of conversations to skip"),
+#     current_user=Depends(get_current_active_user),
+#     conversation_service: ConversationService = Depends(get_conversation_service)
+# ):
+#     """
+#     Get conversation history for the current user (optionally active-only).
+#     """
+#     conversations = await conversation_service.get_user_conversations(
+#         user_id=current_user.id,
+#         active_only=active_only,
+#         limit=limit,
+#         offset=offset
+#     )
+#
+#     # Explicitly handle empty list — DO NOT raise 404
+#     if conversations is None:
+#         return []
+#
+#     return conversations

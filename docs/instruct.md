@@ -12,29 +12,29 @@
                 +----------------------------+-----------------------------+
                 |                                                          |
       +--------------------+                                   +--------------------+
-      | Application Services|                                   | Authentication     |
-      | (Chunking, RAG Logic,|                                  | Services (JWT,     |
-      | Conversations, Tasks|                                   | Security Middlewares|
+      | Application Services |                                 | Authentication       |
+      | (Chunking, RAG Logic,|                                 | Services (JWT,       |
+      | Conversations, Tasks |                                 | Security Middlewares |
       +--------------------+                                   +--------------------+
                 |                                                          |
                 v                                                          v
-+---------------------------+                              +----------------------------+
-| Domain Entities & UseCases|                              |    Redis Cache (Sessions)  |
-| (Documents, Embeddings,   |                              +----------------------------+
-| Queries, Themes, Files)   |
-+---------------------------+
+    +---------------------------+                              +----------------------------+
+    | Domain Entities & UseCases|                              |    Redis Cache (Sessions)  |
+    | (Documents, Embeddings,   |                              +----------------------------+
+    | Queries, Themes, Files)   |
+    +---------------------------+
                 |
                 v
-+-------------------------------------------+
-| Adapters / Ports                          |
-| (Embeddings, LLMs, Rerankers, Indexers)   |
-+-------------------------------------------+
-                |
-                v
-+--------------------------------------------------+
-| Infrastructure Layer                             |
-| (PostgreSQL, FAISS/Chroma, Huggingface, Redis)   |
-+--------------------------------------------------+
+    +-------------------------------------------+
+    | Adapters / Ports                          |
+    | (Embeddings, LLMs, Rerankers, Indexers)   |
+    +-------------------------------------------+
+                    |
+                    v
+    +--------------------------------------------------+
+    | Infrastructure Layer                             |
+    | (PostgreSQL, FAISS/Chroma, Huggingface, Redis)   |
+    +--------------------------------------------------+
 
 
 
