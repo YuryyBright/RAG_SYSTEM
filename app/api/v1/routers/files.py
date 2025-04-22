@@ -8,9 +8,9 @@ from typing import List, Optional, Union
 import os
 
 from api.middleware_auth import get_current_active_user
-from app.infrastructure.database.repository import get_async_db
+from infrastructure.repositories.repository import get_async_db
 from app.infrastructure.database.db_models import User, File as FileModel
-from app.adapters.storage.file_manager import FileManager
+from app.modules.storage.file_manager import FileManager
 from app.api.schemas.files import FileResponse as FileResponseSchema
 from api.schemas.files import (
     FileProcessingRequest,
@@ -22,8 +22,8 @@ from api.schemas.files import (
 from app.core.use_cases.file_processing import FileProcessingUseCase
 from app.api.dependencies.dependencies import file_processing_use_case, get_task_manager
 from config import settings
-from core.services.task_services import TaskManager
-from infrastructure.database.repository.file_repository import FileRepository
+from application.services.task_services import TaskManager
+from infrastructure.repositories.repository.file_repository import FileRepository
 
 router = APIRouter()
 file_manager = FileManager()

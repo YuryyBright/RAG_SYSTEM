@@ -1,17 +1,17 @@
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, Path, Body
+from fastapi import APIRouter, Depends, HTTPException, Query, Path
 from sqlalchemy.orm import Session
 
 from api.middleware_auth import get_current_active_user
 from app.api.schemas.conversation import (
     ConversationCreate, ConversationUpdate, ConversationResponse,
-    ConversationDetailResponse, MessageCreate, MessageResponse, ConversationContextResponse
+    ConversationDetailResponse, MessageCreate, MessageResponse, ConversationContextResponse, RerankingConfig
 )
 
 from app.api.dependencies.dependencies import get_conversation_service, get_context_service, get_rag_context_retriever
-from core.services.context_management_service import ContextManagementService
-from core.services.conversation_service import ConversationService
-from infrastructure.database.repository import get_async_db
+from application.services.context_management_service import ContextManagementService
+from application.services.conversation_service import ConversationService
+from infrastructure.repositories.repository import get_async_db
 
 router = APIRouter()
 
@@ -122,6 +122,37 @@ async def delete_conversation(
         raise HTTPException(status_code=500, detail="Failed to delete conversation")
 
 
+@router.post("/{conversation_id}/reranking-config", response_model=ConversationResponse)
+async def update_reranking_config(
+        reranking_config: RerankingConfig,
+        conversation_id: str = Path(..., description="The ID of the conversation"),
+        db: Session = Depends(get_async_db),
+        current_user=Depends(get_current_active_user),
+        conversation_service: ConversationService = Depends(get_conversation_service)
+):
+    """Update reranking configuration for a conversation."""
+    # Check authorization
+    conversation = await conversation_service.get_conversation(conversation_id)
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    if conversation.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to update this conversation")
+
+    # Update metadata with reranking config
+    metadata = conversation.metadata or {}
+    metadata["reranking"] = {
+        "enabled": reranking_config.enabled,
+        "method": reranking_config.method,
+        "top_k": reranking_config.top_k
+    }
+
+    # Update conversation with new metadata
+    updated_conversation = await conversation_service.update_conversation(
+        conversation_id=conversation_id,
+        metadata=metadata
+    )
+
+    return updated_conversation
 @router.post("/{conversation_id}/messages", response_model=MessageResponse)
 async def add_message(
         message: MessageCreate,
@@ -244,7 +275,6 @@ async def get_user_chat_history(
         active_only: bool = Query(False, description="Filter only active conversations"),
         limit: Optional[int] = Query(None, description="Maximum number of conversations to return"),
         offset: Optional[int] = Query(None, description="Number of conversations to skip"),
-        db: Session = Depends(get_async_db),
         current_user=Depends(get_current_active_user),
         conversation_service: ConversationService = Depends(get_conversation_service)
 ):

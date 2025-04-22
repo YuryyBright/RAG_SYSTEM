@@ -1,10 +1,9 @@
 import asyncio
 import os
 import random
-import string
 from pathlib import Path
 from app.infrastructure.loaders.file_processor import FileProcessor
-from infrastructure.database.repository.file_repository import FileRepository
+from infrastructure.repositories.repository import FileRepository
 
 
 class DummyFileRepository(FileRepository):

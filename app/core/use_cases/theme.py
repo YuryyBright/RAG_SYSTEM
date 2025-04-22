@@ -2,12 +2,13 @@
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 
-from adapters.storage.document_store import DocumentStore
-from adapters.storage.file_manager import FileManager
-from app.core.entities.theme import Theme
-from app.core.entities.document import Document
-from infrastructure.database.db_models import File
-from infrastructure.database.repository.theme_repository import ThemeRepository
+from infrastructure.repositories.repository.theme_repository import ThemeRepository
+from modules.storage.document_store import DocumentStore
+from modules.storage.file_manager import FileManager
+
+from domain.entities.document import Document
+from infrastructure.database.db_models import File, Theme
+
 from utils.logger_util import get_logger
 
 logger = get_logger(__name__)

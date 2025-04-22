@@ -14,9 +14,9 @@ from app.api.schemas.theme import (
 
 from app.api.middleware_auth import get_current_active_user
 from app.core.use_cases.theme import ThemeUseCase
-from app.core.interfaces.document_store import DocumentStoreInterface
+from domain.interfaces.document_store import DocumentStoreInterface
 from app.api.dependencies.dependencies import get_document_store
-from core.entities.user import User
+from domain.entities.user import User
 
 router = APIRouter()
 
@@ -272,7 +272,7 @@ async def add_document_to_theme(
             )
 
         # Check if document exists and user has access to it
-        document = await document_store.get_document(document_data.document_id)
+        document = await document_store.get_document(document_data.document_id, user.id, theme_id)
         if not document:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,

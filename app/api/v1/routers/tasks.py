@@ -26,7 +26,7 @@ from api.schemas.task import (
 )
 
 # Repository for Task objects
-from app.infrastructure.database.repository.task_repository import TaskRepository
+from infrastructure.repositories.repository.task_repository import TaskRepository
 from api.dependencies.task_dependencies import get_task_repository
 # Example dependencies for injecting DB sessions, repositories, etc.
 from app.api.dependencies.dependencies import (
@@ -37,7 +37,7 @@ from app.api.dependencies.dependencies import (
 
 # A logger utility for debugging
 from app.utils.logger_util import get_logger
-from core.services.task_services import TaskManager
+from application.services.task_services import TaskManager
 
 logger = get_logger(__name__)
 router = APIRouter()

@@ -1,6 +1,5 @@
 import argparse
 import asyncio
-import logging
 from getpass import getpass
 from typing import Optional
 
@@ -10,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from passlib.context import CryptContext
 
 from app.infrastructure.database.db_models import User
-from app.infrastructure.database.repository import AsyncSessionLocal
+from infrastructure.repositories.repository import AsyncSessionLocal
 from app.utils.logger_util import get_logger
 
 # Configure logger

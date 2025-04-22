@@ -55,6 +55,10 @@ class ConversationResponse(BaseModel):
     class Config:
         orm_mode = True
 
+class RerankingConfig(BaseModel):
+    enabled: bool = True
+    method: str = "cross-encoder"  # Options: "cross-encoder", "bm25"
+    top_k: int = 5  # Number of results to keep after reranking
 
 class ConversationDetailResponse(ConversationResponse):
     messages: List[MessageResponse] = []

@@ -1,59 +1,11 @@
 ├─ LICENSE
 ├─ README.md
 ├─ __pycache__
-├─ alembic/
+├─ alembic
 ├─ alembic.ini
 ├─ app
 │   ├─ __init__.py
 │   ├─ __pycache__
-│   ├─ adapters
-│   │   ├─ __init__.py
-│   │   ├─ __pycache__
-│   │   ├─ analytics
-│   │   │   ├─ __init__.py
-│   │   │   └─ clickhouse_analytics.py
-│   │   ├─ auth
-│   │   │   ├─ __init__.py
-│   │   │   ├─ __pycache__
-│   │   │   └─ security.py
-│   │   ├─ embeding
-│   │   │   ├─ __init__.py
-│   │   │   ├─ __pycache__
-│   │   │   ├─ cached_embedding.py
-│   │   │   ├─ embedding_factory.py
-│   │   │   ├─ instructor.py
-│   │   │   ├─ open_ai.py
-│   │   │   └─ sentence_transformer.py
-│   │   ├─ feedback
-│   │   │   ├─ __init__.py
-│   │   │   └─ feedback_collector.py
-│   │   ├─ indexing
-│   │   │   ├─ __init__.py
-│   │   │   ├─ __pycache__
-│   │   │   ├─ chroma_index.py
-│   │   │   ├─ faiss_hnsw.py
-│   │   │   └─ milvus.py
-│   │   ├─ llm
-│   │   │   ├─ __init__.py
-│   │   │   ├─ __pycache__
-│   │   │   ├─ base_llm_service.py
-│   │   │   ├─ factory.py
-│   │   │   ├─ mistral.py
-│   │   │   └─ open_ai.py
-│   │   ├─ reranking
-│   │   │   ├─ __init__.py
-│   │   │   ├─ __pycache__
-│   │   │   ├─ bm25_reranker.py
-│   │   │   └─ cross_encoder.py
-│   │   ├─ storage
-│   │   │   ├─ __init__.py
-│   │   │   ├─ __pycache__
-│   │   │   ├─ document_store.py
-│   │   │   └─ file_manager.py
-│   │   └─ user
-│   │       ├─ __init__.py
-│   │       ├─ __pycache__
-│   │       └─ services.py
 │   ├─ api
 │   │   ├─ __init__.py
 │   │   ├─ __pycache__
@@ -90,7 +42,6 @@
 │   │   │       ├─ documents.py
 │   │   │       ├─ files.py
 │   │   │       ├─ pages.py
-│   │   │       ├─ queries.py
 │   │   │       ├─ task_pages.py
 │   │   │       ├─ tasks.py
 │   │   │       ├─ theme.py
@@ -101,46 +52,27 @@
 │   │       ├─ chat.py
 │   │       ├─ notifications.py
 │   │       └─ task_updates.py
+│   ├─ application
+│   │   ├─ __init__.py
+│   │   ├─ __pycache__
+│   │   └─ services
+│   │       ├─ __init__.py
+│   │       ├─ __pycache__
+│   │       ├─ auth_service.py
+│   │       ├─ base_embedding_service.py
+│   │       ├─ chunking_service.py
+│   │       ├─ context_management_service.py
+│   │       ├─ context_management_strategies.py
+│   │       ├─ conversation_service.py
+│   │       ├─ llm_service.py
+│   │       ├─ rag_context_retriever.py
+│   │       ├─ task_services.py
+│   │       ├─ telemetry.py
+│   │       └─ vector_index_services.py
 │   ├─ config.py
 │   ├─ core
 │   │   ├─ __init__.py
 │   │   ├─ __pycache__
-│   │   ├─ entities
-│   │   │   ├─ __init__.py
-│   │   │   ├─ __pycache__
-│   │   │   ├─ document.py
-│   │   │   ├─ embedding.py
-│   │   │   ├─ processed_file.py
-│   │   │   ├─ query.py
-│   │   │   ├─ theme.py
-│   │   │   └─ user.py
-│   │   ├─ interfaces
-│   │   │   ├─ __init__.py
-│   │   │   ├─ __pycache__
-│   │   │   ├─ analytics.py
-│   │   │   ├─ auth.py
-│   │   │   ├─ base_embedding_service.py
-│   │   │   ├─ chuncking.py
-│   │   │   ├─ document_store.py
-│   │   │   ├─ embedding.py
-│   │   │   ├─ indexing.py
-│   │   │   ├─ llm.py
-│   │   │   ├─ reranking.py
-│   │   │   ├─ theme_repository.py
-│   │   │   └─ vector_index.py
-│   │   ├─ services
-│   │   │   ├─ __init__.py
-│   │   │   ├─ __pycache__
-│   │   │   ├─ auth_service.py
-│   │   │   ├─ chunking_service.py
-│   │   │   ├─ context_management_service.py
-│   │   │   ├─ context_management_strategies.py
-│   │   │   ├─ converstation_services.py
-│   │   │   ├─ demo_chunking.py
-│   │   │   ├─ rag_context_retriever.py
-│   │   │   ├─ task_services.py
-│   │   │   ├─ telemetry.py
-│   │   │   └─ vector_index_services.py
 │   │   ├─ templates
 │   │   │   ├─ __init__.py
 │   │   │   ├─ __pycache__
@@ -155,6 +87,31 @@
 │   ├─ docker
 │   │   ├─ Dockerfile
 │   │   └─ docker-compose.yml
+│   ├─ domain
+│   │   ├─ __init__.py
+│   │   ├─ __pycache__
+│   │   ├─ entities
+│   │   │   ├─ __init__.py
+│   │   │   ├─ __pycache__
+│   │   │   ├─ document.py
+│   │   │   ├─ processed_file.py
+│   │   │   ├─ query.py
+│   │   │   ├─ task.py
+│   │   │   ├─ theme.py
+│   │   │   └─ user.py
+│   │   └─ interfaces
+│   │       ├─ __init__.py
+│   │       ├─ __pycache__
+│   │       ├─ analytics.py
+│   │       ├─ auth.py
+│   │       ├─ chuncking.py
+│   │       ├─ document_store.py
+│   │       ├─ embedding.py
+│   │       ├─ indexing.py
+│   │       ├─ llm.py
+│   │       ├─ reranking.py
+│   │       ├─ theme_repository.py
+│   │       └─ vector_index.py
 │   ├─ exports
 │   ├─ infrastructure
 │   │   ├─ __init__.py
@@ -173,52 +130,108 @@
 │   │   ├─ database
 │   │   │   ├─ __init__.py
 │   │   │   ├─ __pycache__
-│   │   │   ├─ db_models.py
-│   │   │   └─ repository
+│   │   │   └─ db_models.py
+│   │   ├─ files
+│   │   │   ├─ __init__.py
+│   │   │   └─ readers
 │   │   │       ├─ __init__.py
 │   │   │       ├─ __pycache__
-│   │   │       ├─ activity_repository.py
-│   │   │       ├─ conv_cont_repository.py
-│   │   │       ├─ converstation_repository.py
-│   │   │       ├─ document_repository.py
-│   │   │       ├─ file_repository.py
-│   │   │       ├─ message_repository.py
-│   │   │       ├─ session_repository.py
-│   │   │       ├─ task_repository.py
-│   │   │       ├─ theme_repository.py
-│   │   │       ├─ token_repository.py
-│   │   │       └─ user_repository.py
+│   │   │       ├─ base_reader.py
+│   │   │       ├─ csv_reader.py
+│   │   │       ├─ docx_reader.py
+│   │   │       ├─ html_reader.py
+│   │   │       ├─ json_reader.py
+│   │   │       ├─ pdf_reader.py
+│   │   │       ├─ pptx_reader.py
+│   │   │       ├─ reader_factory.py
+│   │   │       ├─ rtf_reader.py
+│   │   │       ├─ txt_reader.py
+│   │   │       ├─ xlsx_reader.py
+│   │   │       ├─ xml_reader.py
+│   │   │       └─ yaml_reader.py
 │   │   ├─ loaders
 │   │   │   ├─ __init__.py
 │   │   │   ├─ __pycache__
 │   │   │   ├─ draft_loader.py
 │   │   │   ├─ file_processor.py
-│   │   │   ├─ readers
-│   │   │   │   ├─ __init__.py
-│   │   │   │   ├─ __pycache__
-│   │   │   │   ├─ base_reader.py
-│   │   │   │   ├─ csv_reader.py
-│   │   │   │   ├─ docx_reader.py
-│   │   │   │   ├─ html_reader.py
-│   │   │   │   ├─ json_reader.py
-│   │   │   │   ├─ pdf_reader.py
-│   │   │   │   ├─ pptx_reader.py
-│   │   │   │   ├─ reader_factory.py
-│   │   │   │   ├─ rtf_reader.py
-│   │   │   │   ├─ txt_reader.py
-│   │   │   │   ├─ xlsx_reader.py
-│   │   │   │   ├─ xml_reader.py
-│   │   │   │   └─ yaml_reader.py
 │   │   │   └─ test_files_hardmode
-│   │   └─ logging
+│   │   ├─ logging
+│   │   │   ├─ __init__.py
+│   │   │   ├─ __pycache__
+│   │   │   ├─ formatters.py
+│   │   │   └─ logger.py
+│   │   └─ repositories
 │   │       ├─ __init__.py
 │   │       ├─ __pycache__
-│   │       ├─ formatters.py
-│   │       └─ logger.py
+│   │       └─ repository
+│   │           ├─ __init__.py
+│   │           ├─ __pycache__
+│   │           ├─ activity_repository.py
+│   │           ├─ conv_cont_repository.py
+│   │           ├─ conversation_repository.py
+│   │           ├─ document_repository.py
+│   │           ├─ file_repository.py
+│   │           ├─ message_repository.py
+│   │           ├─ session_repository.py
+│   │           ├─ task_repository.py
+│   │           ├─ theme_repository.py
+│   │           ├─ token_repository.py
+│   │           └─ user_repository.py
 │   ├─ main.py
 │   ├─ models
+│   ├─ modules
+│   │   ├─ __init__.py
+│   │   ├─ __pycache__
+│   │   ├─ analytics
+│   │   │   ├─ __init__.py
+│   │   │   └─ clickhouse_analytics.py
+│   │   ├─ auth
+│   │   │   ├─ __init__.py
+│   │   │   ├─ __pycache__
+│   │   │   └─ security.py
+│   │   ├─ embeding
+│   │   │   ├─ __init__.py
+│   │   │   ├─ __pycache__
+│   │   │   ├─ cached_embedding.py
+│   │   │   ├─ embedding_factory.py
+│   │   │   ├─ instructor.py
+│   │   │   ├─ open_ai.py
+│   │   │   └─ sentence_transformer.py
+│   │   ├─ feedback
+│   │   │   ├─ __init__.py
+│   │   │   └─ feedback_collector.py
+│   │   ├─ indexing
+│   │   │   ├─ __init__.py
+│   │   │   ├─ __pycache__
+│   │   │   ├─ chroma_index.py
+│   │   │   ├─ faiss_hnsw.py
+│   │   │   └─ milvus.py
+│   │   ├─ llm
+│   │   │   ├─ __init__.py
+│   │   │   ├─ __pycache__
+│   │   │   ├─ base.py
+│   │   │   ├─ factory.py
+│   │   │   ├─ gguf.py
+│   │   │   ├─ huggingface.py
+│   │   │   └─ onnx.py
+│   │   ├─ reranking
+│   │   │   ├─ __init__.py
+│   │   │   ├─ __pycache__
+│   │   │   ├─ bm25_reranker.py
+│   │   │   ├─ cross_encoder.py
+│   │   │   └─ factory.py
+│   │   ├─ storage
+│   │   │   ├─ __init__.py
+│   │   │   ├─ __pycache__
+│   │   │   ├─ document_store.py
+│   │   │   └─ file_manager.py
+│   │   └─ user
+│   │       ├─ __init__.py
+│   │       ├─ __pycache__
+│   │       └─ services.py
 │   ├─ scripts
 │   │   ├─ __pycache__
+│   │   ├─ llm_manager.py
 │   │   ├─ run_admin.py
 │   │   ├─ setup_db.py
 │   │   ├─ setup_instructor_model.py
@@ -299,6 +312,7 @@
 │   │       ├─ profile.html
 │   │       ├─ tasks.html
 │   │       └─ users.html
+│   ├─ test.py
 │   ├─ tests
 │   │   ├─ __init__.py
 │   │   ├─ __pycache__
@@ -341,11 +355,11 @@
 │   │   ├─ deployment.yaml
 │   │   ├─ ingress.yaml
 │   │   └─ service.yaml
-│   └─ terraform/
+│   └─ terraform
 │       ├─ main.tf
 │       └─ variables.tf
 ├─ docs
 │   └─ instruct.md
 ├─ logs
-├─ struct.py
-└─ structure.txt
+├─ structure.txt
+└─ structure_of_proj.py

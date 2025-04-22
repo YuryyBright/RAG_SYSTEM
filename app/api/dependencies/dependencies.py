@@ -11,59 +11,55 @@ from typing import Annotated
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from adapters.embeding.embedding_factory import get_embedding_service
-from adapters.embeding.instructor import InstructorEmbedding
-from adapters.embeding.open_ai import OpenAIEmbedding
-from adapters.embeding.sentence_transformer import SentenceTransformerEmbedding
-from adapters.indexing.chroma_index import ChromaVectorIndex
-from adapters.indexing.milvus import MilvusVectorIndex
-from adapters.llm.factory import LLMFactory
-from adapters.reranking.factory import RerankerFactory
-from adapters.storage.file_manager import FileManager
+from application.services.auth_service import AuthService
+from application.services.conversation_service import ConversationService
+from domain.interfaces.document_store import DocumentStoreInterface
+from infrastructure.repositories.repository.conv_cont_repository import ConversationContextRepository
+from infrastructure.repositories.repository.conversation_repository import ConversationRepository
+from infrastructure.repositories.repository.document_repository import DocumentRepository
+from infrastructure.repositories.repository.file_repository import FileRepository
+from infrastructure.repositories.repository.message_repository import MessageRepository
+from infrastructure.repositories.repository.theme_repository import ThemeRepository
+from modules.embeding.embedding_factory import get_embedding_service
+from modules.indexing.chroma_index import ChromaVectorIndex
+from modules.indexing.milvus import MilvusVectorIndex
+from modules.llm.factory import LLMFactory
+from modules.reranking.factory import RerankerFactory
+from modules.storage.file_manager import FileManager
 
 # Fix typo in import path
 
 from app.config import settings
 
 # Core Interfaces
-from app.core.interfaces.document_store import DocumentStoreInterface
-from app.core.interfaces.embedding import EmbeddingInterface
-from app.core.interfaces.indexing import IndexInterface
-from app.core.interfaces.llm import LLMInterface
+from domain.interfaces.embedding import EmbeddingInterface
+from domain.interfaces.indexing import IndexInterface
+from domain.interfaces.llm import LLMInterface
 
-from app.core.interfaces.theme_repository import ThemeRepositoryInterface
 from app.core.use_cases.file_processing import FileProcessingUseCase, FileProcessor
 
 # Use Cases
 from app.core.use_cases.theme import ThemeUseCase
 
 # Adapters
-from app.adapters.storage.document_store import DocumentStore
-from app.adapters.indexing.faiss_hnsw import FaissVectorIndex
-from app.adapters.reranking.cross_encoder import CrossEncoderReranker
-from app.adapters.llm.mistral import MistralLLM
+from app.modules.storage.document_store import DocumentStore
+from app.modules.indexing.faiss_hnsw import FaissVectorIndex
 
 # Infrastructure
-from app.infrastructure.database.repository.theme_repository import ThemeRepository
-from app.infrastructure.database.repository.document_repository import DocumentRepository
 
-from app.infrastructure.database.repository import get_async_db
+
+from infrastructure.repositories.repository import get_async_db
 from app.utils.logger_util import get_logger
-from core.interfaces.reranking import RerankingService
-from core.services.auth_service import AuthService
-from core.services.chunking_service import ChunkingService
-from core.services.context_management_service import ContextManagementService
-from core.services.conversation_service import ConversationService
+from domain.interfaces.reranking import RerankingService
+from application.services.chunking_service import ChunkingService
+from application.services.context_management_service import ContextManagementService
 
-from core.services.task_services import TaskManager
-from core.services.vector_index_services import VectorIndexService
-from infrastructure.database.repository.conv_cont_repository import ConversationContextRepository
-from infrastructure.database.repository.conversation_repository import ConversationRepository
-from infrastructure.database.repository.file_repository import FileRepository
-from infrastructure.database.repository.message_repository import MessageRepository
-from infrastructure.database.repository.task_repository import TaskRepository
+from application.services.llm_service import LLMService
+from application.services.rag_context_retriever import RAGContextRetriever
+
+from application.services.task_services import TaskManager
+from application.services.vector_index_services import VectorIndexService
 from api.websockets.task_updates import get_task_update_manager, TaskUpdateManager
-from utils.validators import validate_embedding_dimensions
 
 logger = get_logger(__name__)
 
@@ -113,11 +109,6 @@ def get_file_manager() -> FileManager:
 
 
 
-def get_llm_service() -> LLMInterface:
-    """Provides Mistral or other LLM."""
-    return MistralLLM(model_name=settings.LLM_MODEL)
-
-
 def get_reranker_service() -> RerankingService:
     """Provides reranker model interface."""
     return RerankerFactory.get_reranker(reranker_type=settings.RERANKER_TYPE)
@@ -137,6 +128,14 @@ def get_document_store(
     )
 
 
+def get_llm_service() -> LLMService:
+    """Dependency provider for the LLM service."""
+    # Create an instance that implements LLMInterface
+    # Using LLMFactory to get the default LLM implementation
+    llm_interface = LLMFactory.get_llm()
+
+    # Pass the interface to the LLMService constructor
+    return LLMService(llm_interface)
 # === Use Cases ===
 
 def get_theme_use_case_p(
@@ -289,16 +288,15 @@ def get_context_repository(db: AsyncSession = Depends(get_async_db)):
 def get_conversation_service(
     conversation_repo: ConversationRepository = Depends(get_conversation_repository),
     message_repo: MessageRepository = Depends(get_message_repository),
-    llm_service = Depends(get_llm_service)
 ):
     """Get conversation service dependency."""
-    return ConversationService(conversation_repo, message_repo, llm_service)
+    return ConversationService(conversation_repo, message_repo)
 
 def get_context_service(
     context_repo: ConversationContextRepository = Depends(get_context_repository),
     message_repo: MessageRepository = Depends(get_message_repository),
     embedding_service = Depends(get_embedding_service),
-    llm_service = Depends(get_llm_service),
+    llm_service_ = Depends(get_llm_service),
     max_context_window: int = 20
 ):
     """Get context management service dependency."""
@@ -306,16 +304,26 @@ def get_context_service(
         context_repo,
         message_repo,
         embedding_service,
-        llm_service,
+        llm_service_,
         max_context_window
     )
 def get_llm_service() -> LLMInterface:
     # You could also read a header or user‐choice from DB
     return LLMFactory.get_llm()
+
+def get_reranker() -> RerankingService:
+    return RerankerFactory.get_reranker(settings.RERANKER_TYPE)
+
+# Update this function to include reranker
 def get_rag_context_retriever(
-    context_service: ContextManagementService = Depends(get_context_service),
-    message_repo: MessageRepository = Depends(get_message_repository)
+    vector_index_service=Depends(get_vector_index),
+    context_service=Depends(get_context_service),
+    conversation_service=Depends(get_conversation_service),
+    reranker=Depends(get_reranker)
 ):
-    """Get RAG context retriever dependency."""
-    from app.core.services.rag_context_retriever import RAGContextRetriever
-    return RAGContextRetriever(context_service, message_repo)
+    return RAGContextRetriever(
+        vector_index_service=vector_index_service,
+        context_service=context_service,
+        conversation_service=conversation_service,
+        reranker=reranker
+    )

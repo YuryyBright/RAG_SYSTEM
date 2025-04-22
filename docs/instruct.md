@@ -1,3 +1,54 @@
+                                   +---------------------+
+                                   |      Frontend       |
+                                   | (React / JS Static) |
+                                   +---------------------+
+                                            |
+                                            v
+                                 +-----------------------+
+                                 |      FastAPI API      |
+                                 |  (REST + Websockets)  |
+                                 +-----------+-----------+
+                                             |
+                +----------------------------+-----------------------------+
+                |                                                          |
+      +--------------------+                                   +--------------------+
+      | Application Services|                                   | Authentication     |
+      | (Chunking, RAG Logic,|                                  | Services (JWT,     |
+      | Conversations, Tasks|                                   | Security Middlewares|
+      +--------------------+                                   +--------------------+
+                |                                                          |
+                v                                                          v
++---------------------------+                              +----------------------------+
+| Domain Entities & UseCases|                              |    Redis Cache (Sessions)  |
+| (Documents, Embeddings,   |                              +----------------------------+
+| Queries, Themes, Files)   |
++---------------------------+
+                |
+                v
++-------------------------------------------+
+| Adapters / Ports                          |
+| (Embeddings, LLMs, Rerankers, Indexers)   |
++-------------------------------------------+
+                |
+                v
++--------------------------------------------------+
+| Infrastructure Layer                             |
+| (PostgreSQL, FAISS/Chroma, Huggingface, Redis)   |
++--------------------------------------------------+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 # 🔍 Optimal Chunk Size and Embedding Dimension for RAG Systems
 
 ## 📈 Chunk Size Recommendations

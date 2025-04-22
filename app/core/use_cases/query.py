@@ -1,13 +1,13 @@
 from typing import List, Dict, Any, Optional
 
-from adapters.storage.document_store import DocumentStore
-from app.core.entities.query import Query
-from app.core.entities.document import Document
-from app.core.interfaces.reranking import RerankingService
-from app.core.services.rag_context_retriever import RAGContextRetriever
-from app.adapters.reranking.factory import RerankerFactory
-from core.interfaces.embedding import EmbeddingInterface
-from core.interfaces.llm import LLMInterface
+from modules.storage.document_store import DocumentStore
+from domain.entities import Query
+from domain.entities.document import Document
+from domain.interfaces.reranking import RerankingService
+from application.services.rag_context_retriever import RAGContextRetriever
+from app.modules.reranking.factory import RerankerFactory
+from domain.interfaces.embedding import EmbeddingInterface
+from domain.interfaces.llm import LLMInterface
 
 
 class RAGQueryProcessor:
@@ -67,53 +67,61 @@ class RAGQueryProcessor:
                 - documents: metadata and snippet for each retrieved document
                 - metadata: flags about context usage and counts
         """
-        # 1. Compute query embedding
+        # 1. Embed Query
         query_embedding = await self.embedding_service.get_embedding(query.text)
 
-        # 2. Retrieve documents semantically
-        relevant_docs = await self.document_store.semantic_search(
-            query_embedding, limit=self.top_k * 2, theme_id=theme_id  # Get more docs initially for better reranking
+        # 2. Retrieve documents via semantic search
+        initial_docs = await self.document_store.semantic_search(
+            query_embedding, limit=self.top_k * 3, theme_id=theme_id  # Більший пул документів
         )
+
+        if not initial_docs:
+            return {
+                "query": query.text,
+                "response": "No relevant documents found.",
+                "documents": [],
+                "metadata": {
+                    "document_count": 0,
+                    "used_conversation_context": False,
+                    "reranking_used": False,
+                },
+            }
 
         # 3. Reranking
         reranking_used = False
-        reranking_service = self.reranking_service
+        reranker = self.reranking_service
 
-        # Allow runtime override of reranker
-        if reranker_type and reranker_type != getattr(reranking_service, "reranker_type", None):
-            reranking_service = RerankerFactory.get_reranker(reranker_type)
+        if reranker_type and reranker_type != getattr(reranker, "reranker_type", None):
+            reranker = RerankerFactory.get_reranker(reranker_type)
 
-        if reranking_service and relevant_docs:
-            reranked_docs, scores = await self._rerank_documents(
-                query.text, relevant_docs, reranking_service
-            )
-            relevant_docs = reranked_docs[:self.top_k]  # Take top_k after reranking
+        if reranker:
+            reranked_docs, scores = await self._rerank_documents(query.text, initial_docs, reranker)
+            reranked_docs = [doc for doc in reranked_docs if doc.score >= 0.3]  # Фільтруємо слабкі документи
+            relevant_docs = reranked_docs[:self.top_k] if reranked_docs else initial_docs[:self.top_k]
             reranking_used = True
+        else:
+            relevant_docs = initial_docs[:self.top_k]
 
-        # 4. Format document context
+        # 4. Prepare Document Context
         document_context = self._format_documents(relevant_docs)
 
-        # 5. Retrieve conversation context if available
+        # 5. Optionally retrieve conversation context
         conversation_context = ""
         if conversation_id and self.rag_context_retriever:
             context_data = await self.rag_context_retriever.get_context_for_query(
                 conversation_id=conversation_id, query=query.text
             )
-            conversation_context = self.rag_context_retriever.format_context_for_llm(
-                context_data
-            )
+            conversation_context = self.rag_context_retriever.format_context_for_llm(context_data)
 
-        # 6. Build system prompt
-        system_prompt = self._generate_system_prompt(
-            conversation_context, document_context
-        )
+        # 6. Generate final prompt
+        system_prompt = self._generate_system_prompt(conversation_context, document_context)
 
-        # 7. Generate response via LLM
+        # 7. Call LLM
         llm_response = await self.llm_provider.generate_text(
             system_prompt=system_prompt, user_prompt=query.text
         )
 
-        # 8. Assemble output
+        # 8. Return all assembled information
         return {
             "query": query.text,
             "response": llm_response,
@@ -123,7 +131,7 @@ class RAGQueryProcessor:
                     "title": doc.metadata.get("title", f"Document {idx + 1}"),
                     "source": doc.source or "Unknown",
                     "snippet": self._extract_snippet(doc.content, query.text),
-                    "score": getattr(doc, "score", None)  # Include reranking score if available
+                    "score": getattr(doc, "score", None)
                 }
                 for idx, doc in enumerate(relevant_docs)
             ],
@@ -132,7 +140,7 @@ class RAGQueryProcessor:
                 "document_count": len(relevant_docs),
                 "theme_id": theme_id,
                 "reranking_used": reranking_used,
-                "reranker_type": getattr(reranking_service, "reranker_type", None) if reranking_used else None
+                "reranker_type": getattr(reranker, "reranker_type", None) if reranking_used else None
             },
         }
 

@@ -2,14 +2,13 @@
 from fastapi import Depends,Response, HTTPException, status, Cookie, Request, Header
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
-from datetime import datetime
-from typing import Optional, Union
+from typing import Optional
 
-from app.infrastructure.database.repository import get_async_db
+from application.services.auth_service import AuthService
+from infrastructure.repositories.repository import get_async_db
 from app.infrastructure.database.db_models import User
 from app.utils.logger_util import get_logger
-from app.utils.security import COOKIE_NAME, CSRF_COOKIE_NAME, clear_auth_cookies
-from core.services.auth_service import AuthService
+from app.utils.security import COOKIE_NAME, clear_auth_cookies
 
 # Configure logger
 logger = get_logger(__name__)

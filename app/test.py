@@ -1,7 +1,7 @@
 
 import asyncio
 
-from adapters.llm.local import LocalLLM
+from modules.llm.gguf import LocalLLM
 
 
 async def generate_text():

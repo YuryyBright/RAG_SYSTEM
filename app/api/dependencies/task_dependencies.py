@@ -1,5 +1,5 @@
-from infrastructure.database.repository.task_repository import TaskRepository
-from app.infrastructure.database.repository import get_async_db
+from infrastructure.repositories.repository.task_repository import TaskRepository
+from infrastructure.repositories.repository import get_async_db
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 

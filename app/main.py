@@ -18,16 +18,14 @@ from starlette.status import HTTP_302_FOUND
 
 from api.v1.routers import auth, documents, files, pages, auth_pages, dashboard_pages, admin_pages, user_api, \
     theme, task_pages, tasks, conversations
-from api.websockets import task_updates
 from api.websockets.task_updates import handle_task_websocket
 
 from app.config import settings
 from app.api.middlewares import setup_middlewares
-from core.services.auth_service import AuthService
-from infrastructure.database.repository import get_async_db
+from application.services.auth_service import AuthService
+from infrastructure.repositories.repository import get_async_db
 from utils.logger_util import get_logger
-from utils.security import COOKIE_NAME, set_csrf_cookie, CSRF_COOKIE_NAME
-
+from utils.security import COOKIE_NAME
 
 logger = get_logger(__name__)
 

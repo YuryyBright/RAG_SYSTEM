@@ -3,24 +3,20 @@ import shutil
 import os
 from pathlib import Path
 from uuid import uuid4
-from datetime import datetime, timedelta
 from typing import List, Optional
 
-from fastapi import APIRouter, Response, Request, Depends, HTTPException, status, UploadFile, File, Query, \
-    BackgroundTasks, Cookie
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Request, Depends, HTTPException, status, UploadFile, File, Query, \
+    BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from adapters.user.services import UserService
+from modules.user.services import UserService
 from app.api.schemas.user_api import (
-    ProfileUpdate, PasswordChange, ApiKeyResponse, ApiKeyCreate, UserStats,
-    AccountAction, SessionInfo, NotificationSettings, ExportUserData
+    ProfileUpdate, PasswordChange, AccountAction, SessionInfo, NotificationSettings
 )
 from app.infrastructure.database.db_models import User
-from app.infrastructure.database.repository import get_async_db
+from infrastructure.repositories.repository import get_async_db
 from app.api.middleware_auth import get_current_active_user, get_session_id_from_cookie
 from utils.logger_util import get_logger
-from utils.security import create_session_cookie, set_csrf_cookie
 
 router = APIRouter()
 logger = get_logger(__name__)

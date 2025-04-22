@@ -5,11 +5,10 @@ schema validation, and format verification.
 import re
 import uuid
 import json
-from typing import Any, Dict, List, Optional, Union, Callable
-from datetime import datetime
+from typing import Any, Dict, List, Optional, Union
 import logging
 
-from core.interfaces.embedding import EmbeddingInterface
+from domain.interfaces.embedding import EmbeddingInterface
 
 logger = logging.getLogger(__name__)
 
