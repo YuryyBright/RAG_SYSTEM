@@ -14397,7 +14397,7 @@ var scale_time = core_scale.extend({
 
 		// Backward compatibility: before introducing adapter, `displayFormats` was
 		// supposed to contain *all* unit/string pairs but this can't be resolved
-		// when loading the scale (adapters are loaded afterward), so let's populate
+		// when loading the scale (modules are loaded afterward), so let's populate
 		// missing formats on update
 		helpers$1.mergeIf(time.displayFormats, adapter.formats());
 
@@ -20653,7 +20653,7 @@ core_controller.helpers.each(scales, function(scale, type) {
 	core_controller.scaleService.registerScaleType(type, scale, scale._defaults);
 });
 
-// Load to register built-in adapters (as side effects)
+// Load to register built-in modules (as side effects)
 
 
 // Loading built-in plugins

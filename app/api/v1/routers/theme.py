@@ -3,7 +3,7 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from api.schemas.files import FileResponse
-from app.api.dependencies.dependencies import get_theme_use_case
+from app.api.dependencies.dependencies import get_theme_use_case, get_theme_use_case_p
 from app.api.schemas.theme import (
     ThemeCreate,
     ThemeUpdate,
@@ -14,9 +14,9 @@ from app.api.schemas.theme import (
 
 from app.api.middleware_auth import get_current_active_user
 from app.core.use_cases.theme import ThemeUseCase
-from app.core.interfaces.document_store import DocumentStoreInterface
+from domain.interfaces.document_store import DocumentStoreInterface
 from app.api.dependencies.dependencies import get_document_store
-from core.entities.user import User
+from domain.entities.user import User
 
 router = APIRouter()
 
@@ -24,7 +24,7 @@ router = APIRouter()
 async def create_theme(
         theme_data: ThemeCreate,
         user: dict = Depends(get_current_active_user),
-        theme_use_case: ThemeUseCase = Depends(get_theme_use_case)
+        theme_use_case: ThemeUseCase = Depends(get_theme_use_case_p)
 ):
     """
     Create a new theme.
@@ -58,7 +58,7 @@ async def create_theme(
 async def get_themes(
         include_public: bool = False,
         user: dict = Depends(get_current_active_user),
-        theme_use_case: ThemeUseCase = Depends(get_theme_use_case)
+        theme_use_case: ThemeUseCase = Depends(get_theme_use_case_p)
 ):
     """
     Get themes owned by the current user, optionally including public themes.
@@ -83,7 +83,6 @@ async def get_themes(
                 "updated_at": theme.updated_at.isoformat() if theme.updated_at else None,
                 "document_count": len(document_ids)
             })
-
         return result
     except Exception as e:
         raise HTTPException(
@@ -96,7 +95,7 @@ async def get_themes(
 async def get_theme(
         theme_id: str,
         user: dict = Depends(get_current_active_user),
-        theme_use_case: ThemeUseCase = Depends(get_theme_use_case)
+        theme_use_case: ThemeUseCase = Depends(get_theme_use_case_p)
 ):
     """
     Get a specific theme by ID.
@@ -273,7 +272,7 @@ async def add_document_to_theme(
             )
 
         # Check if document exists and user has access to it
-        document = await document_store.get_document(document_data.document_id)
+        document = await document_store.get_document(document_data.document_id, user.id, theme_id)
         if not document:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,

@@ -196,13 +196,21 @@ function renderThemes(themes) {
 /**
  * Select a theme and proceed to file upload
  */
+import { resetThemeState } from "./state.js";
+import { updateVectorDBStatusUI, restoreDropZoneFiles } from "./ui.js";
+import { fetchAllThemeFiles } from "./ui.js";
+
 export function selectTheme(themeId, themeName) {
+  // 1. Clear previous theme state before switching
+  resetThemeState();
+
+  // 2. Set new theme
   state.currentThemeId = themeId;
   state.selectedTheme = themeName;
 
   $("#selected-theme-name").text(themeName);
 
-  // Check if there's already a processing task for this theme
+  // 3. Fetch tasks for this theme
   $.ajax({
     url: `/api/tasks?theme_id=${themeId}`,
     method: "GET",
@@ -211,58 +219,100 @@ export function selectTheme(themeId, themeName) {
     },
     success: function (tasks) {
       if (tasks && tasks.length > 0) {
-        // Filter for active tasks (pending or in progress)
         const activeTasks = tasks.filter(
-          (t) => (t.status === "in_progress" || t.status === "pending") && t.type === "theme_processing"
+          (t) =>
+            (t.status === "in_progress" || t.status === "pending" || t.status === "completed") &&
+            t.type === "theme_processing"
         );
 
         if (activeTasks.length > 0) {
-          // Sort by most recently created
           activeTasks.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-
-          // Get the first (most recent) task
           const activeTask = activeTasks[0];
 
-          // Set as our current processing task
           state.processingTask = activeTask;
-
-          // Update UI based on task status
           updateTaskUI(activeTask);
 
-          // Update vector DB status if exists in task metadata
+          // 🛠 Restore vectorDB status if present
           if (activeTask.metadata && activeTask.metadata.vectorDBStatus) {
             state.vectorDBStatus = activeTask.metadata.vectorDBStatus;
             updateVectorDBStatusUI();
           }
 
-          // Determine which step to show based on the task's current step
+          // 🛠 Restore uploaded files if files array exists in metadata
+          if (activeTask.metadata && activeTask.metadata.files && activeTask.metadata.files.length > 0) {
+            // Optionally re-fetch files from server to get file details
+            fetchAllThemeFiles(themeId);
+          }
+
+          // 🛠 Restore logs if they exist
+          if (activeTask.logs && activeTask.logs.length > 0) {
+            state.processingLogs = activeTask.logs;
+
+            $("#process-log-content").empty();
+            state.processingLogs.forEach((log) => {
+              const { text, type } = log;
+              let icon, messageClass;
+
+              switch (type) {
+                case "success":
+                  icon = "fa-check-circle text-success";
+                  messageClass = "log-success";
+                  break;
+                case "warning":
+                  icon = "fa-exclamation-triangle text-warning";
+                  messageClass = "log-warning";
+                  break;
+                case "error":
+                  icon = "fa-times-circle text-danger";
+                  messageClass = "log-error";
+                  break;
+                default: // info
+                  icon = "fa-info-circle text-info";
+                  messageClass = "log-info";
+              }
+
+              const logEntry = `
+      <div class="log-entry ${messageClass}">
+        <i class="fas ${icon} mr-1"></i>
+        <span>${text}</span>
+      </div>
+    `;
+
+              $("#process-log-content").append(logEntry);
+            });
+
+            $("#process-log-container").removeClass("d-none");
+          }
+
+          // 🛠 Restore dropzone files if needed (optional)
+          if (state.dropZoneFiles.length > 0) {
+            restoreDropZoneFiles();
+          }
+
+          // 🛠 Restore current step navigation based on task progress
           if (activeTask.current_step != null) {
             const stepMapping = {
-              0: 2, // Data Ingestion -> Upload Files
-              1: 3, // Text Chunking -> Process Files (skip download step)
-              2: 3, // Generate Embeddings -> Process Files (skip read step)
-              3: 3, // Store Vectors -> Process Files
+              0: 2,
+              1: 3,
+              2: 3,
+              3: 3,
             };
-
-            // Navigate to the appropriate step
             const targetStep = stepMapping[activeTask.current_step] || 2;
             navigateToStep(targetStep);
-            return; // Skip the default navigation
+            return;
           }
         }
       }
 
-      // If no active task was found, proceed to upload section
+      // No active task found: fallback
       navigateToStep(2);
 
-      // Subscribe to updates for this theme
       if (state.taskSocket && state.taskSocket.readyState === WebSocket.OPEN) {
         subscribeToThemeUpdates(themeId);
       }
     },
     error: function (xhr, status, error) {
       console.error("Error checking tasks:", error);
-      // If error, still navigate to upload section
       navigateToStep(2);
     },
   });
@@ -364,6 +414,3 @@ export function checkForActiveTasks() {
     });
   }
 }
-
-// Import ui-related functions
-import { updateVectorDBStatusUI } from "./ui.js";

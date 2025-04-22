@@ -5,11 +5,9 @@ import os
 import tempfile
 from pathlib import Path
 import pytest
-from datetime import datetime
 
 from app.infrastructure.loaders.file_processor import FileProcessor
-from core.entities.document import Document
-from core.entities.processed_file import ProcessedFile
+from domain.entities import ProcessedFile
 
 
 class TestFileProcessor(unittest.TestCase):

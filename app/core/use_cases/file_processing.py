@@ -2,13 +2,12 @@
 import os
 from typing import Dict, List, Tuple, Any, Optional
 from datetime import datetime
-import numpy as np
-from adapters.storage.document_store import DocumentStore
+from modules.storage.document_store import DocumentStore
 
-from app.core.entities.document import Document
-from core.services.chunking_service import ChunkingService
-from core.services.embedding_service import EmbeddingService
-from core.services.vector_index_services import VectorIndexService
+from domain.entities.document import Document
+from domain.interfaces.embedding import EmbeddingInterface
+from application.services.chunking_service import ChunkingService
+from application.services.vector_index_services import VectorIndexService
 from infrastructure.loaders.file_processor import FileProcessor
 from utils.logger_util import get_logger
 from api.websockets.task_updates import TaskUpdateManager
@@ -27,7 +26,7 @@ class FileProcessingUseCase:
             self,
             file_processor: FileProcessor,
             chunking_service: ChunkingService,
-            embedding_service: EmbeddingService,
+            embedding_service: EmbeddingInterface,
             document_store: DocumentStore,
             vector_index: VectorIndexService,
             task_update_manager: TaskUpdateManager
@@ -412,7 +411,6 @@ class FileProcessingUseCase:
 
                 embeddings = await self.embedding_service.get_embeddings(batch_vectors)
                 await self.vector_index.add_vectors(embeddings, batch_ids)
-
                 chunks_vectorized += len(batch_vectors)
 
                 # Send progress updates for embedding process

@@ -1,262 +1,365 @@
-rag_system/
-├── app/
-│   ├── __init__.py
-│   ├── main.py                      # FastAPI application entry point
-│   ├── config.py                    # Configuration settings including logging config
-│   ├── .env                         # FastAPI application entry point
-│   ├── core/                        # Core business logic (domain layer)
-│   │   ├── __init__.py
-│   │   ├── entities/                # Business entities
-│   │   │   ├── __init__.py
-│   │   │   ├── document.py          # Document entity with improved metadata support
-│   │   │   ├── embedding.py         # Embedding entity with type information
-│   │   │   ├── query.py             # Query entity with history tracking
-│   │   │   ├── theme.py             # Theme entity for knowledge domains
-│   │   │   ├── task.py              # New entity for background tasks
-│   │   │   ├── feedback.py          # New entity for user feedback on responses
-│   │   │   └── user.py              # Enhanced user entity with preferences
-│   │   │
-│   │   ├── interfaces/              # Interfaces/abstractions
-│   │   │   ├── __init__.py
-│   │   │   ├── auth.py              # Authentication interface
-│   │   │   ├── document_store.py    # Document storage interface
-│   │   │   ├── embedding.py         # Embedding service interface
-│   │   │   ├── indexing.py          # Vector indexing interface
-│   │   │   ├── llm.py               # LLM provider interface
-│   │   │   ├── reranking.py         # Reranking service interface
-│   │   │   ├── feedback.py          # New feedback collection interface
-│   │   │   ├── analytics.py         # New analytics interface
-│   │   │   ├── chunking.py          # New interface for text chunking
-│   │   │   └── theme_repository.py  # Theme repository interface
-│   │   ├── templates/               # Core services implementation
-│   │   │   ├── __init__.py
-│   │   │   └── templates.py.py      # Implementation of template interface
-│   │   ├── services/                # Core services implementation
-│   │   │   ├── __init__.py
-│   │   │   ├── auth_service.py              # Implementation of vector indexing
-│   │   │   ├── vector_index_service.py      # Implementation of vector indexing
-│   │   │   ├── embedding_service.py         # Implementation of embedding interface
-│   │   │   ├── vector_index.py              # Implementation of vector indexing
-│   │   │   ├── chunking_service.py          # New service for document chunking strategies
-│   │   │   ├── task_manager.py              # New service for managing background tasks
-│   │   │   ├── processing_service.py        # New service for document processing
-│   │   │   ├── chunking_service.py          # New service for document chunking strategies
-│   │   │   └── telemetry.py                 # New service for system performance monitoring
-│   │   │
-│   │   ├── use_cases/               # Application use cases
-│   │   │   ├── __init__.py
-│   │   │   ├── query_processing.py  # Enhanced query processing with context awareness
-│   │   │   ├── file_processing.py   # File processing with improved error handling
-│   │   │   ├── theme_management.py  # Theme management use cases
-│   │   │   ├── feedback_collection.py # New feedback collection use case
-│   │   │   ├── task_management.py   # New use case for task management
-│   │   │   └── analytics.py         # New analytics use case
-│   │
-│   ├── adapters/                    # Implementation of interfaces (adapters)
-│   │   ├── __init__.py
-│   │   ├── auth/
-│   │   │   ├── __init__.py
-│   │   │   └── security.py.py       # JWT authentication implementation
-│   │   │
-│   │   ├── embedding/
-│   │   │   ├── __init__.py
-│   │   │   ├── openai_embeddings.py # OpenAI embedding implementation
-│   │   │   ├── sentence_transformers.py # Sentence-Transformers implementation
-│   │   │   └── instructor_embeddings.py # Instructor embeddings implementation
-│   │   │
-│   │   ├── indexing/
-│   │   │   ├── __init__.py
-│   │   │   ├── faiss_index.py       # FAISS vector index implementation
-│   │   │   ├── milvus_index.py      # Milvus vector index implementation
-│   │   │   └── chroma_index.py      # ChromaDB vector index implementation
-│   │   │
-│   │   ├── llm/
-│   │   │   ├── __init__.py
-│   │   │   ├── openai_service.py    # OpenAI API implementation
-│   │   │   ├── anthropic_service.py # Anthropic API implementation
-│   │   │   └── local_llm_service.py # Local LLM implementation
-│   │   │
-│   │   ├── reranking/
-│   │   │   ├── __init__.py
-│   │   │   ├── cross_encoder.py     # Cross-encoder reranking implementation
-│   │   │   └── colbert_reranker.py  # ColBERT reranking implementation
-│   │   │
-│   │   ├── storage/
-│   │   │   ├── __init__.py
-│   │   │   ├── document_store.py    # Document storage implementation
-│   │   │   └── file_manager.py      # File management implementation
-│   │   │
-│   │   ├── analytics/
-│   │   │   ├── __init__.py
-│   │   │   └── clickhouse_analytics.py # Analytics with ClickHouse
-│   │   │
-│   │   ├── feedback/
-│   │   │   ├── __init__.py
-│   │   │   └── feedback_collector.py # Feedback collection implementation
-│   │   └── task/                    # New adapters for task management
-│   │       ├── __init__.py
-│   │       └── task_store.py        # Task persistence adapter
-│   ├── infrastructure/              # External interfaces
-│   │   ├── __init__.py
-│   │   ├── database/
-│   │   │   ├── __init__.py
-│   │   │   ├── db_models.py         # SQLAlchemy models
-│   │   │   ├── migrations/          # Database migrations
-│   │   │   │   └── versions/
-│   │   │   └── repository/
-│   │   │       ├── __init__.py
-│   │   │       ├── activity_repository.py
-│   │   │       ├── document_repository.py
-│   │   │       ├── file_repository.py
-│   │   │       ├── session_repository.py
-│   │   │       ├── theme_repository.py
-│   │   │       ├── token_repository.py
-│   │   │       ├── task_repository.py # New repository for task persistence
-│   │   │       └── user_repository.py
-│   │   │
-│   │   ├── loaders/
-│   │   │   ├── __init__.py
-│   │   │   ├── base_loader.py       # Base document loader
-│   │   │   ├── pdf_loader.py        # PDF document loader
-│   │   │   ├── docx_loader.py       # DOCX document loader
-│   │   │   ├── html_loader.py       # HTML document loader
-│   │   │   ├── markdown_loader.py   # Markdown document loader
-│   │   │   └── csv_loader.py        # CSV document loader
-│   │   ├── cleaners/
-│   │   │   ├── base_cleaner.py
-│   │   │   ├── markdown_cleaner.py
-│   │   │   └── html_cleaner.py
-│   │   │
-│   │   ├── cache/
-│   │   │   ├── __init__.py
-│   │   │   ├── redis_cache.py       # Redis cache implementation
-│   │   │   └── memory_cache.py      # In-memory cache implementation
-│   │   │
-│   │   ├── logging/
-│   │   │   ├── __init__.py
-│   │   │   ├── logger.py            # Logger implementation
-│   │   │   └── formatters.py        # Log formatters
-│   │   │
-│   │   └── telemetry/
-│   │       ├── __init__.py
-│   │       ├── prometheus_exporter.py # Prometheus metrics exporter
-│   │       └── opentelemetry_tracer.py # OpenTelemetry tracing
-│   │
-│   ├── api/                         # API layer
-│   │   ├── __init__.py
-│   │   ├── dependencies.py          # FastAPI dependencies
-│   │   ├── error_handlers.py        # API error handlers
-│   │   ├── middlewares.py           # API middlewares
-│   │   │
-│   │   ├── schemas/                 # API request/response models
-│   │   │   ├── __init__.py
-│   │   │   ├── auth.py              # Authentication schemas
-│   │   │   ├── document.py          # Document schemas
-│   │   │   ├── query.py             # Query schemas
-│   │   │   ├── files.py             # Files schemas
-│   │   │   ├── query.py             # Query schemas (duplicate name in example)
-│   │   │   ├── theme.py             # Theme schemas
-│   │   │   ├── user.py              # Feedback schemas (?)
-│   │   │   ├── user_api             # user_api schemas (extension missing in example)
-│   │   │   ├── task.py              # New schemas for task API
-│   │   │   └── analytics.py         # Analytics schemas
-│   │   │
-│   │   ├── v1/                      # API v1 routes
-│   │   │   ├── __init__.py
-│   │   │   └── routes/
-│   │   │       ├── __init__.py
-│   │   │       ├── admin_pages.py
-│   │   │       ├── auth.py
-│   │   │       ├── auth_pages.py
-│   │   │       ├── dashboard_pages.py
-│   │   │       ├── documents.py
-│   │   │       ├── files.py
-│   │   │       ├── pages.p
-│   │   │       ├── queries.py
-│   │   │       ├── theme.py
-│   │   │       ├── tasks.py         # New routes for task API
-│   │   │       ├── task_pages.py    # New routes for task UI pages
-│   │   │       └── user_api.py
-│   │   │
-│   │   └── websockets/              # WebSocket endpoints
-│   │       ├── __init__.py
-│   │       ├── chat.py              # Chat WebSocket handler
-│   │       └── notifications.py     # Notifications WebSocket handler
-│   │
-│   │ # Web UI (if separate from API)
-│   ├── static/                  # Static assets
-│   │   ├── css/
-│   │   ├── js/
-│   │   └── images/
-│   │
-│   └── templates/               # Jinja2 templates
-│       ├── base.html
-│       ├── components/
-│       └── pages/
-│
-├── utils/                           # Utility functions
-│   ├── __init__.py
-│   ├── text_processing.py           # Text processing utilities
-│   ├── vector_math.py               # Vector math utilities
-│   ├── file_utils.py                # File handling utilities
-│   ├── validators.py                # Data validation utilities
-│   ├── logger_util.py               # Logging utilities
-│   └── performance.py               # Performance monitoring utilities
-│
-├── data/                            # Data storage
-│   ├── uploads/                     # User uploaded files
-│   ├── processed/                   # Processed documents
-│   ├── themes/                      # Theme exports
-│   └── embeddings/                  # Stored embeddings (if file-based)
-│
-├── devops/                          # NEW: DevOps/CI/CD pipelines & infra-as-code
-│   ├── ci/
-│   │   ├── github_actions.yml       # Example GitHub Actions workflow
-│   │   └── jenkinsfile              # Example Jenkins pipeline
-│   ├── cd/
-│   │   └── helm/                    # Optional: Helm charts for Kubernetes deployment
-│   ├── k8s/
-│   │   ├── deployment.yaml          # Kubernetes deployment manifests
-│   │   ├── service.yaml             # K8s service definitions
-│   │   └── ingress.yaml             # Optional: Ingress configuration
-│   └── terraform/
-│       ├── main.tf                  # Terraform config for cloud infrastructure
-│       ├── variables.tf
-│       └── outputs.tf
-├── scripts/                         # Utility scripts
-│   ├── setup_db.py                  # Database setup script
-│   ├── generate_embeddings.py       # Batch embedding generation
-│   ├── export_themes.py             # Theme export script
-│   └── import_documents.py          # Bulk document import script
-│
-├── tests/                           # Tests
-│   ├── __init__.py
-│   ├── conftest.py                  # Test configuration
-│   ├── unit/                        # Unit tests
-│   │   ├── core/
-│   │   ├── adapters/
-│   │   └── api/
-│   ├── integration/                 # Integration tests
-│   │   ├── test_document_flow.py
-│   │   ├── test_query_flow.py
-│   │   └── test_theme_flow.py
-│   └── performance/                 # Performance tests
-│       ├── test_embedding_perf.py
-│       └── test_query_perf.py
-│
-├── docker/                          # Docker configuration
-│   ├── Dockerfile
-│   ├── docker-compose.yml
-│   └── docker-compose.dev.yml
-│
-├── docs/                            # Documentation
-│   ├── architecture.md
-│   ├── api.md
-│   ├── deployment.md
-│   └── development.md
-│
-├── .env.example                     # Example environment variables
-├── .gitignore                       # Git ignore file
-├── pyproject.toml                   # Project configuration
-├── poetry.lock                      # Dependency lock file
-└── README.md                        # Project README
+├─ LICENSE
+├─ README.md
+├─ __pycache__
+├─ alembic
+├─ alembic.ini
+├─ app
+│   ├─ __init__.py
+│   ├─ __pycache__
+│   ├─ api
+│   │   ├─ __init__.py
+│   │   ├─ __pycache__
+│   │   ├─ dependencies
+│   │   │   ├─ __init__.py
+│   │   │   ├─ __pycache__
+│   │   │   ├─ dependencies.py
+│   │   │   └─ task_dependencies.py
+│   │   ├─ middleware_auth.py
+│   │   ├─ middlewares.py
+│   │   ├─ schemas
+│   │   │   ├─ __init__.py
+│   │   │   ├─ __pycache__
+│   │   │   ├─ auth.py
+│   │   │   ├─ conversation.py
+│   │   │   ├─ document.py
+│   │   │   ├─ files.py
+│   │   │   ├─ query.py
+│   │   │   ├─ task.py
+│   │   │   ├─ theme.py
+│   │   │   ├─ user.py
+│   │   │   └─ user_api.py
+│   │   ├─ v1
+│   │   │   ├─ __init__.py
+│   │   │   ├─ __pycache__
+│   │   │   └─ routers
+│   │   │       ├─ __init__.py
+│   │   │       ├─ __pycache__
+│   │   │       ├─ admin_pages.py
+│   │   │       ├─ auth.py
+│   │   │       ├─ auth_pages.py
+│   │   │       ├─ conversations.py
+│   │   │       ├─ dashboard_pages.py
+│   │   │       ├─ documents.py
+│   │   │       ├─ files.py
+│   │   │       ├─ pages.py
+│   │   │       ├─ task_pages.py
+│   │   │       ├─ tasks.py
+│   │   │       ├─ theme.py
+│   │   │       └─ user_api.py
+│   │   └─ websockets
+│   │       ├─ __init__.py
+│   │       ├─ __pycache__
+│   │       ├─ chat.py
+│   │       ├─ notifications.py
+│   │       └─ task_updates.py
+│   ├─ application
+│   │   ├─ __init__.py
+│   │   ├─ __pycache__
+│   │   └─ services
+│   │       ├─ __init__.py
+│   │       ├─ __pycache__
+│   │       ├─ auth_service.py
+│   │       ├─ base_embedding_service.py
+│   │       ├─ chunking_service.py
+│   │       ├─ context_management_service.py
+│   │       ├─ context_management_strategies.py
+│   │       ├─ conversation_service.py
+│   │       ├─ llm_service.py
+│   │       ├─ rag_context_retriever.py
+│   │       ├─ task_services.py
+│   │       ├─ telemetry.py
+│   │       └─ vector_index_services.py
+│   ├─ config.py
+│   ├─ core
+│   │   ├─ __init__.py
+│   │   ├─ __pycache__
+│   │   ├─ templates
+│   │   │   ├─ __init__.py
+│   │   │   ├─ __pycache__
+│   │   │   └─ templates.py
+│   │   └─ use_cases
+│   │       ├─ __init__.py
+│   │       ├─ __pycache__
+│   │       ├─ file_processing.py
+│   │       ├─ query.py
+│   │       └─ theme.py
+│   ├─ data
+│   ├─ docker
+│   │   ├─ Dockerfile
+│   │   └─ docker-compose.yml
+│   ├─ domain
+│   │   ├─ __init__.py
+│   │   ├─ __pycache__
+│   │   ├─ entities
+│   │   │   ├─ __init__.py
+│   │   │   ├─ __pycache__
+│   │   │   ├─ document.py
+│   │   │   ├─ processed_file.py
+│   │   │   ├─ query.py
+│   │   │   ├─ task.py
+│   │   │   ├─ theme.py
+│   │   │   └─ user.py
+│   │   └─ interfaces
+│   │       ├─ __init__.py
+│   │       ├─ __pycache__
+│   │       ├─ analytics.py
+│   │       ├─ auth.py
+│   │       ├─ chuncking.py
+│   │       ├─ document_store.py
+│   │       ├─ embedding.py
+│   │       ├─ indexing.py
+│   │       ├─ llm.py
+│   │       ├─ reranking.py
+│   │       ├─ theme_repository.py
+│   │       └─ vector_index.py
+│   ├─ exports
+│   ├─ infrastructure
+│   │   ├─ __init__.py
+│   │   ├─ __pycache__
+│   │   ├─ cache
+│   │   │   ├─ __init__.py
+│   │   │   ├─ __pycache__
+│   │   │   └─ redis_cache.py
+│   │   ├─ cleaners
+│   │   │   ├─ __init__.py
+│   │   │   ├─ __pycache__
+│   │   │   ├─ base_cleaner.py
+│   │   │   ├─ cleaner_factory.py
+│   │   │   ├─ html_cleaner.py
+│   │   │   └─ markdown_cleaner.py
+│   │   ├─ database
+│   │   │   ├─ __init__.py
+│   │   │   ├─ __pycache__
+│   │   │   └─ db_models.py
+│   │   ├─ files
+│   │   │   ├─ __init__.py
+│   │   │   └─ readers
+│   │   │       ├─ __init__.py
+│   │   │       ├─ __pycache__
+│   │   │       ├─ base_reader.py
+│   │   │       ├─ csv_reader.py
+│   │   │       ├─ docx_reader.py
+│   │   │       ├─ html_reader.py
+│   │   │       ├─ json_reader.py
+│   │   │       ├─ pdf_reader.py
+│   │   │       ├─ pptx_reader.py
+│   │   │       ├─ reader_factory.py
+│   │   │       ├─ rtf_reader.py
+│   │   │       ├─ txt_reader.py
+│   │   │       ├─ xlsx_reader.py
+│   │   │       ├─ xml_reader.py
+│   │   │       └─ yaml_reader.py
+│   │   ├─ loaders
+│   │   │   ├─ __init__.py
+│   │   │   ├─ __pycache__
+│   │   │   ├─ draft_loader.py
+│   │   │   ├─ file_processor.py
+│   │   │   └─ test_files_hardmode
+│   │   ├─ logging
+│   │   │   ├─ __init__.py
+│   │   │   ├─ __pycache__
+│   │   │   ├─ formatters.py
+│   │   │   └─ logger.py
+│   │   └─ repositories
+│   │       ├─ __init__.py
+│   │       ├─ __pycache__
+│   │       └─ repository
+│   │           ├─ __init__.py
+│   │           ├─ __pycache__
+│   │           ├─ activity_repository.py
+│   │           ├─ conv_cont_repository.py
+│   │           ├─ conversation_repository.py
+│   │           ├─ document_repository.py
+│   │           ├─ file_repository.py
+│   │           ├─ message_repository.py
+│   │           ├─ session_repository.py
+│   │           ├─ task_repository.py
+│   │           ├─ theme_repository.py
+│   │           ├─ token_repository.py
+│   │           └─ user_repository.py
+│   ├─ main.py
+│   ├─ models
+│   ├─ modules
+│   │   ├─ __init__.py
+│   │   ├─ __pycache__
+│   │   ├─ analytics
+│   │   │   ├─ __init__.py
+│   │   │   └─ clickhouse_analytics.py
+│   │   ├─ auth
+│   │   │   ├─ __init__.py
+│   │   │   ├─ __pycache__
+│   │   │   └─ security.py
+│   │   ├─ embeding
+│   │   │   ├─ __init__.py
+│   │   │   ├─ __pycache__
+│   │   │   ├─ cached_embedding.py
+│   │   │   ├─ embedding_factory.py
+│   │   │   ├─ instructor.py
+│   │   │   ├─ open_ai.py
+│   │   │   └─ sentence_transformer.py
+│   │   ├─ feedback
+│   │   │   ├─ __init__.py
+│   │   │   └─ feedback_collector.py
+│   │   ├─ indexing
+│   │   │   ├─ __init__.py
+│   │   │   ├─ __pycache__
+│   │   │   ├─ chroma_index.py
+│   │   │   ├─ faiss_hnsw.py
+│   │   │   └─ milvus.py
+│   │   ├─ llm
+│   │   │   ├─ __init__.py
+│   │   │   ├─ __pycache__
+│   │   │   ├─ base.py
+│   │   │   ├─ factory.py
+│   │   │   ├─ gguf.py
+│   │   │   ├─ huggingface.py
+│   │   │   └─ onnx.py
+│   │   ├─ reranking
+│   │   │   ├─ __init__.py
+│   │   │   ├─ __pycache__
+│   │   │   ├─ bm25_reranker.py
+│   │   │   ├─ cross_encoder.py
+│   │   │   └─ factory.py
+│   │   ├─ storage
+│   │   │   ├─ __init__.py
+│   │   │   ├─ __pycache__
+│   │   │   ├─ document_store.py
+│   │   │   └─ file_manager.py
+│   │   └─ user
+│   │       ├─ __init__.py
+│   │       ├─ __pycache__
+│   │       └─ services.py
+│   ├─ scripts
+│   │   ├─ __pycache__
+│   │   ├─ llm_manager.py
+│   │   ├─ run_admin.py
+│   │   ├─ setup_db.py
+│   │   ├─ setup_instructor_model.py
+│   │   ├─ setup_llm_model.py
+│   │   └─ template_commands.md
+│   ├─ static
+│   │   ├─ build
+│   │   ├─ dist
+│   │   │   ├─ css
+│   │   │   ├─ img
+│   │   │   └─ js
+│   │   │       ├─ adminlte.js
+│   │   │       ├─ adminlte.js.map
+│   │   │       ├─ adminlte.min.js
+│   │   │       ├─ adminlte.min.js.map
+│   │   │       ├─ demo.js
+│   │   │       └─ pages
+│   │   │           ├─ auth.js
+│   │   │           ├─ chat
+│   │   │           │   ├─ advanced-settings.js
+│   │   │           │   ├─ api-service.js
+│   │   │           │   ├─ file-handlers.js
+│   │   │           │   ├─ main.js
+│   │   │           │   ├─ message-handlers.js
+│   │   │           │   ├─ sidebar-handlers.js
+│   │   │           │   └─ ui-handlers.js
+│   │   │           ├─ dashboard.js
+│   │   │           ├─ dashboard2.js
+│   │   │           ├─ dashboard3.js
+│   │   │           ├─ dashboard_1.js
+│   │   │           ├─ dashboard_user.js
+│   │   │           ├─ files.js
+│   │   │           ├─ opportunities.js
+│   │   │           ├─ profile.js
+│   │   │           ├─ request-helper.js
+│   │   │           ├─ template.js
+│   │   │           ├─ theme-processing
+│   │   │           │   ├─ dropzone.js
+│   │   │           │   ├─ file-download.js
+│   │   │           │   ├─ file-preview.js
+│   │   │           │   ├─ file-processing.js
+│   │   │           │   ├─ file-read.js
+│   │   │           │   ├─ index.js
+│   │   │           │   ├─ state.js
+│   │   │           │   ├─ task.js
+│   │   │           │   ├─ theme.js
+│   │   │           │   ├─ ui.js
+│   │   │           │   ├─ utils.js
+│   │   │           │   ├─ vectorDB.js
+│   │   │           │   └─ websocket.js
+│   │   │           ├─ theme-processing.js
+│   │   │           └─ users.js
+│   │   ├─ plugins
+│   │   └─ uploads
+│   ├─ templates
+│   │   ├─ 403.html
+│   │   ├─ 404.html
+│   │   ├─ 500.html
+│   │   ├─ AI
+│   │   │   ├─ chat.html
+│   │   │   └─ files_proccesor.html
+│   │   ├─ auth
+│   │   │   └─ login.html
+│   │   ├─ base.html
+│   │   ├─ dashboard
+│   │   │   ├─ documents.html
+│   │   │   ├─ files.html
+│   │   │   ├─ index.html
+│   │   │   └─ opportunities.html
+│   │   ├─ email
+│   │   │   └─ welcome.html
+│   │   ├─ include
+│   │   │   ├─ navbar.html
+│   │   │   └─ sidebar.html
+│   │   ├─ index.html
+│   │   └─ user
+│   │       ├─ page.py
+│   │       ├─ profile.html
+│   │       ├─ tasks.html
+│   │       └─ users.html
+│   ├─ test.py
+│   ├─ tests
+│   │   ├─ __init__.py
+│   │   ├─ __pycache__
+│   │   ├─ conftest.py
+│   │   ├─ integration
+│   │   │   └─ __init__.py
+│   │   └─ unit
+│   │       ├─ __init__.py
+│   │       ├─ __pycache__
+│   │       ├─ adapters
+│   │       │   └─ __init__.py
+│   │       ├─ api
+│   │       │   └─ __init__.py
+│   │       ├─ core
+│   │       │   └─ __init__.py
+│   │       └─ infrastructure
+│   │           ├─ __init__.py
+│   │           ├─ __pycache__
+│   │           └─ test_file_processor.py
+│   └─ utils
+│       ├─ __init__.py
+│       ├─ __pycache__
+│       ├─ file_handlers.py
+│       ├─ logger_util.py
+│       ├─ security.py
+│       ├─ text_processors.py
+│       └─ validators.py
+├─ common commnads
+├─ devops
+│   ├─ cd
+│   │   └─ helm
+│   │       ├─ Chart.yaml
+│   │       ├─ templates
+│   │       └─ values
+│   │           └─ values.yaml.yaml
+│   ├─ ci
+│   │   ├─ github_actions.yml
+│   │   └─ jenkinsfile
+│   ├─ k8s
+│   │   ├─ deployment.yaml
+│   │   ├─ ingress.yaml
+│   │   └─ service.yaml
+│   └─ terraform
+│       ├─ main.tf
+│       └─ variables.tf
+├─ docs
+│   └─ instruct.md
+├─ logs
+├─ structure.txt
+└─ structure_of_proj.py

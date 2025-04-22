@@ -1,14 +1,13 @@
 # app/api/routes/dashboard_pages.py
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.middleware_auth import get_current_active_user
 from app.infrastructure.database.db_models import User, File
-from app.infrastructure.database.repository import get_async_db
+from infrastructure.repositories.repository import get_async_db
 from core.templates.templates import templates
-from infrastructure.database.repository.file_repository import FileRepository
+from infrastructure.repositories.repository.file_repository import FileRepository
 
 # Set up templates
 

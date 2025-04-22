@@ -1,20 +1,17 @@
 # app/api/routes/documents.py
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, BackgroundTasks
-from typing import List, Dict, Optional
-import os
-import tempfile
-import shutil
+from fastapi import APIRouter, Depends, HTTPException
+from typing import List
 from api.schemas.document import DocumentCreate, DocumentResponse
-from core.entities.document import Document
+from domain.entities.document import Document
 
-from core.interfaces.embedding import EmbeddingInterface
-from core.interfaces.indexing import IndexInterface
+from domain.interfaces.embedding import EmbeddingInterface
+from domain.interfaces.indexing import IndexInterface
 from app.api.dependencies.dependencies import (
     get_document_repository,
     get_embedding_service,
     get_vector_index
 )
-from app.infrastructure.database.repository.document_repository import DocumentRepository
+from infrastructure.repositories.repository.document_repository import DocumentRepository
 
 router = APIRouter()
 

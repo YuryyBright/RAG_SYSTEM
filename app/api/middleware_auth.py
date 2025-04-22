@@ -2,14 +2,13 @@
 from fastapi import Depends,Response, HTTPException, status, Cookie, Request, Header
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
-from datetime import datetime
-from typing import Optional, Union
+from typing import Optional
 
-from app.infrastructure.database.repository import get_async_db
+from application.services.auth_service import AuthService
+from infrastructure.repositories.repository import get_async_db
 from app.infrastructure.database.db_models import User
 from app.utils.logger_util import get_logger
-from app.utils.security import COOKIE_NAME, CSRF_COOKIE_NAME, clear_auth_cookies
-from core.services.auth_service import AuthService
+from app.utils.security import COOKIE_NAME, clear_auth_cookies
 
 # Configure logger
 logger = get_logger(__name__)
@@ -38,18 +37,23 @@ async def get_current_user(
         HTTPException: If token is invalid
     """
     auth_service = AuthService(db)
-
     try:
         if token:
-            logger.info(f"Authentication check successful by token: {token[:4]}...")
+            logger.info(
+                "Authentication with bearer token succeeded for %s",
+                request.url.path,
+            )
             return await auth_service.verify_token(token)
+
         cookie_token = request.cookies.get("auth_token")
         if cookie_token:
-            logger.info(f"Authentication check successful by cookie_token: {cookie_token[:4]}...")
+            logger.info(
+                "Authentication with session cookie succeeded for %s",
+                request.url.path,
+            )
             return await auth_service.verify_token(cookie_token)
-
     except Exception as e:
-        logger.error(f"Authentication error: {str(e)}")
+        logger.error("Authentication error: %s", e)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Could not validate credentials",

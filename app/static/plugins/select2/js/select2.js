@@ -5383,7 +5383,7 @@ S2.define('select2/core',[
     Utils.StoreData($element[0], 'old-tabindex', tabindex);
     $element.attr('tabindex', '-1');
 
-    // Set up containers and adapters
+    // Set up containers and modules
 
     var DataAdapter = this.options.get('dataAdapter');
     this.dataAdapter = new DataAdapter($element, this.options);
@@ -5414,7 +5414,7 @@ S2.define('select2/core',[
 
     var self = this;
 
-    // Bind the container to all of the adapters
+    // Bind the container to all of the modules
     this._bindAdapters();
 
     // Register any DOM event handlers

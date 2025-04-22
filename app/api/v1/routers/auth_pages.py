@@ -1,12 +1,10 @@
 # app/api/routes/auth_pages.py
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi import APIRouter, Depends, Request
+from fastapi.responses import HTMLResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from starlette.status import HTTP_302_FOUND
-
 from api.v1.routers.auth import get_current_active_user
-from app.infrastructure.database.repository import get_async_db
+from infrastructure.repositories.repository import get_async_db
 from utils.security import COOKIE_NAME
 
 router = APIRouter()

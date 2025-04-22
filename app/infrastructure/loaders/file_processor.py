@@ -1,23 +1,19 @@
 # app/infrastructure/loaders/file_processor.py
-import os
 import uuid
-import logging
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime
 from pathlib import Path
 from dataclasses import asdict
 from langdetect import detect
 from langdetect.lang_detect_exception import LangDetectException
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.entities.document import Document
-from core.entities.processed_file import ProcessedFile
-from infrastructure.database.repository.file_repository import FileRepository
+from domain.entities.document import Document
+from domain.entities.processed_file import ProcessedFile
+from infrastructure.repositories.repository.file_repository import FileRepository
+
 from utils.logger_util import get_logger
-from .readers.reader_factory import ReaderFactory
-from .readers.base_reader import BaseReader
+from infrastructure.files.readers.reader_factory import ReaderFactory
 from infrastructure.cleaners.cleaner_factory import CleanerFactory
-from infrastructure.cleaners.base_cleaner import BaseCleaner  # Import BaseCleaner
 
 logger = get_logger(__name__)
 

@@ -1,0 +1,598 @@
+{% extends "base.html" %} {% block title %}Intelligent AI Chat{% endblock %} {% block head %}
+<link rel="stylesheet" href="{{ url_for('static', path='/dist/css/alt/chat.css') }}" />
+{% endblock %} {% block header %}
+<div class="row mb-3">
+  <div class="col-md-7">
+    <h1 class="m-0 d-flex align-items-center">
+      <i class="fas fa-robot mr-2 text-primary"></i>
+      Intelligent AI Chat
+      <span class="model-info-badge">
+        <i class="fas fa-bolt"></i>
+        Podilsk chat
+      </span>
+    </h1>
+  </div>
+  <div class="col-md-5">
+    <ol class="breadcrumb float-md-right">
+      <li class="breadcrumb-item"><a href="{{ url_for('dashboard_home') }}">Dashboard</a></li>
+      <li class="breadcrumb-item active">AI Chat</li>
+    </ol>
+  </div>
+</div>
+{% endblock %} {% block content %}
+<!-- Main content -->
+
+  <div class="container-fluid">
+    <div class="row">
+      <!-- Chat column -->
+      <div class="col-lg-8">
+        <div class="card mb-4">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <div class="d-flex align-items-center">
+              <h3 class="card-title mb-0 d-flex align-items-center">
+                <i class="fas fa-comments mr-2"></i>
+                <span>Conversation</span>
+              </h3>
+              <button class="ml-3 dark-mode-toggle custom-tooltip" data-tooltip="Toggle Light/Dark Mode">
+                <i class="fas fa-moon"></i>
+              </button>
+            </div>
+            <div class="d-flex align-items-center">
+              <button class="export-btn mr-3 custom-tooltip" data-tooltip="Export conversation">
+                <i class="fas fa-download"></i>
+                <span>Export</span>
+              </button>
+              <div class="switch-container">
+                <span class="small">Standard</span>
+                <label class="switch mx-2">
+                  <input type="checkbox" id="ragModeToggle" />
+                  <span class="slider"></span>
+                </label>
+                <span class="small">RAG Mode</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="card-body p-0">
+            <!-- Chat suggestions -->
+            <div class="chat-suggestions px-3 pt-3">
+              <div class="suggestion-chip">
+                <i class="fas fa-lightbulb mr-1"></i>
+                How can you help with data analysis?
+              </div>
+              <div class="suggestion-chip">
+                <i class="fas fa-lightbulb mr-1"></i>
+                Write a blog post about AI trends
+              </div>
+              <div class="suggestion-chip">
+                <i class="fas fa-lightbulb mr-1"></i>
+                Explain quantum computing
+              </div>
+              <div class="suggestion-chip">
+                <i class="fas fa-lightbulb mr-1"></i>
+                Create a Python script for web scraping
+              </div>
+            </div>
+
+            <!-- Chat messages -->
+            <div class="chat-container" id="chatContainer">
+              <div class="message ai-message">
+                <div class="message-info">
+                  <div class="message-avatar">AI</div>
+                  <div class="message-sender">Claude AI Assistant</div>
+                </div>
+                <div class="message-content">
+                  <p>👋 Hello! I'm your AI assistant powered by Claude. How can I help you today?</p>
+                  <p>
+                    I can assist with research, writing, code generation, data analysis, and much more. Feel free to ask
+                    me anything!
+                  </p>
+                </div>
+                <div class="message-time">Just now</div>
+                <div class="message-actions">
+                  <button class="message-action-btn copy-btn">
+                    <i class="fas fa-copy"></i>
+                    Copy
+                  </button>
+                  <button class="message-action-btn regenerate-btn">
+                    <i class="fas fa-redo-alt"></i>
+                    Regenerate
+                  </button>
+                </div>
+              </div>
+
+              <!-- Typing indicator -->
+              <div class="typing-indicator" id="typingIndicator">
+                <span></span>
+                <span></span>
+                <span></span>
+              </div>
+            </div>
+          </div>
+
+          <div class="card-footer">
+            <div class="mb-3">
+              <p class="toggle-settings" id="toggleAdvancedSettings">
+                <i class="fas fa-sliders-h"></i>
+                Advanced Settings
+              </p>
+
+              <div class="advanced-settings" id="advancedSettings">
+                <!-- Parameter sliders -->
+                <div class="parameter-sliders">
+                  <h5 class="text-light mb-3">Response Parameters</h5>
+
+                  <div class="slider-container">
+                    <label for="temperatureSlider">
+                      <div class="slider-label">
+                        <i class="fas fa-thermometer-half"></i>
+                        Temperature
+                      </div>
+                      <span class="slider-value" id="temperatureValue">0.7</span>
+                    </label>
+                    <input
+                      type="range"
+                      class="form-control-range"
+                      id="temperatureSlider"
+                      min="0"
+                      max="1"
+                      step="0.1"
+                      value="0.7"
+                    />
+                    <small class="text-muted">
+                      Controls randomness: lower values are more deterministic, higher values are more creative.
+                    </small>
+                  </div>
+
+                  <div class="slider-container">
+                    <label for="topPSlider">
+                      <div class="slider-label">
+                        <i class="fas fa-filter"></i>
+                        Top P
+                      </div>
+                      <span class="slider-value" id="topPValue">0.9</span>
+                    </label>
+                    <input
+                      type="range"
+                      class="form-control-range"
+                      id="topPSlider"
+                      min="0"
+                      max="1"
+                      step="0.05"
+                      value="0.9"
+                    />
+                    <small class="text-muted">
+                      Controls diversity via nucleus sampling: 0.5 considers only top 50% of probability distribution.
+                    </small>
+                  </div>
+
+                  <div class="slider-container">
+                    <label for="maxTokensSlider">
+                      <div class="slider-label">
+                        <i class="fas fa-text-height"></i>
+                        Max Tokens
+                      </div>
+                      <span class="slider-value" id="maxTokensValue">2000</span>
+                    </label>
+                    <input
+                      type="range"
+                      class="form-control-range"
+                      id="maxTokensSlider"
+                      min="100"
+                      max="4000"
+                      step="100"
+                      value="2000"
+                    />
+                    <small class="text-muted">Maximum length of the generated response.</small>
+                  </div>
+                </div>
+
+                <!-- Custom instructions -->
+                <div class="instructions-area">
+                  <h5 class="text-light mb-2">
+                    <i class="fas fa-pencil-alt"></i>
+                    Custom Instructions
+                  </h5>
+                  <textarea
+                    id="customInstructions"
+                    placeholder="Add custom instructions for the AI (e.g., 'Respond as a technical expert' or 'Explain concepts simply')"
+                  ></textarea>
+                </div>
+
+                <!-- Prompt library -->
+                <div class="prompt-library">
+                  <h6>
+                    <i class="fas fa-book"></i>
+                    Prompt Library
+                  </h6>
+                  <div class="prompt-items">
+                    <div class="prompt-item">Technical Expert</div>
+                    <div class="prompt-item">Simple Explanations</div>
+                    <div class="prompt-item">Creative Writer</div>
+                    <div class="prompt-item">Data Analyst</div>
+                    <div class="prompt-item">Marketing Specialist</div>
+                    <div class="prompt-item">Teacher</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- File upload area (only in standard mode) -->
+            <div id="fileUploadContainer" class="mb-3">
+              <div class="file-upload-area" id="fileDropArea">
+                <i class="fas fa-cloud-upload-alt fa-2x mb-2 text-primary"></i>
+                <p class="mb-0">Drag & drop files here or click to upload</p>
+                <small class="text-muted">
+                  Supported: PDF, TXT, DOCX, MD, HTML, CSV, JSON, XLS, XLSX, PPT, PPTX (Max 15MB)
+                </small>
+                <input type="file" id="fileInput" multiple style="display: none" />
+              </div>
+
+              <div class="attached-files" id="attachedFilesList">
+                <!-- Example attached file (will be generated dynamically) -->
+                <div class="attached-file">
+                  <div class="file-icon">
+                    <i class="fas fa-file-pdf"></i>
+                  </div>
+                  <div class="file-info">
+                    <div class="file-name">research-paper.pdf</div>
+                    <div class="file-size">1.2 MB</div>
+                  </div>
+                  <button class="remove-file-btn">
+                    <i class="fas fa-times"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <form id="chatForm">
+              <div class="input-group">
+                <div class="voice-input-btn custom-tooltip" data-tooltip="Voice input" id="voiceInputBtn">
+                  <i class="fas fa-microphone"></i>
+                </div>
+                <textarea
+                  id="messageInput"
+                  class="form-control"
+                  placeholder="Type your message or use / for commands..."
+                  rows="2"
+                  autofocus
+                ></textarea>
+                <div class="input-group-append">
+                  <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-paper-plane mr-1"></i>
+                    Send
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sidebar column -->
+      <div class="col-lg-4">
+        <!-- Models card -->
+        <div class="card mb-4">
+          <div class="card-header">
+            <h3 id="llmCardTitle" class="card-title mb-0 d-flex align-items-center">
+              <i class="fas fa-brain mr-2 text-warning"></i>
+              <span>AI Models</span>
+            </h3>
+
+            <div class="card-tools">
+              <button type="button" class="btn btn-tool" data-card-widget="collapse">
+                <i class="fas fa-minus"></i>
+              </button>
+            </div>
+          </div>
+
+          <div class="card-body">
+            <p class="text-muted small mb-3">Select an AI model to power your conversation:</p>
+
+            <div id="LLMContainer" class="d-flex flex-wrap">
+              <div class="badge badge-info model-pill" data-model-id="1">
+                <i class="fas fa-star"></i>
+                Claude 3 Opus
+              </div>
+              <div class="badge badge-secondary model-pill" data-model-id="2">
+                <i class="fas fa-bolt"></i>
+                Claude 3 Sonnet
+              </div>
+              <div class="badge badge-secondary model-pill" data-model-id="3">
+                <i class="fas fa-feather"></i>
+                Claude 3 Haiku
+              </div>
+              <div class="badge badge-secondary model-pill" data-model-id="4">
+                <i class="fas fa-robot"></i>
+                GPT-4
+              </div>
+              <div class="badge badge-secondary model-pill" data-model-id="5">
+                <i class="fas fa-microchip"></i>
+                PaLM 2
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Themes card -->
+        <div class="card mb-4">
+          <div class="card-header">
+            <h3 class="card-title mb-0">
+              <i class="fas fa-lightbulb mr-2 text-warning"></i>
+              Knowledge Themes
+            </h3>
+            <div class="card-tools">
+              <button type="button" class="btn btn-tool" data-card-widget="collapse">
+                <i class="fas fa-minus"></i>
+              </button>
+            </div>
+          </div>
+
+          <div class="card-body">
+            <p class="text-muted small mb-3">Select a theme to enhance AI responses with specific knowledge:</p>
+
+            <div id="themesContainer" class="d-flex flex-wrap">
+              <div class="badge badge-info theme-pill" data-theme-id="1">
+                <i class="fas fa-globe"></i>
+                General Knowledge
+              </div>
+              <div class="badge badge-secondary theme-pill" data-theme-id="2">
+                <i class="fas fa-laptop-code"></i>
+                Technology
+              </div>
+              <div class="badge badge-secondary theme-pill" data-theme-id="3">
+                <i class="fas fa-chart-line"></i>
+                Business
+              </div>
+              <div class="badge badge-secondary theme-pill" data-theme-id="4">
+                <i class="fas fa-heartbeat"></i>
+                Health
+              </div>
+              <div class="badge badge-secondary theme-pill" data-theme-id="5">
+                <i class="fas fa-atom"></i>
+                Science
+              </div>
+              <div class="badge badge-secondary theme-pill" data-theme-id="6">
+                <i class="fas fa-graduation-cap"></i>
+                Education
+              </div>
+              <div class="badge badge-secondary theme-pill" data-theme-id="7">
+                <i class="fas fa-paint-brush"></i>
+                Creative
+              </div>
+              <div class="badge badge-secondary theme-pill" data-theme-id="8">
+                <i class="fas fa-balance-scale"></i>
+                Legal
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Chat history card -->
+        <div class="card">
+          <div class="card-header">
+            <h3 class="card-title mb-0">
+              <i class="fas fa-history mr-2 text-info"></i>
+              Recent Conversations
+            </h3>
+            <div class="card-tools">
+              <div class="btn-group">
+                <button type="button" class="btn btn-tool dropdown-toggle" data-toggle="dropdown">
+                  <i class="fas fa-ellipsis-v"></i>
+                </button>
+                <div class="dropdown-menu dropdown-menu-right">
+                  <a href="#" class="dropdown-item" id="exportAllChatsBtn">
+                    <i class="fas fa-download mr-2"></i>
+                    Export All
+                  </a>
+                  <a href="#" class="dropdown-item" id="searchChatsBtn">
+                    <i class="fas fa-search mr-2"></i>
+                    Search
+                  </a>
+                  <div class="dropdown-divider"></div>
+                  <a href="#" class="dropdown-item text-danger" id="clearHistoryBtn">
+                    <i class="fas fa-trash-alt mr-2"></i>
+                    Clear All
+                  </a>
+                </div>
+              </div>
+              <button type="button" class="btn btn-tool" data-card-widget="collapse">
+                <i class="fas fa-minus"></i>
+              </button>
+            </div>
+          </div>
+
+          <div class="card-body p-0">
+            <div class="p-2">
+              <input
+                type="text"
+                class="form-control form-control-sm"
+                placeholder="Search conversations..."
+                id="searchConversations"
+              />
+            </div>
+            <ul class="list-group list-group-flush" id="chatHistoryList">
+              <!-- Chat history will be loaded here -->
+              <li
+                class="list-group-item d-flex justify-content-between align-items-center chat-history-item"
+                data-id="1"
+              >
+                <i class="fas fa-comments"></i>
+                <span class="chat-history-title">Project Brainstorming Session</span>
+                <span class="badge badge-pill">2h ago</span>
+              </li>
+              <li
+                class="list-group-item d-flex justify-content-between align-items-center chat-history-item"
+                data-id="2"
+              >
+                <i class="fas fa-comments"></i>
+                <span class="chat-history-title">Research Summary Analysis</span>
+                <span class="badge badge-pill">5h ago</span>
+              </li>
+              <li
+                class="list-group-item d-flex justify-content-between align-items-center chat-history-item"
+                data-id="3"
+              >
+                <i class="fas fa-comments"></i>
+                <span class="chat-history-title">Code Review and Optimization</span>
+                <span class="badge badge-pill">1d ago</span>
+              </li>
+              <li
+                class="list-group-item d-flex justify-content-between align-items-center chat-history-item"
+                data-id="4"
+              >
+                <i class="fas fa-comments"></i>
+                <span class="chat-history-title">Marketing Campaign Ideas</span>
+                <span class="badge badge-pill">2d ago</span>
+              </li>
+              <li
+                class="list-group-item d-flex justify-content-between align-items-center chat-history-item"
+                data-id="5"
+              >
+                <i class="fas fa-comments"></i>
+                <span class="chat-history-title">Data Analysis Results</span>
+                <span class="badge badge-pill">3d ago</span>
+              </li>
+            </ul>
+          </div>
+
+          <div class="card-footer text-center">
+            <button class="btn btn-sm btn-outline-primary" id="newChatBtn">
+              <i class="fas fa-plus mr-1"></i>
+              New Chat
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %} {% block scripts %}
+<!-- Add external dependencies -->
+
+<!-- Load modular JavaScript files -->
+<script type="module" src="{{ url_for('static', path='dist/js/pages/chat/ui-handlers.js') }}"></script>
+<script type="module" src="{{ url_for('static', path='dist/js/pages/chat/message-handlers.js') }}"></script>
+<script type="module" src="{{ url_for('static', path='dist/js/pages/chat/file-handlers.js') }}"></script>
+<script type="module" src="{{ url_for('static', path='dist/js/pages/chat/api-service.js') }}"></script>
+<script type="module" src="{{ url_for('static', path='dist/js/pages/chat/advanced-settings.js') }}"></script>
+<script type="module" src="{{ url_for('static', path='dist/js/pages/chat/voice-input.js') }}"></script>
+<script type="module" src="{{ url_for('static', path='dist/js/pages/chat/main.js') }}"></script>
+
+<script>
+$(document).ready(function () {
+  /** Initialize UI components */
+  function initializeUI() {
+    console.log("UI components initialized");
+  }
+
+  initializeUI();
+
+  /** Highlight code blocks and add copy buttons */
+  function highlightCodeInMessages() {
+    $("pre code").each(function () {
+      hljs.highlightElement(this);
+
+      if (!$(this).parent().find(".code-copy-btn").length) {
+        const $copyBtn = $('<button class="code-copy-btn">Copy</button>');
+        $copyBtn.on("click", () => {
+          navigator.clipboard.writeText($(this).text()).then(() => {
+            $copyBtn.text("Copied!");
+            setTimeout(() => $copyBtn.text("Copy"), 2000);
+          });
+        });
+        $(this).parent().append($copyBtn);
+      }
+    });
+  }
+
+  highlightCodeInMessages();
+
+  /** Observe DOM changes for dynamic message content */
+  const observer = new MutationObserver(function (mutations) {
+    mutations.forEach(function (mutation) {
+      if (mutation.addedNodes.length) {
+        highlightCodeInMessages();
+      }
+    });
+  });
+
+  observer.observe(document.getElementById("chatContainer"), { childList: true, subtree: true });
+
+  /** Add tooltip initialization if needed (CSS based here) */
+  $(".custom-tooltip").each(function () {
+    // No JS action needed if purely CSS
+  });
+
+  /** Chat suggestion chips */
+  $(".suggestion-chip").on("click", function () {
+    const text = $(this).text().trim();
+    $("#messageInput").val(text).focus();
+  });
+
+  /** Prompt library items */
+  $(".prompt-item").on("click", function () {
+    const prompt = $(this).text().trim();
+    const $customInstructions = $("#customInstructions");
+
+    const promptText = {
+      "Technical Expert":
+        "Respond as a technical expert with deep domain knowledge. Use precise terminology and provide detailed explanations.",
+      "Simple Explanations":
+        "Explain concepts in simple terms as if talking to someone with no background in the subject. Use analogies and everyday examples.",
+      "Creative Writer":
+        "Respond with creative flair, using vivid language, metaphors, and storytelling techniques.",
+      "Data Analyst":
+        "Approach questions from a data-driven perspective. Be analytical, highlight patterns, and consider statistical implications.",
+      "Marketing Specialist":
+        "Frame responses with marketing principles in mind. Consider audience targeting, value propositions, and engagement strategies.",
+      "Teacher":
+        "Adopt an educational approach with clear learning objectives. Break down complex topics into digestible parts and check for understanding."
+    };
+
+    $customInstructions.val(promptText[prompt] || $customInstructions.val());
+  });
+
+  /** Dark/Light mode toggle */
+  $(".dark-mode-toggle").on("click", function () {
+    const $icon = $(this).find("i");
+    $icon.toggleClass("fa-moon fa-sun");
+  });
+
+  /** Voice input button toggle */
+  $("#voiceInputBtn").on("click", function () {
+    $(this).toggleClass("recording");
+    const $icon = $(this).find("i");
+
+    if ($(this).hasClass("recording")) {
+      $icon.removeClass("fa-microphone").addClass("fa-stop");
+      $(this).attr("data-tooltip", "Stop recording");
+      // Start recording logic placeholder
+    } else {
+      $icon.removeClass("fa-stop").addClass("fa-microphone");
+      $(this).attr("data-tooltip", "Voice input");
+      // Stop recording logic placeholder
+    }
+  });
+
+  /** Copy full message content */
+  $(".copy-btn").on("click", function () {
+    const messageContent = $(this).closest(".message").find(".message-content").text();
+
+    navigator.clipboard.writeText(messageContent).then(() => {
+      const originalHTML = $(this).html();
+      $(this).html('<i class="fas fa-check"></i> Copied');
+      setTimeout(() => {
+        $(this).html(originalHTML);
+      }, 2000);
+    });
+  });
+
+  /** Export conversation button */
+  $(".export-btn").on("click", function () {
+    const exportOptions = ["Text (.txt)", "Markdown (.md)", "HTML (.html)", "JSON (.json)"];
+    alert("Export options would appear here: " + exportOptions.join(", "));
+  });
+});
+</script>
+{% endblock %} {% block footer %} {% endblock %}
