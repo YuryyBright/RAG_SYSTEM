@@ -2,8 +2,9 @@
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 
+from api.dependencies.infrastructure_dependencies import get_theme_repository
 from api.schemas.files import FileResponse
-from app.api.dependencies.dependencies import get_theme_use_case, get_theme_use_case_p
+from app.api.dependencies.use_case_dependencies import get_theme_use_case
 from app.api.schemas.theme import (
     ThemeCreate,
     ThemeUpdate,
@@ -15,8 +16,9 @@ from app.api.schemas.theme import (
 from app.api.middleware_auth import get_current_active_user
 from app.core.use_cases.theme import ThemeUseCase
 from domain.interfaces.document_store import DocumentStoreInterface
-from app.api.dependencies.dependencies import get_document_store
+from app.api.dependencies.document_dependency import get_document_store
 from domain.entities.user import User
+from infrastructure.repositories.theme_repository import ThemeRepository
 
 router = APIRouter()
 
@@ -24,13 +26,13 @@ router = APIRouter()
 async def create_theme(
         theme_data: ThemeCreate,
         user: dict = Depends(get_current_active_user),
-        theme_use_case: ThemeUseCase = Depends(get_theme_use_case_p)
+        theme_repo: ThemeRepository = Depends(get_theme_repository)
 ):
     """
     Create a new theme.
     """
     try:
-        created_theme = await theme_use_case.create_theme(
+        created_theme = await theme_repo.create_theme(
             name=theme_data.name,
             description=theme_data.description,
             is_public=theme_data.is_public,
@@ -43,7 +45,7 @@ async def create_theme(
             description=created_theme.description,
             is_public=created_theme.is_public,
             owner_id=created_theme.owner_id,
-            document_count=await theme_use_case.theme_repository.count_documents(created_theme.id),
+            document_count=await theme_repo.count_documents(created_theme.id),
             created_at=created_theme.created_at.isoformat(),
             updated_at=created_theme.updated_at.isoformat() if created_theme.updated_at else None
         )
@@ -58,13 +60,13 @@ async def create_theme(
 async def get_themes(
         include_public: bool = False,
         user: dict = Depends(get_current_active_user),
-        theme_use_case: ThemeUseCase = Depends(get_theme_use_case_p)
+        theme_repo: ThemeRepository = Depends(get_theme_repository)
 ):
     """
     Get themes owned by the current user, optionally including public themes.
     """
     try:
-        themes = await theme_use_case.get_themes(
+        themes = await theme_repo.get_themes(
             owner_id=user.id,  # ✅ FIXED HERE
             include_public=include_public
         )
@@ -95,13 +97,13 @@ async def get_themes(
 async def get_theme(
         theme_id: str,
         user: dict = Depends(get_current_active_user),
-        theme_use_case: ThemeUseCase = Depends(get_theme_use_case_p)
+        theme_repo: ThemeRepository = Depends(get_theme_repository)
 ):
     """
     Get a specific theme by ID.
     """
     try:
-        theme = await theme_use_case.get_theme(theme_id)
+        theme = await theme_repo.get_theme(theme_id)
 
         if not theme:
             raise HTTPException(
@@ -115,7 +117,7 @@ async def get_theme(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You don't have access to this theme"
             )
-
+        documents = await theme_repo.get_theme_documents(theme_id)
         return {
             "id": theme.id,
             "name": theme.name,
@@ -124,8 +126,8 @@ async def get_theme(
             "owner_id": theme.owner_id,
             "created_at": theme.created_at,
             "updated_at": theme.updated_at,
-            "document_count": len(theme.document_ids or []),
-            "document_ids": theme.document_ids or []
+            "document_count": len(documents),
+            "document_ids": [] #TODO fix this issues in next patch
         }
     except HTTPException:
         raise

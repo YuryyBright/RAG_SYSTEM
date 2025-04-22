@@ -77,15 +77,17 @@ class ModelInfo(BaseModel):
         The unique identifier of the model.
     name : str
         The name of the model.
-    provider : str
+    file_path : str
         The provider of the model (e.g., OpenAI, HuggingFace).
-    context_window : int | None, optional
+    size : int | None, optional
         The maximum context window size supported by the model, if applicable.
     """
     id: str
     name: str
     provider: str
-    context_window: int | None = None
+    file_path: str
+    size: int
+    #context_window: int | None = None
 
 
 class ConversationContextResponse(BaseModel):

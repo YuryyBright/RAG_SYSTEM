@@ -9,7 +9,7 @@ from langdetect.lang_detect_exception import LangDetectException
 
 from domain.entities.document import Document
 from domain.entities.processed_file import ProcessedFile
-from infrastructure.repositories.repository.file_repository import FileRepository
+from infrastructure.repositories.file_repository import FileRepository
 
 from utils.logger_util import get_logger
 from infrastructure.files.readers.reader_factory import ReaderFactory

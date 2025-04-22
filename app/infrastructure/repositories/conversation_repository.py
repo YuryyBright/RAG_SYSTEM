@@ -1,4 +1,6 @@
 from typing import List, Optional
+
+from sqlalchemy import asc, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.exc import SQLAlchemyError
@@ -72,9 +74,17 @@ class ConversationRepository:
         except SQLAlchemyError:
             return None
 
-    async def get_by_user_id(self, user_id: str, active_only: bool = False) -> List[Conversation]:
+    async def get_by_user_id(
+            self,
+            user_id: str,
+            active_only: bool = False,
+            limit: Optional[int] = None,
+            offset: Optional[int] = None,
+            sort_by: str = "updated_at",
+            sort_dir: str = "desc"
+    ) -> List[Conversation]:
         """
-        Retrieve all conversations for a specific user.
+        Retrieve conversations for a specific user with optional filtering, pagination, and sorting.
 
         Parameters
         ----------
@@ -82,19 +92,30 @@ class ConversationRepository:
             The unique identifier of the user.
         active_only : bool, optional
             If True, only active conversations will be retrieved (default is False).
+        limit : Optional[int], optional
+            Maximum number of conversations to return.
+        offset : Optional[int], optional
+            Number of conversations to skip.
+        sort_by : str, optional
+            Field to sort by (default is "updated_at").
+        sort_dir : str, optional
+            Sort direction: "asc" or "desc" (default is "desc").
 
         Returns
         -------
         List[Conversation]
-            A list of Conversation objects for the user, ordered by the most recently updated.
+            A list of Conversation objects for the user, ordered and paginated.
 
         Raises
         ------
         ValueError
-            If user_id is empty.
+            If user_id is empty or invalid sort direction is provided.
         """
         if not user_id:
             raise ValueError("user_id must be a non-empty string.")
+
+        if sort_dir not in {"asc", "desc"}:
+            raise ValueError("sort_dir must be either 'asc' or 'desc'.")
 
         try:
             query = select(Conversation).where(Conversation.user_id == user_id)
@@ -102,17 +123,29 @@ class ConversationRepository:
             if active_only:
                 query = query.where(Conversation.is_active.is_(True))
 
-            query = query.order_by(Conversation.updated_at.desc())
+            sort_column = getattr(Conversation, sort_by, None)
+            if sort_column is None:
+                raise ValueError(f"Invalid sort_by field: {sort_by}")
+
+            if sort_dir == "asc":
+                query = query.order_by(asc(sort_column))
+            else:
+                query = query.order_by(desc(sort_column))
+
+            if limit is not None:
+                query = query.limit(limit)
+            if offset is not None:
+                query = query.offset(offset)
 
             result = await self.db_session.execute(query)
-            conversations = result.scalars().all()
+            conversations = list(result.scalars().all())
 
-            logger.debug(f"Retrieved {len(conversations)} conversations for user_id={user_id}")
+            # logger.info(f"Retrieved {len(conversations)} conversations for user_id={user_id}")
             return conversations
 
-        except SQLAlchemyError as e:
-            logger.exception(f"Database error while retrieving conversations for user_id={user_id}: {e}")
-            raise  # Re-raise so that the caller can handle it properly
+        except Exception as e:
+            logger.error(f"Error retrieving conversations for user_id={user_id}: {e}")
+            raise
 
     async def update(self, conversation: Conversation) -> Optional[Conversation]:
         """

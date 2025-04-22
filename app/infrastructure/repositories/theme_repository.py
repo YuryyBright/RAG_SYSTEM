@@ -30,7 +30,7 @@ class ThemeRepository(ThemeRepositoryInterface):
         self.db = db
 
     async def create_theme(self, name: str, description: Optional[str],
-                           is_public: bool, owner_id: str) -> str:
+                           is_public: bool, owner_id: str) -> Theme:
         """
         Create and persist a new theme in the database.
 
@@ -56,7 +56,7 @@ class ThemeRepository(ThemeRepositoryInterface):
             )
             self.db.add(theme)
             await self.db.commit()
-            return theme.id
+            return theme
         except SQLAlchemyError as e:
             logger.error(f"Error creating theme: {e}")
             await self.db.rollback()

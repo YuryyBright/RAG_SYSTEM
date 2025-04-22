@@ -228,11 +228,139 @@ class DocumentRepository:
         return result.scalar()
 
     async def search_similar(
-            self, embedding: Optional[List[float]], limit: int = 10, owner_id: Optional[str] = None
+            self,
+            embedding: Optional[List[float]],
+            limit: int = 10,
+            owner_id: Optional[str] = None,
+            theme_id: Optional[str] = None
     ) -> List[Document]:
         """
-        Search for similar documents using a vector embedding. This assumes
-        a method is in place (e.g., FAISS or Postgres pgvector) that supports vector similarity.
+        Search for similar documents using a vector embedding.
+
+        This method implements vector similarity search using PostgreSQL's pgvector extension.
+        It calculates cosine similarity between the provided embedding and document embeddings.
+
+        Parameters
+        ----------
+        embedding : Optional[List[float]]
+            The query embedding vector. If None, returns all documents sorted by creation date.
+        limit : int
+            Maximum number of results to return
+        owner_id : Optional[str]
+            Filter results by owner ID
+        theme_id : Optional[str]
+            Filter results by theme ID
+
+        Returns
+        -------
+        List[Document]
+            Documents sorted by similarity to the query embedding
         """
-        # Placeholder stub — to be implemented based on your similarity method (e.g., cosine similarity).
-        raise NotImplementedError("Vector similarity search not yet implemented.")
+        try:
+            # If no embedding provided, return most recent documents
+            if embedding is None:
+                query = select(Document).order_by(Document.created_at.desc())
+
+                # Apply owner filter if provided
+                if owner_id:
+                    query = query.where(Document.owner_id == owner_id)
+
+                # Apply theme filter if provided
+                if theme_id:
+                    query = query.join(
+                        ThemeDocument,
+                        Document.id == ThemeDocument.document_id
+                    ).where(ThemeDocument.theme_id == theme_id)
+
+                query = query.limit(limit)
+                result = await self.db.execute(query)
+                return result.scalars().all()
+
+            # For vector similarity search
+            from sqlalchemy import text
+            from sqlalchemy.sql import column
+            import numpy as np
+
+            # Convert embedding to SQL-compatible array string
+            embedding_str = str(embedding).replace('[', '{').replace(']', '}')
+
+            # Build SQL query for vector similarity
+            # This uses PostgreSQL's vector operators with the pgvector extension
+            sql = """
+            SELECT d.*, 
+                   (d.embedding <=> :embedding) as similarity
+            FROM documents d
+            """
+
+            params = {"embedding": embedding_str, "limit": limit}
+
+            # Add theme join if needed
+            if theme_id:
+                sql += """
+                JOIN theme_documents td ON d.id = td.document_id
+                WHERE td.theme_id = :theme_id
+                """
+                params["theme_id"] = theme_id
+
+                # Add owner filter if provided with theme
+                if owner_id:
+                    sql += " AND d.owner_id = :owner_id"
+                    params["owner_id"] = owner_id
+            elif owner_id:
+                # Just owner filter without theme
+                sql += " WHERE d.owner_id = :owner_id"
+                params["owner_id"] = owner_id
+
+            # Order by similarity and limit results
+            sql += """
+            ORDER BY similarity ASC
+            LIMIT :limit
+            """
+
+            result = await self.db.execute(text(sql), params)
+            documents = result.all()
+
+            # Attach similarity score to each document
+            for doc in documents:
+                # Access similarity from the query result
+                similarity_value = getattr(doc, 'similarity', None)
+                if similarity_value is not None:
+                    # Convert similarity to a score between 0-1 (lower distance = higher score)
+                    # pgvector <=> operator returns a distance, so we convert it to similarity
+                    doc.similarity = 1.0 - min(1.0, float(similarity_value))
+
+            return documents
+
+        except Exception as e:
+            logger.error(f"Error in search_similar: {str(e)}", exc_info=True)
+            # Fallback to basic filtering if vector search fails
+            return await self._fallback_search(limit, owner_id, theme_id)
+
+    async def _fallback_search(
+            self,
+            limit: int,
+            owner_id: Optional[str] = None,
+            theme_id: Optional[str] = None
+    ) -> List[Document]:
+        """
+        Fallback method for basic document retrieval when vector search is unavailable.
+
+        Returns
+        -------
+        List[Document]
+            Latest documents matching the filters
+        """
+        query = select(Document).order_by(Document.created_at.desc())
+
+        if owner_id:
+            query = query.where(Document.owner_id == owner_id)
+
+        if theme_id:
+            query = query.join(
+                ThemeDocument,
+                Document.id == ThemeDocument.document_id
+            ).where(ThemeDocument.theme_id == theme_id)
+
+        query = query.limit(limit)
+        result = await self.db.execute(query)
+        return result.scalars().all()

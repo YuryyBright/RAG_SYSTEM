@@ -1,7 +1,6 @@
 from typing import List, Dict, Any, Optional
 
 from modules.storage.document_store import DocumentStore
-from domain.entities import Query
 from domain.entities.document import Document
 from domain.interfaces.reranking import RerankingService
 from application.services.rag_context_retriever import RAGContextRetriever
@@ -67,82 +66,105 @@ class RAGQueryProcessor:
                 - documents: metadata and snippet for each retrieved document
                 - metadata: flags about context usage and counts
         """
-        # 1. Embed Query
-        query_embedding = await self.embedding_service.get_embedding(query.text)
+        try:
+            # 1. Embed Query
+            query_embedding = await self.embedding_service.get_embedding(query.text)
 
-        # 2. Retrieve documents via semantic search
-        initial_docs = await self.document_store.semantic_search(
-            query_embedding, limit=self.top_k * 3, theme_id=theme_id  # Більший пул документів
-        )
+            # 2. Retrieve documents via semantic search
+            initial_docs = await self.document_store.semantic_search(
+                query_embedding=query_embedding,
+                limit=self.top_k * 3,
+                theme_id=theme_id  # Larger pool of documents
+            )
 
-        if not initial_docs:
+            if not initial_docs:
+                return {
+                    "query": query.text,
+                    "response": "No relevant documents found.",
+                    "documents": [],
+                    "metadata": {
+                        "document_count": 0,
+                        "used_conversation_context": False,
+                        "reranking_used": False,
+                    },
+                }
+
+            # 3. Reranking
+            reranking_used = False
+            reranker = self.reranking_service
+
+            if reranker_type and reranker_type != getattr(reranker, "reranker_type", None):
+                reranker = RerankerFactory.get_reranker(reranker_type)
+
+            min_score_threshold = 0.3  # Define threshold as a constant
+
+            if reranker:
+                reranked_docs, scores = await self._rerank_documents(query.text, initial_docs, reranker)
+                # Filter weak documents
+                reranked_docs = [doc for doc in reranked_docs if doc.score >= min_score_threshold]
+                relevant_docs = reranked_docs[:self.top_k] if reranked_docs else initial_docs[:self.top_k]
+                reranking_used = True
+            else:
+                # Apply similar filtering to non-reranked documents if they have scores
+                filtered_docs = [doc for doc in initial_docs if getattr(doc, "score", 1.0) >= min_score_threshold]
+                relevant_docs = filtered_docs[:self.top_k] if filtered_docs else initial_docs[:self.top_k]
+
+            # 4. Prepare Document Context
+            document_context = self._format_documents(relevant_docs)
+
+            # 5. Optionally retrieve conversation context
+            conversation_context = ""
+            if conversation_id and self.rag_context_retriever:
+                context_data = await self.rag_context_retriever.get_context_for_query(
+                    conversation_id=conversation_id, query=query.text
+                )
+                conversation_context = self.rag_context_retriever.format_context_for_llm(context_data)
+
+            # 6. Generate final prompt
+            system_prompt = self._generate_system_prompt(conversation_context, document_context)
+
+            # 7. Call LLM
+            llm_response = await self.llm_provider.generate_text(
+                system_prompt=system_prompt, user_prompt=query.text
+            )
+
+            # 8. Return all assembled information
             return {
                 "query": query.text,
-                "response": "No relevant documents found.",
+                "response": llm_response,
+                "documents": [
+                    {
+                        "id": doc.id,
+                        "title": doc.metadata.get("title", f"Document {idx + 1}"),
+                        "source": doc.source or "Unknown",
+                        "snippet": self._extract_snippet(doc.content, query.text),
+                        "score": getattr(doc, "score", None)
+                    }
+                    for idx, doc in enumerate(relevant_docs)
+                ],
+                "metadata": {
+                    "used_conversation_context": bool(conversation_context),
+                    "document_count": len(relevant_docs),
+                    "theme_id": theme_id,
+                    "reranking_used": reranking_used,
+                    "reranker_type": getattr(reranker, "reranker_type", None) if reranking_used else None
+                },
+            }
+        except Exception as e:
+            # Proper error handling
+            import logging
+            logging.error(f"Error processing query: {str(e)}", exc_info=True)
+            return {
+                "query": query.text,
+                "response": "An error occurred while processing your query.",
                 "documents": [],
                 "metadata": {
+                    "error": str(e),
                     "document_count": 0,
                     "used_conversation_context": False,
                     "reranking_used": False,
                 },
             }
-
-        # 3. Reranking
-        reranking_used = False
-        reranker = self.reranking_service
-
-        if reranker_type and reranker_type != getattr(reranker, "reranker_type", None):
-            reranker = RerankerFactory.get_reranker(reranker_type)
-
-        if reranker:
-            reranked_docs, scores = await self._rerank_documents(query.text, initial_docs, reranker)
-            reranked_docs = [doc for doc in reranked_docs if doc.score >= 0.3]  # Фільтруємо слабкі документи
-            relevant_docs = reranked_docs[:self.top_k] if reranked_docs else initial_docs[:self.top_k]
-            reranking_used = True
-        else:
-            relevant_docs = initial_docs[:self.top_k]
-
-        # 4. Prepare Document Context
-        document_context = self._format_documents(relevant_docs)
-
-        # 5. Optionally retrieve conversation context
-        conversation_context = ""
-        if conversation_id and self.rag_context_retriever:
-            context_data = await self.rag_context_retriever.get_context_for_query(
-                conversation_id=conversation_id, query=query.text
-            )
-            conversation_context = self.rag_context_retriever.format_context_for_llm(context_data)
-
-        # 6. Generate final prompt
-        system_prompt = self._generate_system_prompt(conversation_context, document_context)
-
-        # 7. Call LLM
-        llm_response = await self.llm_provider.generate_text(
-            system_prompt=system_prompt, user_prompt=query.text
-        )
-
-        # 8. Return all assembled information
-        return {
-            "query": query.text,
-            "response": llm_response,
-            "documents": [
-                {
-                    "id": doc.id,
-                    "title": doc.metadata.get("title", f"Document {idx + 1}"),
-                    "source": doc.source or "Unknown",
-                    "snippet": self._extract_snippet(doc.content, query.text),
-                    "score": getattr(doc, "score", None)
-                }
-                for idx, doc in enumerate(relevant_docs)
-            ],
-            "metadata": {
-                "used_conversation_context": bool(conversation_context),
-                "document_count": len(relevant_docs),
-                "theme_id": theme_id,
-                "reranking_used": reranking_used,
-                "reranker_type": getattr(reranker, "reranker_type", None) if reranking_used else None
-            },
-        }
 
     async def _rerank_documents(
             self,
@@ -233,53 +255,50 @@ class RAGQueryProcessor:
         """
         Extract a relevant snippet up to `max_length` characters around query terms.
 
-        Implements a sliding window to maximize query term coverage.
+        Implements a sliding window to maximize query term coverage with better edge handling.
         """
         if len(text) <= max_length:
             return text
 
-        query_terms = set(query.lower().split())
-        text_lower = text.lower()
+        query_terms = set(word.lower() for word in query.lower().split() if len(word) > 2)
 
+        # If no significant query terms, return the beginning of the document
+        if not query_terms:
+            return text[:max_length] + ("..." if len(text) > max_length else "")
+
+        text_lower = text.lower()
         best_start = 0
         best_score = 0
-        window = max_length * 2
-        step = max_length
+        window = max_length * 2  # Double-sized window for searching
+        step = max(max_length // 4, 20)  # Smaller steps for better precision
 
-        for start in range(0, len(text_lower), step):
+        # Find the chunk with highest query term density
+        for start in range(0, len(text_lower) - window + 1, step):
             chunk = text_lower[start:start + window]
-            score = sum(term in chunk for term in query_terms)
+            # Weight by both term presence and position in chunk
+            score = sum(3 if term in chunk[:window // 2] else 1 for term in query_terms if term in chunk)
             if score > best_score:
                 best_score = score
                 best_start = start
 
-        snippet = text[best_start:best_start + max_length]
-        # Adjust to word boundaries
+        # Fine-tune to avoid cutting words
+        adjusted_start = best_start
         if best_start > 0:
+            # Find word boundary to the right
+            space_pos = text.find(' ', best_start)
+            if space_pos > 0 and space_pos < best_start + 20:  # Don't move too far
+                adjusted_start = space_pos + 1
+
+        snippet = text[adjusted_start:adjusted_start + max_length]
+
+        # Adjust to word boundaries
+        if adjusted_start > 0:
             snippet = "..." + snippet.lstrip()
-        if best_start + max_length < len(text):
-            snippet = snippet.rstrip() + "..."
+        if adjusted_start + max_length < len(text):
+            last_space = snippet.rfind(' ')
+            if last_space > max_length * 0.75:  # Only truncate if we keep most of the content
+                snippet = snippet[:last_space] + "..."
+            else:
+                snippet = snippet.rstrip() + "..."
 
         return snippet
-
-    async def extra_functionality(
-            self,
-            query: Query,
-            external_flag: bool = False,
-            **kwargs: Any
-    ) -> Any:
-        """
-        Placeholder for extending post-processing or notifications after RAG processing.
-
-        Args:
-            query: The original Query entity.
-            external_flag: Example flag for custom behavior.
-            **kwargs: Additional parameters for extension.
-
-        Returns:
-            Custom result (defined by implementation).
-
-        Raises:
-            NotImplementedError: Must be overridden to enable functionality.
-        """
-        raise NotImplementedError("`extra_functionality` is not implemented.")

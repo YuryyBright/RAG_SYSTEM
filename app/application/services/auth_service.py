@@ -6,14 +6,14 @@ from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from domain.entities.user import User
-from infrastructure.repositories.repository.user_repository import UserRepository
-from infrastructure.repositories.repository.token_repository import TokenRepository
+from infrastructure.repositories.user_repository import UserRepository
+from infrastructure.repositories.token_repository import TokenRepository
 from app.modules.auth.security import JWTAuth
 from app.utils.logger_util import get_logger
 from app.utils.security import generate_session_id, generate_csrf_token
 
-from infrastructure.repositories.repository.activity_repository import ActivityRepository
-from infrastructure.repositories.repository.session_repository import SessionRepository
+from infrastructure.repositories.activity_repository import ActivityRepository
+from infrastructure.repositories.session_repository import SessionRepository
 from fastapi import Request
 
 

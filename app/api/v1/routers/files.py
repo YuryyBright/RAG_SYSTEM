@@ -7,8 +7,10 @@ from sqlalchemy.orm import Session
 from typing import List, Optional, Union
 import os
 
+from api.dependencies.infrastructure_dependencies import get_task_manager
 from api.middleware_auth import get_current_active_user
-from infrastructure.repositories.repository import get_async_db
+from api.schemas.task import TaskTypeEnum
+from infrastructure.repositories import get_async_db
 from app.infrastructure.database.db_models import User, File as FileModel
 from app.modules.storage.file_manager import FileManager
 from app.api.schemas.files import FileResponse as FileResponseSchema
@@ -20,10 +22,10 @@ from api.schemas.files import (
     FileProcessingRecommendations
 )
 from app.core.use_cases.file_processing import FileProcessingUseCase
-from app.api.dependencies.dependencies import file_processing_use_case, get_task_manager
+from app.api.dependencies.use_case_dependencies import file_processing_use_case
 from config import settings
 from application.services.task_services import TaskManager
-from infrastructure.repositories.repository.file_repository import FileRepository
+from infrastructure.repositories.file_repository import FileRepository
 
 router = APIRouter()
 file_manager = FileManager()
@@ -96,7 +98,7 @@ async def process_files_with_chunking(
     task = await task_service.create_task(
         user_id=current_user.id,
         theme_id=request.theme_id,
-        task_type="theme_processing",
+        task_type=TaskTypeEnum.THEME_PROCESSING,
         description=f"Processing theme: {request.theme_id}",
         metadata={
             "step": "processing",

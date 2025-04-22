@@ -34,7 +34,7 @@ export const APIService = {
   // Load chat history
   loadChatHistory() {
     return $.ajax({
-      url: "/api/conversations/history",
+      url: "/api/conversations",
       method: "GET",
       dataType: "json",
     })
@@ -66,7 +66,7 @@ export const APIService = {
   // Get a specific chat
   getChat(chatId) {
     return $.ajax({
-      url: `/api/v1/chat/${chatId}`,
+      url: `/api/conversations/chat/${chatId}`,
       method: "GET",
       dataType: "json",
     }).catch((error) => {
@@ -78,11 +78,11 @@ export const APIService = {
   // Load models
   loadModels() {
     return $.ajax({
-      url: "/api/v1/models",
+      url: "/api/conversations/models",
       method: "GET",
       dataType: "json",
     })
-      .then((data) => data.models)
+      .then((data) => data)
       .catch((error) => {
         console.error("Failed to load models:", error);
         throw new Error("Failed to load models");
@@ -92,7 +92,7 @@ export const APIService = {
   // Clear chat history
   clearChatHistory() {
     return $.ajax({
-      url: "/api/v1/chat/history",
+      url: "/api/conversations/chat/history",
       method: "DELETE",
       dataType: "json",
     }).catch((error) => {

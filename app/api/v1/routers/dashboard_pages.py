@@ -5,9 +5,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.middleware_auth import get_current_active_user
 from app.infrastructure.database.db_models import User, File
-from infrastructure.repositories.repository import get_async_db
+from infrastructure.repositories import get_async_db
 from core.templates.templates import templates
-from infrastructure.repositories.repository.file_repository import FileRepository
+from infrastructure.repositories.file_repository import FileRepository
 
 # Set up templates
 

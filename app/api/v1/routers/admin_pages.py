@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from api.v1.routers.auth import get_current_active_user
 from app.infrastructure.database.db_models import User, File
-from infrastructure.repositories.repository import get_async_db
+from infrastructure.repositories import get_async_db
 
 # Set up templates
 templates = Jinja2Templates(directory="app/templates")
