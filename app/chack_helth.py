@@ -1,4 +1,5 @@
 import asyncio
+from pprint import pprint
 
 from api.dependencies.ai_dependencies import get_llm_service
 from application.services.conversation_service import ConversationService
@@ -103,7 +104,7 @@ async def main():
         )
 
         print("🧠 ASSISTANT REPLY:")
-        print(assistant_response)
+        pprint(result)
 
 if __name__ == "__main__":
     asyncio.run(main())

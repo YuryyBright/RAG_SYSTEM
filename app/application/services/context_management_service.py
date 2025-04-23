@@ -168,3 +168,20 @@ class ContextManagementService:
             return None
         context.priority = new_priority
         return await self.context_repo.update(context)
+
+    async def get_conversation_context(self, conversation_id: str) -> List[ConversationContext]:
+        """
+        Alias for list_contexts to support external service calls.
+
+        Parameters
+        ----------
+        conversation_id : str
+            ID of the conversation.
+
+        Returns
+        -------
+        List[ConversationContext]
+            All context entries for the conversation.
+        """
+        return await self.list_contexts(conversation_id)
+

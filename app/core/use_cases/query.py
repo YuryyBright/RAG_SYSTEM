@@ -7,8 +7,9 @@ from application.services.rag_context_retriever import RAGContextRetriever
 from app.modules.reranking.factory import RerankerFactory
 from domain.interfaces.embedding import EmbeddingInterface
 from domain.interfaces.llm import LLMInterface
+from utils.logger_util import get_logger
 
-
+logger = get_logger(__name__)
 class RAGQueryProcessor:
     """
     Asynchronous processor for queries using Retrieval-Augmented Generation (RAG).
@@ -125,9 +126,9 @@ class RAGQueryProcessor:
 
             # 7. Call LLM
             llm_response = await self.llm_provider.generate_text(
-                system_prompt=system_prompt, user_prompt=query.text
+                system_prompt=system_prompt, prompt=query.text
             )
-
+            logger.debug(f"Final prompt to LLM:\n{system_prompt}\nUser Query: {query.text}")
             # 8. Return all assembled information
             return {
                 "query": query.text,
@@ -187,7 +188,7 @@ class RAGQueryProcessor:
             return [], []
 
         document_texts = [doc.content for doc in documents]
-        scores = await reranking_service.rerank(
+        scores = reranking_service.rerank(
             query=query,
             documents=document_texts,
             top_k=len(documents)
@@ -196,16 +197,18 @@ class RAGQueryProcessor:
         # Match scores with documents
         scored_docs = list(zip(documents, scores))
         # Sort by score in descending order
-        scored_docs.sort(key=lambda x: x[1], reverse=True)
+        scored_docs.sort(key=lambda x: x[1]["score"], reverse=True)
 
         # Add score to document metadata and separate reranked docs from scores
         reranked_docs = []
         reranked_scores = []
 
-        for doc, score in scored_docs:
+        for doc, score_dict in scored_docs:
+            score = score_dict.get("score", 0.0)  # Safely get the float score
             doc.metadata = doc.metadata or {}
             doc.metadata["rerank_score"] = score
-            doc.score = score  # Add score directly to document for easy access
+            doc.metadata["rerank_label"] = score_dict.get("label", "unknown")  # Optional: if your dict has more info
+            doc.score = score  # Store score directly for sorting and display
             reranked_docs.append(doc)
             reranked_scores.append(score)
 
@@ -302,3 +305,43 @@ class RAGQueryProcessor:
                 snippet = snippet.rstrip() + "..."
 
         return snippet
+
+    def format_context_for_llm(self, context_data: dict) -> str:
+        """
+        Format context data (recent messages, semantic results, and context items)
+        into a single prompt-ready string for LLM use.
+
+        Args:
+            context_data: Dictionary with keys 'recent_messages', 'semantic_results', and 'context_items'
+
+        Returns:
+            str: A well-formatted string containing the merged context info.
+        """
+        parts = []
+
+        # Format recent messages
+        if context_data.get("recent_messages"):
+            parts.append("RECENT MESSAGES:")
+            for msg in context_data["recent_messages"]:
+                role = getattr(msg, "role", "user")
+                content = getattr(msg, "content", "")
+                parts.append(f"{role.capitalize()}: {content}")
+            parts.append("")
+
+        # Format semantic results
+        if context_data.get("semantic_results"):
+            parts.append("SEMANTIC RESULTS:")
+            for idx, doc in enumerate(context_data["semantic_results"], start=1):
+                content = doc.get("content", "") if isinstance(doc, dict) else str(doc)
+                parts.append(f"[Result {idx}]: {content}")
+            parts.append("")
+
+        # Format context items (summaries, key points, etc.)
+        if context_data.get("context_items"):
+            parts.append("CONVERSATION CONTEXTS:")
+            for item in context_data["context_items"]:
+                context_type = getattr(item, "context_type", "unknown")
+                parts.append(f"[{context_type.capitalize()}]: {item.content}")
+            parts.append("")
+
+        return "\n".join(parts)

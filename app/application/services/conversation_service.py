@@ -523,3 +523,22 @@ class ConversationService:
                 new_messages.append(new_msg)
 
         return new_conversation, new_messages
+
+    async def get_recent_messages(self, conversation_id: str, limit: int = 5) -> List[Message]:
+        """
+        Retrieve the most recent messages in a conversation.
+
+        Parameters
+        ----------
+        conversation_id : str
+            Unique identifier of the conversation.
+        limit : int
+            Maximum number of recent messages to return.
+
+        Returns
+        -------
+        List[Message]
+            The most recent messages, ordered by newest last (chronological).
+        """
+        messages = await self.get_messages(conversation_id, include_hidden=False, limit=limit)
+        return messages[-limit:] if len(messages) > limit else messages

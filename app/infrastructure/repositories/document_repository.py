@@ -2,6 +2,8 @@ from typing import Optional, List, Dict, Any
 
 from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
 from app.infrastructure.database.db_models import Document, ThemeDocument
 from app.utils.logger_util import get_logger
 
@@ -234,38 +236,17 @@ class DocumentRepository:
             owner_id: Optional[str] = None,
             theme_id: Optional[str] = None
     ) -> List[Document]:
-        """
-        Search for similar documents using a vector embedding.
-
-        This method implements vector similarity search using PostgreSQL's pgvector extension.
-        It calculates cosine similarity between the provided embedding and document embeddings.
-
-        Parameters
-        ----------
-        embedding : Optional[List[float]]
-            The query embedding vector. If None, returns all documents sorted by creation date.
-        limit : int
-            Maximum number of results to return
-        owner_id : Optional[str]
-            Filter results by owner ID
-        theme_id : Optional[str]
-            Filter results by theme ID
-
-        Returns
-        -------
-        List[Document]
-            Documents sorted by similarity to the query embedding
-        """
+        """Search for similar documents using vector similarity"""
         try:
-            # If no embedding provided, return most recent documents
+            # Handle non-vector search case
             if embedding is None:
-                query = select(Document).order_by(Document.created_at.desc())
+                query = select(Document).options(
+                    selectinload(Document.document_metadata)
+                ).order_by(Document.created_at.desc())
 
-                # Apply owner filter if provided
+                # Apply filters
                 if owner_id:
                     query = query.where(Document.owner_id == owner_id)
-
-                # Apply theme filter if provided
                 if theme_id:
                     query = query.join(
                         ThemeDocument,
@@ -273,21 +254,16 @@ class DocumentRepository:
                     ).where(ThemeDocument.theme_id == theme_id)
 
                 query = query.limit(limit)
-
-                # Create a new transaction for this operation
                 result = await self.db.execute(query)
                 return result.scalars().all()
 
             # For vector similarity search
             from sqlalchemy import text
-            from sqlalchemy.sql import column
-            import numpy as np
 
-            # Convert embedding to SQL-compatible array string
-            embedding_str = str(embedding).replace('[', '{').replace(']', '}')
+            # Use proper vector format for pgvector - keep square brackets
+            embedding_str = str(embedding)
 
-            # Build SQL query for vector similarity
-            # This uses PostgreSQL's vector operators with the pgvector extension
+            # Build query with proper parameters
             sql = """
             SELECT d.id, (d.embedding <=> :embedding) as similarity
             FROM documents d
@@ -295,7 +271,7 @@ class DocumentRepository:
 
             params = {"embedding": embedding_str, "limit": limit}
 
-            # Add theme join if needed
+            # Add filters
             if theme_id:
                 sql += """
                 JOIN theme_documents td ON d.id = td.document_id
@@ -303,83 +279,74 @@ class DocumentRepository:
                 """
                 params["theme_id"] = theme_id
 
-                # Add owner filter if provided with theme
                 if owner_id:
                     sql += " AND d.owner_id = :owner_id"
                     params["owner_id"] = owner_id
             elif owner_id:
-                # Just owner filter without theme
                 sql += " WHERE d.owner_id = :owner_id"
                 params["owner_id"] = owner_id
 
-            # Order by similarity and limit results
             sql += """
             ORDER BY similarity ASC
             LIMIT :limit
             """
 
-            # Use transaction to ensure proper handling of database errors
-                # Execute the query to get document IDs and their similarity scores
+            # Execute vector search
             result = await self.db.execute(text(sql), params)
             rows = result.all()
 
             if not rows:
                 return []
 
+            # Process results with similarity scores
             similarity_data = {row.id: 1.0 - min(1.0, float(row.similarity)) for row in rows}
-
-            # Now fetch the actual document objects
             doc_ids = list(similarity_data.keys())
-            query = select(Document).where(Document.id.in_(doc_ids))
+
+            # Fetch documents with eager loading of metadata
+            query = select(Document).options(
+                selectinload(Document.document_metadata)
+            ).where(Document.id.in_(doc_ids))
+
             result = await self.db.execute(query)
             documents = result.scalars().all()
 
-            # Attach similarity scores to the document objects
+            # Attach similarity scores
             for doc in documents:
                 doc.similarity = similarity_data.get(doc.id, 0.0)
 
-            # Sort by similarity score (highest first)
+            # Sort by similarity (highest first)
             documents.sort(key=lambda x: x.similarity, reverse=True)
-
             return documents
 
         except Exception as e:
             logger.error(f"Error in search_similar: {str(e)}", exc_info=True)
-            # Fallback to basic filtering if vector search fails
-            return await self._fallback_search(limit, owner_id, theme_id)
+            # Fallback without trying to start a new transaction
+            return await self._fallback_search_no_transaction(limit, owner_id, theme_id)
 
-    async def _fallback_search(
+    async def _fallback_search_no_transaction(
             self,
             limit: int,
             owner_id: Optional[str] = None,
             theme_id: Optional[str] = None
     ) -> List[Document]:
-        """
-        Fallback method for basic document retrieval when vector search is unavailable.
-
-        Returns
-        -------
-        List[Document]
-            Latest documents matching the filters
-        """
+        """Fallback method that doesn't start a new transaction"""
         try:
-            # Use a fresh transaction for the fallback query
-            async with self.db.begin() as transaction:
-                query = select(Document).order_by(Document.created_at.desc())
+            query = select(Document).options(
+                selectinload(Document.document_metadata)
+            ).order_by(Document.created_at.desc())
 
-                if owner_id:
-                    query = query.where(Document.owner_id == owner_id)
+            if owner_id:
+                query = query.where(Document.owner_id == owner_id)
 
-                if theme_id:
-                    query = query.join(
-                        ThemeDocument,
-                        Document.id == ThemeDocument.document_id
-                    ).where(ThemeDocument.theme_id == theme_id)
+            if theme_id:
+                query = query.join(
+                    ThemeDocument,
+                    Document.id == ThemeDocument.document_id
+                ).where(ThemeDocument.theme_id == theme_id)
 
-                query = query.limit(limit)
-                result = await self.db.execute(query)
-                return result.scalars().all()
+            query = query.limit(limit)
+            result = await self.db.execute(query)
+            return result.scalars().all()
         except Exception as e:
-            logger.error(f"Error in _fallback_search: {str(e)}", exc_info=True)
-            # If even the fallback fails, return an empty list
+            logger.error(f"Error in fallback search: {str(e)}", exc_info=True)
             return []

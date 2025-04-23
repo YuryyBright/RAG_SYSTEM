@@ -88,8 +88,8 @@ class DocumentStore(DocumentStoreInterface):
                     owner_id=result.owner_id,
                     theme_id=getattr(result, 'theme_id', theme_id),
                     metadata=self._extract_metadata(result),
-                    created_at=result.created_at.isoformat(),
-                    updated_at=result.updated_at.isoformat()
+                    created_at=result.created_at.isoformat() if result.created_at else None,
+                    updated_at=result.updated_at.isoformat() if result.updated_at else None
                 )
                 document.score = similarity  # Add score to document
 
