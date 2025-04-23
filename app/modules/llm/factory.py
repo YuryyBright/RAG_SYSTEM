@@ -2,7 +2,7 @@
 from typing import List, Dict, Any, Optional, Type
 from pathlib import Path
 from app.modules.llm.base import BaseLLM
-from app.config import settings
+from app.config import settings, BASE_DIR
 from app.utils.logger_util import get_logger
 
 logger = get_logger(__name__)
@@ -52,7 +52,7 @@ class LLMFactory:
         Scan the local models directory to detect available models.
         Auto-detects model types based on file extensions and directory structure.
         """
-        models_dir = Path(settings.MODELS_BASE_DIR)
+        models_dir = (BASE_DIR / 'app' /settings.MODELS_BASE_DIR).resolve()
         print(models_dir)
         models = []
         if not models_dir.exists():

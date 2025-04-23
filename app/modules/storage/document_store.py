@@ -142,48 +142,50 @@ class DocumentStore(DocumentStoreInterface):
     def _load_document_from_disk(self, document_id: str, owner_id: str, theme_id: str) -> Optional[Document]:
         """Load document from disk."""
         try:
-            # Construct file path
-            file_path = self.storage_path / owner_id / theme_id / f"{document_id}.json"
+            # Traverse all directories if owner_id or theme_id is not provided
+            base_path = self.storage_path
 
-            # Check if file exists
+            if owner_id:
+                base_path = base_path / owner_id
+            else:
+                owner_dirs = list(base_path.glob("*"))
+                if not owner_dirs:
+                    return None
+                base_path = owner_dirs[0]
+
+            if theme_id:
+                base_path = base_path / theme_id
+            else:
+                theme_dirs = list(base_path.glob("*"))
+                if not theme_dirs:
+                    return None
+                base_path = theme_dirs[0]
+
+            file_path = base_path / f"{document_id}.json"
+
             if not file_path.exists():
                 return None
 
-            # Load document data
             with open(file_path, "r") as f:
                 doc_dict = json.load(f)
 
-            # Load embedding if available
             embedding = None
             if doc_dict.get("has_embedding", False):
-                embedding_path = self.storage_path / owner_id / theme_id / f"{document_id}.embedding.npy"
+                embedding_path = file_path.with_suffix(".embedding.npy")
                 if embedding_path.exists():
                     embedding = np.load(embedding_path).tolist()
 
-            # Create Document object
+            from datetime import datetime
             document = Document(
                 id=doc_dict["id"],
                 content=doc_dict["content"],
                 owner_id=doc_dict["owner_id"],
                 metadata=doc_dict.get("metadata", {}),
                 embedding=embedding,
-                theme_id=theme_id
+                theme_id=theme_id or base_path.name,
+                created_at=datetime.fromisoformat(doc_dict["created_at"]) if doc_dict.get("created_at") else None,
+                updated_at=datetime.fromisoformat(doc_dict["updated_at"]) if doc_dict.get("updated_at") else None
             )
-
-            # Parse dates if present
-            if doc_dict.get("created_at"):
-                try:
-                    from datetime import datetime
-                    document.created_at = datetime.fromisoformat(doc_dict["created_at"])
-                except ValueError:
-                    pass
-
-            if doc_dict.get("updated_at"):
-                try:
-                    from datetime import datetime
-                    document.updated_at = datetime.fromisoformat(doc_dict["updated_at"])
-                except ValueError:
-                    pass
 
             return document
         except Exception as e:

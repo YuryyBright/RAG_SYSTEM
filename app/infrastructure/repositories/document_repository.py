@@ -273,6 +273,8 @@ class DocumentRepository:
                     ).where(ThemeDocument.theme_id == theme_id)
 
                 query = query.limit(limit)
+
+                # Create a new transaction for this operation
                 result = await self.db.execute(query)
                 return result.scalars().all()
 
@@ -287,8 +289,7 @@ class DocumentRepository:
             # Build SQL query for vector similarity
             # This uses PostgreSQL's vector operators with the pgvector extension
             sql = """
-            SELECT d.*, 
-                   (d.embedding <=> :embedding) as similarity
+            SELECT d.id, (d.embedding <=> :embedding) as similarity
             FROM documents d
             """
 
@@ -317,17 +318,28 @@ class DocumentRepository:
             LIMIT :limit
             """
 
+            # Use transaction to ensure proper handling of database errors
+                # Execute the query to get document IDs and their similarity scores
             result = await self.db.execute(text(sql), params)
-            documents = result.all()
+            rows = result.all()
 
-            # Attach similarity score to each document
+            if not rows:
+                return []
+
+            similarity_data = {row.id: 1.0 - min(1.0, float(row.similarity)) for row in rows}
+
+            # Now fetch the actual document objects
+            doc_ids = list(similarity_data.keys())
+            query = select(Document).where(Document.id.in_(doc_ids))
+            result = await self.db.execute(query)
+            documents = result.scalars().all()
+
+            # Attach similarity scores to the document objects
             for doc in documents:
-                # Access similarity from the query result
-                similarity_value = getattr(doc, 'similarity', None)
-                if similarity_value is not None:
-                    # Convert similarity to a score between 0-1 (lower distance = higher score)
-                    # pgvector <=> operator returns a distance, so we convert it to similarity
-                    doc.similarity = 1.0 - min(1.0, float(similarity_value))
+                doc.similarity = similarity_data.get(doc.id, 0.0)
+
+            # Sort by similarity score (highest first)
+            documents.sort(key=lambda x: x.similarity, reverse=True)
 
             return documents
 
@@ -350,17 +362,24 @@ class DocumentRepository:
         List[Document]
             Latest documents matching the filters
         """
-        query = select(Document).order_by(Document.created_at.desc())
+        try:
+            # Use a fresh transaction for the fallback query
+            async with self.db.begin() as transaction:
+                query = select(Document).order_by(Document.created_at.desc())
 
-        if owner_id:
-            query = query.where(Document.owner_id == owner_id)
+                if owner_id:
+                    query = query.where(Document.owner_id == owner_id)
 
-        if theme_id:
-            query = query.join(
-                ThemeDocument,
-                Document.id == ThemeDocument.document_id
-            ).where(ThemeDocument.theme_id == theme_id)
+                if theme_id:
+                    query = query.join(
+                        ThemeDocument,
+                        Document.id == ThemeDocument.document_id
+                    ).where(ThemeDocument.theme_id == theme_id)
 
-        query = query.limit(limit)
-        result = await self.db.execute(query)
-        return result.scalars().all()
+                query = query.limit(limit)
+                result = await self.db.execute(query)
+                return result.scalars().all()
+        except Exception as e:
+            logger.error(f"Error in _fallback_search: {str(e)}", exc_info=True)
+            # If even the fallback fails, return an empty list
+            return []

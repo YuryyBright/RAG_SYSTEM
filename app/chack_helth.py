@@ -29,7 +29,7 @@ async def main():
     engine = create_async_engine(settings.DATABASE_URL, echo=True)
     async_session = sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
-    llm_services = LLMFactory()
+    llm_services = get_llm_service()
     model_id = '0'
 
     if model_id is not None and model_id.isdigit():
@@ -69,7 +69,7 @@ async def main():
         )
         print('Тестова розмова')
         # --- Тестова розмова ---
-        conversation = await conversation_service.create_conversation(user_id=current_user.id)
+        conversation = await conversation_service.create_conversation(user_id='b7507654-117d-4337-8f76-a8d93359d5d3')
         conversation_id = conversation.id
         message = "Що ти знаєш про мої документи?"
         print('Add message:', message)
