@@ -1,8 +1,6 @@
 # app/modules/llm/factory.py
 from typing import List, Dict, Any, Optional, Type
 from pathlib import Path
-
-from domain.interfaces.llm import LLMInterface
 from app.modules.llm.base import BaseLLM
 from app.config import settings
 from app.utils.logger_util import get_logger
@@ -55,6 +53,7 @@ class LLMFactory:
         Auto-detects model types based on file extensions and directory structure.
         """
         models_dir = Path(settings.MODELS_BASE_DIR)
+        print(models_dir)
         models = []
         if not models_dir.exists():
             logger.warning(f"Models directory not found: {models_dir}")
@@ -108,48 +107,38 @@ class LLMFactory:
         return registry.get("models", [])
 
     @classmethod
-    def get_llm(cls, model_name: Optional[str] = None) -> LLMInterface:
+    def get_llm(cls, model_identifier: Optional[str] = None) -> BaseLLM:
         """
-        Get an LLM instance for the specified model name.
-        The factory will automatically detect the model type and create the appropriate handler.
-
-        Parameters
-        ----------
-        model_name : Optional[str]
-            Name of the model to use (if None, will use default from settings)
-
-        Returns
-        -------
-        LLMInterface
-            An LLM interface instance for the requested model
-
-        Raises
-        ------
-        ValueError
-            If the model is not found or the type is not supported
+        Get an LLM instance for the specified model identifier (name or index).
         """
-        name = model_name or settings.LLM_MODEL
-
-        # Find the model in the registry
+        # Get all available models
         registry = cls.get_model_registry()
-        model_info = None
-        model_found = False
+        models = registry.get("models", [])
 
-        for model in registry.get("models", []):
-            if model["name"] == name or model["name"] == name.rstrip(".gguf"):
-                model_info = model
-                model_found = True
-                break
+        # Handle index-based lookup
+        if model_identifier and model_identifier.isdigit():
+            index = int(model_identifier)
+            if 0 <= index < len(models):
+                model_info = models[index]
+            else:
+                raise ValueError(f"Model index out of range: {model_identifier}")
+        else:
+            # Original name-based lookup
+            name = model_identifier or settings.LLM_MODEL
+            model_info = None
+            for model in models:
+                if model["name"] == name or model["name"] == name.rstrip(".gguf"):
+                    model_info = model
+                    break
 
-        if not model_info:
-            raise ValueError(f"Model not found: {name}")
+            if not model_info:
+                raise ValueError(f"Model not found: {name}")
 
-        # Get the appropriate handler for this model type
+        # Get handler and create instance
         model_type = model_info["type"]
         handler_class = cls._llm_handlers.get(model_type)
 
         if not handler_class:
             raise ValueError(f"No handler registered for model type: {model_type}")
 
-        # Create and return the handler instance
-        return handler_class(model_name=name, model_path=model_info["file_path"])
+        return handler_class(model_name=model_info["name"], model_path=model_info["file_path"])

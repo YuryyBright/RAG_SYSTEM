@@ -31,7 +31,7 @@ class GGUFLLM(BaseLLM):
                 model_path=self.model_path,
                 n_ctx=2048,  # Context window size
                 n_threads=n_threads,  # Use available CPU threads
-                n_gpu_layers=-1  # Use GPU if available
+                n_gpu_layers=50  # Use GPU if available
             )
             logger.info(f"Loaded GGUF model: {self.model_path}")
 
@@ -42,7 +42,10 @@ class GGUFLLM(BaseLLM):
             logger.error(f"Failed to load GGUF model: {str(e)}")
             raise
 
-    async def generate(
+    # Remove the overridden generate method that doesn't accept system_prompt and user_prompt
+    # This way, the generate method from BaseLLM will be used, which does accept these parameters
+
+    async def _generate_internal(
             self,
             prompt: str,
             max_tokens: int = 1024,
@@ -51,46 +54,41 @@ class GGUFLLM(BaseLLM):
             stop_sequences: Optional[List[str]] = None,
             **kwargs
     ) -> Dict[str, Any]:
-        """Generate text using the GGUF model."""
-        try:
-            if self.model is None:
-                raise RuntimeError("GGUF Model not loaded properly")
+        """Internal method for text generation using the GGUF model."""
+        if self.model is None:
+            raise RuntimeError("GGUF Model not loaded properly")
 
-            # Prepare parameters
-            params = {
-                "max_tokens": max_tokens,
-                "temperature": temperature,
-                "top_p": top_p
+        # Prepare parameters
+        params = {
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+            "top_p": top_p
+        }
+
+        # Add stop sequences if provided
+        if stop_sequences:
+            params["stop"] = stop_sequences
+
+        # Generate completion
+        result = self.model(prompt, **params)
+
+        # Extract generated text
+        generated_text = result["choices"][0]["text"] if isinstance(result, dict) and "choices" in result else \
+            result.choices[0].text
+
+        # Get token counts
+        prompt_tokens = self.estimate_tokens(prompt)
+        completion_tokens = self.estimate_tokens(generated_text)
+
+        return {
+            "text": generated_text,
+            "model": self.model_name,
+            "usage": {
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "total_tokens": prompt_tokens + completion_tokens
             }
-
-            # Add stop sequences if provided
-            if stop_sequences:
-                params["stop"] = stop_sequences
-
-            # Generate completion
-            result = self.model(prompt, **params)
-
-            # Extract generated text
-            generated_text = result["choices"][0]["text"] if isinstance(result, dict) and "choices" in result else \
-                result.choices[0].text
-
-            # Get token counts
-            prompt_tokens = self.estimate_tokens(prompt)
-            completion_tokens = self.estimate_tokens(generated_text)
-
-            return {
-                "text": generated_text,
-                "model": self.model_name,
-                "usage": {
-                    "prompt_tokens": prompt_tokens,
-                    "completion_tokens": completion_tokens,
-                    "total_tokens": prompt_tokens + completion_tokens
-                }
-            }
-        except Exception as e:
-            logger.error(f"Error generating text with GGUF model {self.model_name}: {str(e)}")
-            return {"text": f"Error: {str(e)}", "error": str(e)}
-
+        }
     def estimate_tokens(self, text: str) -> int:
         """Estimate tokens for GGUF models."""
         if self.model and hasattr(self.model, "tokenize"):

@@ -1,7 +1,7 @@
 # app/core/services/llm_service.py
 from typing import Dict, Any, List, Optional, Union, AsyncIterable
 from app.modules.llm.factory import LLMFactory
-from domain.interfaces.llm import LLMInterface
+from app.domain.interfaces.llm import LLMInterface
 from app.config import settings
 from app.utils.logger_util import get_logger
 
@@ -14,12 +14,15 @@ class LLMService:
     Provides high-level text generation functionality for use in the application.
     """
 
-    def __init__(self, llm_interface):
+    def __init__(self, llm_interface=None):
         self._llm_instances = {}  # Cache of loaded LLM instances
+        self._llm_interface = llm_interface
 
     async def generate_text(
             self,
-            prompt: str,
+            prompt: str = None,
+            system_prompt: str = None,
+            user_prompt: str = None,
             model_name: Optional[str] = None,
             max_tokens: int = 1024,
             temperature: float = 0.7,
@@ -31,11 +34,16 @@ class LLMService:
     ) -> Union[Dict[str, Any], AsyncIterable[Dict[str, Any]]]:
         """
         Generate text using the specified model (or default model if not specified).
+        Supports both single prompt and system/user prompt patterns.
 
         Parameters
         ----------
-        prompt : str
-            The prompt to generate text from
+        prompt : str, optional
+            The single prompt to generate text from (legacy parameter)
+        system_prompt : str, optional
+            System instructions for the model
+        user_prompt : str, optional
+            User query or content
         model_name : Optional[str]
             Name of the model to use. If None, uses the default model from settings
         max_tokens : int
@@ -61,24 +69,74 @@ class LLMService:
         # Use default model if not specified
         model_name = model_name or settings.LLM_DEFAULT_MODEL
 
+        # Format the prompt based on input parameters
+        formatted_prompt = self._format_prompt(prompt, system_prompt, user_prompt)
+
         # Get or create the LLM instance
         llm = await self._get_llm_instance(model_name)
 
         # Log the generation request
         logger.info(f"Generating text with model '{model_name}' (user: {user_id})")
 
-        # Generate text
+        # Generate text - ONLY PASS THE FORMATTED PROMPT
         if streaming:
-            return self._generate_streaming(llm, prompt, max_tokens, temperature, top_p, stop_sequences, **kwargs)
+            return self._generate_streaming(
+                llm,
+                formatted_prompt,
+                max_tokens,
+                temperature,
+                top_p,
+                stop_sequences,
+                **kwargs
+            )
         else:
             return await llm.generate(
-                prompt=prompt,
+                prompt=formatted_prompt,
                 max_tokens=max_tokens,
                 temperature=temperature,
                 top_p=top_p,
                 stop_sequences=stop_sequences,
                 **kwargs
             )
+
+    def _format_prompt(self, prompt: Optional[str], system_prompt: Optional[str], user_prompt: Optional[str]) -> str:
+        """
+        Format the prompt based on provided inputs.
+        Handles both single prompt and system/user prompt patterns.
+
+        Parameters
+        ----------
+        prompt : Optional[str]
+            Single prompt text (legacy)
+        system_prompt : Optional[str]
+            System instructions for the model
+        user_prompt : Optional[str]
+            User query or content
+
+        Returns
+        -------
+        str
+            Formatted prompt suitable for the model
+        """
+        # If a single prompt is provided, use it directly
+        if prompt is not None:
+            return prompt
+
+        # If system and/or user prompts are provided, format accordingly
+        formatted_parts = []
+
+        if system_prompt:
+            formatted_parts.append(f"<system>\n{system_prompt}\n</system>")
+
+        if user_prompt:
+            formatted_parts.append(f"<user>\n{user_prompt}\n</user>")
+
+        if not formatted_parts:
+            # Fallback if no prompt components were provided
+            return ""
+
+        # Join parts with newlines
+        return "\n\n".join(formatted_parts) + "\n\n<assistant>"
 
     async def _generate_streaming(
             self,
@@ -261,7 +319,3 @@ KEY POINTS:"""
     def clear_cache(self):
         """Clear the cached LLM instances to free memory."""
         self._llm_instances.clear()
-
-
-
-

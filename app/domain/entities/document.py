@@ -112,3 +112,10 @@ class Document:
             str: String representation.
         """
         return f"Document(id={self.id}, content={self.content[:50]}...)"
+
+
+class Query:
+    """Entity representing a user query."""
+
+    def __init__(self, text: str):
+        self.text = text

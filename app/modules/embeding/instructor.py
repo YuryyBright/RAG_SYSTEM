@@ -1,10 +1,11 @@
 # app/modules/embedding/instructor.py
 from typing import List
 import os
-
+import torch
 from sentence_transformers import SentenceTransformer
 
 from application.services.base_embedding_service import BaseEmbeddingService
+from config import settings
 from utils.logger_util import get_logger
 
 logger = get_logger(__name__)
@@ -21,7 +22,7 @@ class InstructorEmbedding(BaseEmbeddingService):
 
     def __init__(
             self,
-            model_name: str = "models/instructors/instructor-xl",
+            model_name: str = "hkunlp/instructor-xl",
             instruction: str = "Represent the document for retrieval:",
             query_instruction: str = "Represent the question for retrieving relevant documents:",
             batch_size: int = 8,
@@ -38,24 +39,46 @@ class InstructorEmbedding(BaseEmbeddingService):
             device: The device to run the model on ('cpu' or 'cuda')
         """
         super().__init__(model_name=model_name, batch_size=batch_size)
-        self.model_name = model_name.replace("\\", "/")
+
+        # Get the base directory for models from environment variable or use default
+        base_models_dir = settings.INSTRUCTOR_BASE_DIR
+
+        # Check if the model_name is a Hugging Face model ID or a local path
+        if "/" in model_name and not os.path.exists(model_name):
+            # Construct path to local model directory
+            local_model_path = os.path.join(base_models_dir, model_name.split("/")[-1])
+
+            if os.path.exists(local_model_path):
+                self.model_name = local_model_path
+                logger.info(f"Found model in local directory: {self.model_name}")
+            else:
+                # If not found locally, try to use the original model name
+                # (which might be downloaded from Hugging Face)
+                self.model_name = model_name
+                logger.warning(f"Model not found locally, attempting to use: {self.model_name}")
+        else:
+            self.model_name = model_name
+
+        self.model_name = self.model_name.replace("\\", "/")
         self.instruction = instruction
         self.query_instruction = query_instruction
         self.device = device
 
-        if not os.path.exists(self.model_name):
+        try:
+            logger.info(f"Loading model from: {self.model_name}")
+            self.model = SentenceTransformer(self.model_name)
+
+            # Manually move model if needed
+            if self.device:
+                logger.info(f"⚙️ Moving model to device: {self.device}")
+                self.model = self.model.to(self.device)
+            else:
+                self.device = "cuda" if torch.cuda.is_available() else "cpu"
+            self.model.set_pooling_include_prompt(False)
+            logger.info(f"✅ INSTRUCTOR model initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to load model from {self.model_name}: {str(e)}")
             raise FileNotFoundError(f"Model not found at path: {self.model_name}")
-
-        logger.info(f"✅ Loading model from local path: {self.model_name}")
-        self.model = SentenceTransformer(self.model_name)
-
-        # Manually move model if needed
-        if self.device:
-            logger.info(f"⚙️ Moving model to device: {self.device}")
-            self.model = self.model.to(self.device)
-
-        self.model.set_pooling_include_prompt(False)
-        logger.info(f"✅ INSTRUCTOR model initialized successfully")
 
     async def get_embeddings(self, texts: List[str]) -> List[List[float]]:
         """

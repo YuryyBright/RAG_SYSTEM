@@ -4,10 +4,13 @@ from datetime import datetime
 
 from infrastructure.repositories.message_repository import MessageRepository
 from app.infrastructure.database.db_models import ConversationContext, Message
-from app.modules.llm.base import BaseLLMService
+
 
 from infrastructure.repositories.conv_cont_repository import ConversationContextRepository
+from modules.llm.base import BaseLLM
+from utils.logger_util import get_logger
 
+logger = get_logger(__name__)
 
 class ConversationSummarizer:
     """
@@ -23,7 +26,7 @@ class ConversationSummarizer:
             self,
             context_repo: ConversationContextRepository,
             message_repo: MessageRepository,
-            llm_service: BaseLLMService,
+            llm_service: BaseLLM,
     ):
         self.context_repo = context_repo
         self.message_repo = message_repo
@@ -79,7 +82,7 @@ class ConversationSummarizer:
             )
             return await self.context_repo.create(context)
         except Exception as e:
-            logging.error(f"Error creating summary: {str(e)}", exc_info=True)
+            logger.error(f"Error creating summary: {str(e)}", exc_info=True)
             return None
 
     async def create_progressive_summary(
@@ -145,7 +148,7 @@ class KeyPointsExtractor:
             self,
             context_repo: ConversationContextRepository,
             message_repo: MessageRepository,
-            llm_service: BaseLLMService,
+            llm_service: BaseLLM,
     ):
         self.context_repo = context_repo
         self.message_repo = message_repo

@@ -1,6 +1,9 @@
 from typing import List, Optional, Dict, Any, Tuple
 from datetime import datetime
 
+from pydantic import parse_obj_as
+
+from api.schemas.conversation import MessageResponse
 from app.infrastructure.database.db_models import Conversation, Message
 from infrastructure.repositories.conversation_repository import ConversationRepository
 from app.modules.llm.factory import LLMFactory
@@ -181,12 +184,12 @@ class ConversationService:
             message.metadata_dict = metadata
 
         # Track message count in conversation metadata
-        if conversation.metadata_dict is None:
-            conversation.metadata_dict = {}
+        if conversation.conversation_metadata is None:
+            conversation.conversation_metadata = {}
 
-        msg_count = conversation.metadata_dict.get("message_count", 0) + 1
-        conversation.metadata_dict["message_count"] = msg_count
-        conversation.metadata_dict["last_activity"] = datetime.now().isoformat()
+        msg_count = conversation.conversation_metadata.get("message_count", 0) + 1
+        conversation.conversation_metadata["message_count"] = msg_count
+        conversation.conversation_metadata["last_activity"] = datetime.now().isoformat()
 
         await self.conversation_repo.update(conversation)
 
@@ -395,19 +398,6 @@ class ConversationService:
         )
 
     async def get_conversation_stats(self, conversation_id: str) -> Dict[str, Any]:
-        """
-        Get statistics for a conversation.
-
-        Parameters
-        ----------
-        conversation_id : str
-            Unique identifier of the conversation.
-
-        Returns
-        -------
-        Dict[str, Any]
-            Dictionary with conversation statistics.
-        """
         conversation = await self.get_conversation(conversation_id)
         if not conversation:
             return {}
@@ -417,25 +407,29 @@ class ConversationService:
         # Count messages by role
         role_counts = {}
         total_tokens = 0
-
         for msg in messages:
             role_counts[msg.role] = role_counts.get(msg.role, 0) + 1
             total_tokens += msg.tokens
 
-        # Get first and last message timestamps
         first_message_time = messages[0].created_at if messages else None
         last_message_time = messages[-1].created_at if messages else None
 
         return {
+            "id": conversation.id,
+            "title": conversation.title,
+            "user_id": conversation.user_id,
+            "created_at": conversation.created_at.isoformat(),
+            "updated_at": conversation.updated_at.isoformat(),
+            "is_active": conversation.is_active,
+            "theme_id": conversation.theme_id,
+            "model_id": conversation.model_id,
+            "metadata": conversation.conversation_metadata,
             "message_count": len(messages),
             "role_distribution": role_counts,
             "total_tokens": total_tokens,
             "first_message": first_message_time.isoformat() if first_message_time else None,
             "last_message": last_message_time.isoformat() if last_message_time else None,
-            "theme_id": conversation.theme_id,
-            "model_id": conversation.model_id,
-            "is_active": conversation.is_active,
-            "metadata": conversation.metadata_dict
+            "messages": messages,
         }
 
     async def _get_llm_for_conversation(self, conversation_id: str) -> LLMInterface:

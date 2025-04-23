@@ -1,9 +1,11 @@
 # app/models/db_models.py
 import json
 import uuid
+from typing import Any
 
 import user_agents
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Boolean, LargeBinary, Text, Float
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.sql import func
 from sqlalchemy.ext.declarative import declarative_base
@@ -530,7 +532,7 @@ class Conversation(Base):
     is_active = Column(Boolean, default=True)
     theme_id = Column(String, ForeignKey("themes.id"), nullable=True)
     model_id = Column(String, nullable=True)  # ID of the AI model used
-    conversation_metadata = Column(Text, nullable=True)  # Column stays
+    conversation_metadata = Column("conversation_metadata", JSONB, nullable=True)
 
     # Relationships
     user = relationship("User", backref="conversations")
@@ -539,16 +541,12 @@ class Conversation(Base):
     contexts = relationship("ConversationContext", back_populates="conversation", cascade="all, delete-orphan")
 
     @property
-    def conversation_metadata_dict(self):
-        """Deserialize metadata from JSON string to dict."""
-        if self.conversation_metadata:
-            return json.loads(self.conversation_metadata)
-        return {}
+    def extra_metadata(self) -> dict[str, Any] | None:
+        return self.conversation_metadata or {}
 
-    @conversation_metadata_dict.setter
-    def conversation_metadata_dict(self, value):
-        """Serialize metadata from dict to JSON string."""
-        self.conversation_metadata = json.dumps(value)
+    @extra_metadata.setter
+    def extra_metadata(self, value: dict[str, Any] | None):
+        self.conversation_metadata = value
 
 
 

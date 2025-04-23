@@ -1,10 +1,15 @@
-// Message related functionality
-import { UIHandlers } from './ui-handlers.js';
+// =====================================================================
+// message-handlers.js - IMPROVED VERSION
+// =====================================================================
+
+import { UIHandlers } from "./ui-handlers.js";
 
 export const MessageHandlers = {
   // Send a message to the backend
   sendMessage(messageText, attachedFiles = [], customParameters = {}) {
-    if (!messageText && attachedFiles.length === 0) return;
+    if (!messageText && (!attachedFiles || attachedFiles.length === 0)) {
+      return Promise.reject(new Error("No message content or files provided"));
+    }
 
     // Add user message to chat
     UIHandlers.addMessage(messageText, "user", false, attachedFiles);
@@ -17,16 +22,17 @@ export const MessageHandlers = {
     let requestData;
     let requestOptions = {
       headers: {
-        "X-CSRF-TOKEN": document.querySelector('input[name="csrf_token"]').value,
+        "X-CSRF-TOKEN": document.querySelector('input[name="csrf_token"]')?.value || "",
       },
     };
 
-    if (attachedFiles.length > 0) {
+    // Handle file attachments using FormData
+    if (attachedFiles && attachedFiles.length > 0) {
       requestData = new FormData();
-      requestData.append("message", messageText);
-      requestData.append("rag_mode", window.ChatState.isRagMode);
+      requestData.append("message", messageText || "");
+      requestData.append("rag_mode", window.ChatState.isRagMode ? "true" : "false");
 
-      if (window.ChatState.isRagMode) {
+      if (window.ChatState.isRagMode && window.ChatState.activeThemeId) {
         requestData.append("theme_id", window.ChatState.activeThemeId);
       }
 
@@ -34,9 +40,12 @@ export const MessageHandlers = {
         requestData.append("conversation_id", window.ChatState.conversationId);
       }
 
-      // Add model ID directly from ChatState
+      // Add model ID from ChatState
       if (window.ChatState.activeModelId) {
         requestData.append("model_id", window.ChatState.activeModelId);
+      } else if (window.ChatState.models && window.ChatState.models.length > 0) {
+        // Fallback to first model if none selected
+        requestData.append("model_id", window.ChatState.models[0].id);
       }
 
       // Add advanced parameters
@@ -57,19 +66,26 @@ export const MessageHandlers = {
     } else {
       // JSON request for text-only
       requestData = {
-        message: messageText,
+        message: messageText || "",
         rag_mode: window.ChatState.isRagMode,
-        conversation_id: window.ChatState.conversationId,
       };
 
+      // Add conversation ID if present
+      if (window.ChatState.conversationId) {
+        requestData.conversation_id = window.ChatState.conversationId;
+      }
+
       // Add theme if in RAG mode
-      if (window.ChatState.isRagMode) {
+      if (window.ChatState.isRagMode && window.ChatState.activeThemeId) {
         requestData.theme_id = window.ChatState.activeThemeId;
       }
 
-      // Add model ID directly from ChatState
+      // Add model ID from ChatState
       if (window.ChatState.activeModelId) {
         requestData.model_id = window.ChatState.activeModelId;
+      } else if (window.ChatState.models && window.ChatState.models.length > 0) {
+        // Fallback to first model if none selected
+        requestData.model_id = window.ChatState.models[0].id;
       }
 
       // Add advanced parameters, excluding 'model' to prevent conflicts
@@ -85,10 +101,10 @@ export const MessageHandlers = {
     }
 
     // Send message to backend
-    return fetch("/api/v1/chat", requestOptions)
+    return fetch("/api/conversations/chat", requestOptions)
       .then((response) => {
         if (!response.ok) {
-          throw new Error("Network response was not ok");
+          throw new Error(`Network response error: ${response.status} ${response.statusText}`);
         }
         return response.json();
       })
@@ -97,7 +113,10 @@ export const MessageHandlers = {
         UIHandlers.showTypingIndicator(false);
 
         // Add AI response to chat
-        UIHandlers.addMessage(response.response, "ai");
+        const responseText =
+          typeof response.response === "string" ? response.response : response.response?.text || "[No response text]";
+
+        UIHandlers.addMessage(responseText, "ai");
 
         // Update conversation ID if needed
         if (!window.ChatState.conversationId && response.conversation_id) {
@@ -116,7 +135,13 @@ export const MessageHandlers = {
         // Show error message
         UIHandlers.addMessage("Sorry, I encountered an error processing your request. Please try again.", "ai", true);
         console.error("Chat API error:", error);
-        alertify.error("Error sending message");
+
+        // Show toast error
+        if (window.alertify) {
+          alertify.error("Error sending message");
+        } else {
+          UIHandlers.showToast("Error sending message", "error");
+        }
 
         // Scroll to bottom
         UIHandlers.scrollToBottom();
@@ -127,62 +152,149 @@ export const MessageHandlers = {
 
   // Load a specific chat
   loadChat(chatId) {
+    if (!chatId) {
+      UIHandlers.showToast("Invalid chat ID", "error");
+      return Promise.reject(new Error("Invalid chat ID"));
+    }
+
     return window.APIService.getChat(chatId)
       .then((response) => {
-        if (response.messages && response.messages.length > 0) {
-          // Clear current chat
-          UIHandlers.elements.$chatContainer.html("");
-
-          // Set conversation ID
+        if (response && response.messages && Array.isArray(response.messages)) {
+          const container = UIHandlers.elements.$chatContainer;
+          container.html(""); // Clear chat
           window.ChatState.conversationId = chatId;
 
-          // Add messages
-          response.messages.forEach((msg) => {
-            const sender = msg.role === "user" ? "user" : "ai";
-            UIHandlers.addMessage(msg.content, sender);
-          });
+          const BATCH_SIZE = 10;
+          let currentIndex = 0;
 
-          // Add typing indicator back
-          UIHandlers.elements.$chatContainer.append(`
-            <div class="typing-indicator" id="typingIndicator">
-              <span></span>
-              <span></span>
-              <span></span>
-            </div>
-          `);
+          const renderBatch = () => {
+            const fragment = document.createDocumentFragment();
 
-          // Update typing indicator reference
-          UIHandlers.elements.$typingIndicator = $("#typingIndicator");
+            for (let i = 0; i < BATCH_SIZE && currentIndex < response.messages.length; i++, currentIndex++) {
+              const msg = response.messages[currentIndex];
+              const sender = msg.role === "user" ? "user" : "ai";
+              const messageElement = createMessageElement(msg.content, sender, msg.created_at);
+              fragment.appendChild(messageElement);
+            }
 
-          // Hide typing indicator
-          UIHandlers.showTypingIndicator(false);
+            container[0].appendChild(fragment);
 
-          // Set RAG mode if applicable
+            if (currentIndex < response.messages.length) {
+              requestAnimationFrame(renderBatch);
+            } else {
+              container.append(`
+              <div class="typing-indicator" id="typingIndicator">
+                <span></span><span></span><span></span>
+              </div>
+            `);
+              UIHandlers.elements.$typingIndicator = $("#typingIndicator");
+              UIHandlers.showTypingIndicator(false);
+              UIHandlers.scrollToBottom();
+            }
+          };
+
+          renderBatch(); // Start rendering
+
+          // Update chat state
           if (response.settings && response.settings.rag_mode !== undefined) {
-            window.ChatState.isRagMode = response.settings.rag_mode;
+            window.ChatState.isRagMode = !!response.settings.rag_mode;
             UIHandlers.elements.$ragModeToggle.prop("checked", window.ChatState.isRagMode);
             UIHandlers.updateFileUploadVisibility(window.ChatState.isRagMode);
           }
 
-          // Set theme if applicable
           if (response.settings && response.settings.theme_id) {
             window.ChatState.activeThemeId = response.settings.theme_id;
             $(".theme-pill", $("#themesContainer")).removeClass("badge-info").addClass("badge-secondary");
-            $(`.theme-pill[data-theme-id="${window.ChatState.activeThemeId}"]`, $("#themesContainer")).addClass("badge-info");
+            $(`.theme-pill[data-theme-id="${window.ChatState.activeThemeId}"]`, $("#themesContainer"))
+              .removeClass("badge-secondary")
+              .addClass("badge-info");
           }
 
-          // Set model if applicable
           if (response.settings && response.settings.model_id) {
             window.ChatState.activeModelId = response.settings.model_id;
-            $(".theme-pill", $("#LLMContainer")).removeClass("badge-info").addClass("badge-secondary");
-            $(`.theme-pill[data-model-id="${window.ChatState.activeModelId}"]`, $("#LLMContainer")).addClass("badge-info");
+            $(".model-pill", $("#LLMContainer")).removeClass("badge-info").addClass("badge-secondary");
+            $(`.model-pill[data-model-id="${window.ChatState.activeModelId}"]`, $("#LLMContainer"))
+              .removeClass("badge-secondary")
+              .addClass("badge-info");
           }
 
-          alertify.success("Chat loaded successfully");
+          UIHandlers.showToast("Chat loaded successfully", "success");
+          return response;
+        } else {
+          throw new Error("Invalid chat data format");
         }
       })
-      .catch(() => {
-        alertify.error("Failed to load chat");
+      .catch((error) => {
+        UIHandlers.showToast("Failed to load chat", "error");
+        console.error("Failed to load chat:", error);
+        throw error;
       });
   },
 };
+
+function createMessageElement(content, sender, createdAt = "Just now") {
+  const isAI = sender === "ai";
+
+  const messageDiv = document.createElement("div");
+  messageDiv.className = `message ${isAI ? "ai-message" : "user-message"}`;
+
+  // Message info (avatar + sender)
+  const infoDiv = document.createElement("div");
+  infoDiv.className = "message-info";
+
+  const avatarDiv = document.createElement("div");
+  avatarDiv.className = "message-avatar";
+  avatarDiv.textContent = isAI ? "AI" : "You";
+
+  const senderDiv = document.createElement("div");
+  senderDiv.className = "message-sender";
+  senderDiv.textContent = isAI ? "Powerfull AI Assistant" : "You";
+
+  infoDiv.appendChild(avatarDiv);
+  infoDiv.appendChild(senderDiv);
+
+  // Message content
+  const contentDiv = document.createElement("div");
+  contentDiv.className = "message-content";
+  content.split("\n").forEach((line) => {
+    const p = document.createElement("p");
+    p.textContent = line;
+    contentDiv.appendChild(p);
+  });
+
+  // Message time
+  const timeDiv = document.createElement("div");
+  timeDiv.className = "message-time";
+  timeDiv.textContent = new Date(createdAt).toLocaleTimeString();
+
+  // Message actions
+  const actionsDiv = document.createElement("div");
+  actionsDiv.className = "message-actions";
+
+  const copyBtn = document.createElement("button");
+  copyBtn.className = "message-action-btn copy-btn";
+  copyBtn.innerHTML = `<i class="fas fa-copy"></i> Copy`;
+  copyBtn.onclick = () => navigator.clipboard.writeText(content);
+
+  const regenBtn = document.createElement("button");
+  regenBtn.className = "message-action-btn regenerate-btn";
+  regenBtn.innerHTML = `<i class="fas fa-redo-alt"></i> Regenerate`;
+  regenBtn.onclick = () => {
+    if (window.UIHandlers.handleRegenerate) {
+      window.UIHandlers.handleRegenerate(content);
+    } else {
+      console.warn("No regenerate handler defined.");
+    }
+  };
+
+  actionsDiv.appendChild(copyBtn);
+  if (isAI) actionsDiv.appendChild(regenBtn);
+
+  // Final assembly
+  messageDiv.appendChild(infoDiv);
+  messageDiv.appendChild(contentDiv);
+  messageDiv.appendChild(timeDiv);
+  messageDiv.appendChild(actionsDiv);
+
+  return messageDiv;
+}

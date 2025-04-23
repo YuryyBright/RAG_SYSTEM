@@ -39,12 +39,12 @@ export const APIService = {
       dataType: "json",
     })
       .then((response) => {
-        if (response.history && response.history.length > 0) {
+        if (response && response.length > 0) {
           const $chatHistoryList = $("#chatHistoryList");
           $chatHistoryList.empty();
-
+          console.log("Chat history response:", response);
           // Add history items
-          response.history.forEach((chat) => {
+          response.forEach((chat) => {
             const timeAgo = UIHandlers.formatTimeAgo(new Date(chat.created_at));
             $chatHistoryList.append(`
             <li class="list-group-item d-flex justify-content-between align-items-center chat-history-item" 
@@ -55,7 +55,7 @@ export const APIService = {
           `);
           });
         }
-        return response.history;
+        return response;
       })
       .catch((error) => {
         console.error("Error loading chat history:", error);
@@ -66,7 +66,7 @@ export const APIService = {
   // Get a specific chat
   getChat(chatId) {
     return $.ajax({
-      url: `/api/conversations/chat/${chatId}`,
+      url: `/api/conversations/${chatId}/history`,
       method: "GET",
       dataType: "json",
     }).catch((error) => {
@@ -82,7 +82,17 @@ export const APIService = {
       method: "GET",
       dataType: "json",
     })
-      .then((data) => data)
+      .then((data) => {
+        if (!data || !Array.isArray(data)) {
+          console.error("Invalid model data received:", data);
+          throw new Error("Invalid model data format");
+        }
+        // Store models in ChatState
+        if (window.ChatState) {
+          window.ChatState.models = data;
+        }
+        return data;
+      })
       .catch((error) => {
         console.error("Failed to load models:", error);
         throw new Error("Failed to load models");

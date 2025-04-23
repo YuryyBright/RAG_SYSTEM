@@ -12,16 +12,16 @@ from app.modules.llm.factory import LLMFactory
 from app.modules.llm.gguf import GGUFLLM
 from app.modules.llm.huggingface import HuggingFaceLLM
 from app.modules.llm.onnx import ONNXLLM
-from application.services.llm_service import LLMService
+from app.application.services.llm_service import LLMService
 from app.config import settings
 from app.utils.logger_util import get_logger
 
 logger = get_logger(__name__)
 
 # Register model handlers
-LLMFactory.register_handler("gguf", GGUFLLM)
-LLMFactory.register_handler("hf", HuggingFaceLLM)
-LLMFactory.register_handler("onnx", ONNXLLM)
+# LLMFactory.register_handler("gguf", GGUFLLM)
+# LLMFactory.register_handler("hf", HuggingFaceLLM)
+# LLMFactory.register_handler("onnx", ONNXLLM)
 
 
 class LLMManager:

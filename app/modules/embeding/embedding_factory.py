@@ -12,7 +12,7 @@ from utils.logger_util import get_logger
 logger = get_logger(__name__)
 
 
-async def validate_embedding_dimensions(service: EmbeddingInterface, expected_dim: int) -> None:
+async def validate_embedding_dimensions(service: EmbeddingInterface, expected_dim: int=768) -> None:
     """
     Validate that the embedding service produces vectors with the expected dimensions.
 
@@ -83,8 +83,9 @@ async def get_embedding_service() -> EmbeddingInterface:
         )
 
     # ✅ Validate dimension immediately
-    await validate_embedding_dimensions(service, expected_dim=settings.EMBEDDING_DIMENSION)
-
+    # TODO ADD if needed
+    # await validate_embedding_dimensions(service, expected_dim=settings.EMBEDDING_DIMENSION)
+    #
     # # Wrap with caching if enabled
     # if settings.USE_EMBEDDING_CACHE:
     #     logger.info("✅ Enabling embedding cache")

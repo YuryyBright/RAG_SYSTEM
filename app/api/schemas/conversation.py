@@ -20,10 +20,11 @@ class MessageResponse(BaseModel):
     tokens: int
     is_hidden: bool
     references: Optional[List[Dict[str, Any]]] = None
-    metadata: Optional[Dict[str, Any]] = None
+    message_metadata: Optional[Dict[str, Any]] = None
 
     class Config:
         orm_mode = True
+        from_attributes = True
 
 
 class ConversationCreate(BaseModel):
@@ -50,10 +51,22 @@ class ConversationResponse(BaseModel):
     is_active: bool
     theme_id: Optional[str] = None
     model_id: Optional[str] = None
-    metadata: Optional[Dict[str, Any]] = None
+    conversation_metadata: dict[str, Any] | None = None
 
     class Config:
         orm_mode = True
+
+class ConversationStatsResponse(BaseModel):
+    message_count: int
+    role_distribution: Dict[str, int]
+    total_tokens: int
+    first_message: Optional[str]
+    last_message: Optional[str]
+    theme_id: Optional[str]
+    model_id: Optional[str]
+    is_active: bool
+    metadata: Optional[Dict[str, Any]]
+
 
 class RerankingConfig(BaseModel):
     enabled: bool = True
@@ -112,3 +125,32 @@ class ConversationContextResponse(BaseModel):
     content: str
     priority: int
     updated_at: datetime
+
+
+class DocumentInfo(BaseModel):
+    """Information about a document retrieved by RAG."""
+    id: str
+    title: str
+    source: str
+    snippet: str
+    score: Optional[float] = None
+
+
+class MetadataInfo(BaseModel):
+    """Metadata about the chat response."""
+    used_conversation_context: Optional[bool] = False
+    document_count: Optional[int] = 0
+    theme_id: Optional[str] = None
+    reranking_used: Optional[bool] = False
+    reranker_type: Optional[str] = None
+    rag_mode: Optional[bool] = False
+    error: Optional[str] = None
+
+
+class ChatResponse(BaseModel):
+    """Response model for the chat endpoint."""
+    conversation_id: str
+    response: str
+    documents: List[DocumentInfo] = Field(default_factory=list)
+    metadata: MetadataInfo = Field(default_factory=MetadataInfo)
+    echo: Optional[Dict[str, Any]] = None

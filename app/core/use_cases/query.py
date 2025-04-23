@@ -1,7 +1,7 @@
 from typing import List, Dict, Any, Optional
 
 from modules.storage.document_store import DocumentStore
-from domain.entities.document import Document
+from domain.entities.document import Document, Query
 from domain.interfaces.reranking import RerankingService
 from application.services.rag_context_retriever import RAGContextRetriever
 from app.modules.reranking.factory import RerankerFactory

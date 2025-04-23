@@ -1,4 +1,6 @@
-// UI related functionality with jQuery
+// =====================================================================
+// ui-handlers.js - FIXED VERSION
+// =====================================================================
 
 export const UIHandlers = {
   // DOM Element references
@@ -12,6 +14,19 @@ export const UIHandlers = {
     $chatHistoryList: $("#chatHistoryList"),
     $clearHistoryBtn: $("#clearHistoryBtn"),
     $fileUploadContainer: $("#fileUploadContainer"),
+  },
+
+  initElements: function () {
+    // Re-initialize element references in case they were dynamically created
+    this.elements.$chatContainer = $("#chatContainer");
+    this.elements.$typingIndicator = $("#typingIndicator");
+    this.elements.$messageInput = $("#messageInput");
+    this.elements.$chatForm = $("#chatForm");
+    this.elements.$ragModeToggle = $("#ragModeToggle");
+    this.elements.$themesContainer = $("#themesContainer");
+    this.elements.$chatHistoryList = $("#chatHistoryList");
+    this.elements.$clearHistoryBtn = $("#clearHistoryBtn");
+    this.elements.$fileUploadContainer = $("#fileUploadContainer");
   },
 
   formatMessage: function (text) {
@@ -32,9 +47,48 @@ export const UIHandlers = {
       .replace(/\n/g, "<br>");
 
     formatted = formatted.replace(/<\/li>\s*<br><li>/g, "</li><li>");
-    formatted = formatted.replace(/<li>(.+?)(<br>)?<\/li>/g, (match) =>
-      match.includes("<ul>") ? match : "<ul>" + match + "</ul>"
-    );
+
+    // Fix list formatting - wrap consecutive <li> elements in <ul>
+    const liRegex = /<li>.*?<\/li>/g;
+    const liMatches = formatted.match(liRegex);
+
+    if (liMatches) {
+      // Find consecutive li elements
+      let currentHTML = formatted;
+      let startIndex = currentHTML.indexOf("<li>");
+
+      while (startIndex !== -1) {
+        // Find the end of consecutive li tags
+        let endIndex = startIndex;
+        let liCount = 0;
+        let nextLiPos = currentHTML.indexOf("<li>", endIndex);
+
+        while (nextLiPos !== -1) {
+          const endLiPos = currentHTML.indexOf("</li>", endIndex) + 5;
+          if (nextLiPos - endLiPos > 10) break; // Not consecutive
+          endIndex = endLiPos;
+          liCount++;
+          nextLiPos = currentHTML.indexOf("<li>", endLiPos);
+        }
+
+        if (liCount > 0) {
+          // We found consecutive li elements
+          const beforeList = currentHTML.substring(0, startIndex);
+          const list = currentHTML.substring(startIndex, endIndex);
+          const afterList = currentHTML.substring(endIndex);
+
+          // Wrap in ul tags if not already wrapped
+          if (!list.includes("<ul>")) {
+            currentHTML = beforeList + "<ul>" + list + "</ul>" + afterList;
+          }
+        }
+
+        // Find next li start
+        startIndex = currentHTML.indexOf("<li>", startIndex + 1);
+      }
+
+      formatted = currentHTML;
+    }
 
     return formatted;
   },
@@ -62,7 +116,7 @@ export const UIHandlers = {
       </div>
     `);
 
-    if (attachments.length > 0) {
+    if (attachments && attachments.length > 0) {
       let $attachments = $('<div class="message-attachments"></div>');
       attachments.forEach((attachment) => {
         let icon = "fa-file";
@@ -85,10 +139,19 @@ export const UIHandlers = {
 
     $message.append(`<div class="message-time">${timeString}</div>`);
 
+    // Make sure typing indicator exists
+    if (this.elements.$typingIndicator.length === 0) {
+      this.elements.$typingIndicator = $(
+        '<div class="typing-indicator" id="typingIndicator"><span></span><span></span><span></span></div>'
+      );
+      this.elements.$chatContainer.append(this.elements.$typingIndicator);
+    }
+
     this.elements.$typingIndicator.before($message);
 
+    // Apply syntax highlighting if available
     if (window.hljs) {
-      $("pre code").each(function () {
+      $message.find("pre code").each(function () {
         hljs.highlightElement(this);
       });
     }
@@ -107,16 +170,32 @@ export const UIHandlers = {
   },
 
   showTypingIndicator: function (show = true) {
+    if (this.elements.$typingIndicator.length === 0) {
+      this.elements.$typingIndicator = $(
+        '<div class="typing-indicator" id="typingIndicator"><span></span><span></span><span></span></div>'
+      );
+      this.elements.$chatContainer.append(this.elements.$typingIndicator);
+    }
     this.elements.$typingIndicator.css("display", show ? "block" : "none");
     if (show) this.scrollToBottom();
   },
 
+  // FIXED: This function now actually scrolls to the bottom
   scrollToBottom: function () {
-    // Add safety check to prevent errors
-    $(window).on("resize", this.scrollToBottom.bind(this)); // Bind to preserve context
+    const $container = this.elements.$chatContainer;
+    if ($container && $container.length) {
+      $container.animate({ scrollTop: $container[0].scrollHeight }, 100);
+    }
   },
 
   formatTimeAgo: function (date) {
+    if (!(date instanceof Date)) {
+      date = new Date(date);
+      if (isNaN(date.getTime())) {
+        return "unknown time";
+      }
+    }
+
     const now = new Date();
     const diffSecs = Math.floor((now - date) / 1000);
     const diffMins = Math.floor(diffSecs / 60);
@@ -131,21 +210,29 @@ export const UIHandlers = {
   },
 
   updateFileUploadVisibility: function (isRagMode) {
-    if (isRagMode) {
-      this.elements.$fileUploadContainer.fadeOut(300);
-    } else {
-      this.elements.$fileUploadContainer.fadeIn(300);
+    if (!this.elements.$fileUploadContainer) {
+      this.elements.$fileUploadContainer = $("#fileUploadContainer");
+    }
+
+    if (this.elements.$fileUploadContainer.length) {
+      if (isRagMode) {
+        this.elements.$fileUploadContainer.fadeOut(300);
+      } else {
+        this.elements.$fileUploadContainer.fadeIn(300);
+      }
     }
   },
 
   initAutoResizeTextarea: function () {
     const $textarea = this.elements.$messageInput;
-    $textarea.on("input", function () {
-      $(this).css("height", "auto");
-      const maxHeight = 150;
-      const scrollHeight = this.scrollHeight;
-      $(this).css("height", (scrollHeight > maxHeight ? maxHeight : scrollHeight) + "px");
-    });
+    if ($textarea && $textarea.length) {
+      $textarea.off("input").on("input", function () {
+        $(this).css("height", "auto");
+        const maxHeight = 150;
+        const scrollHeight = this.scrollHeight;
+        $(this).css("height", (scrollHeight > maxHeight ? maxHeight : scrollHeight) + "px");
+      });
+    }
   },
 
   showToast: function (message, type = "success") {
@@ -168,8 +255,10 @@ export const UIHandlers = {
 
 // Initialize on document ready
 $(function () {
+  UIHandlers.initElements();
   UIHandlers.initAutoResizeTextarea();
 
+  // Create toast styles if needed
   if (!window.alertify) {
     const style = `<style>
       .toast {

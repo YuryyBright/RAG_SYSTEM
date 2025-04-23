@@ -139,7 +139,7 @@ class Settings(BaseSettings):
     QUERY_INSTRUCTION: str = "Represent the question for retrieving relevant documents:"
     EMBEDDING_BATCH_SIZE: int = 8
     EMBEDDING_DEVICE: str = "cpu"
-    EMBEDDING_DIMENSION: int = 1536
+    EMBEDDING_DIMENSION: int = 768
 
     OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-small"
     OPENAI_API_KEY: Optional[str] = None
@@ -155,7 +155,7 @@ class Settings(BaseSettings):
     SCORE_THRESHOLD: float = 0.3
 
     # --- LLM ---
-    LLM_MODEL: str = os.getenv("LLM_MODEL", "zephyr:latest")
+    LLM_MODEL: str = os.getenv("LLM_MODEL", "Mistral-7B-Instruct-v0.3-Q3_K_L.gguf")
     MODELS_BASE_DIR: str = os.getenv("MODELS_BASE_DIR", str(BASE_DIR / "models/llm"))
 
     # --- File Storage ---

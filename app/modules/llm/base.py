@@ -1,17 +1,17 @@
 # app/modules/llm/base.py
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from typing import Dict, Any, List, Optional
 
-from domain.interfaces.llm import LLMInterface
+from app.domain.interfaces.llm import LLMInterface
 from app.utils.logger_util import get_logger
 
 logger = get_logger(__name__)
 
 
-class BaseLLM(LLMInterface, ABC):
+class BaseLLM(LLMInterface):
     """
-    Abstract base class for all LLM handlers.
-    Implements common functionality and defines the interface for LLM handlers.
+    Base class for all LLM implementations.
+    Provides common functionality and defines the interface that all LLM handlers must implement.
     """
 
     def __init__(self, model_name: str, model_path: str):
@@ -29,18 +29,23 @@ class BaseLLM(LLMInterface, ABC):
         self.model_path = model_path
         self.model = None
         self.tokenizer = None
+        self.pipeline = None
+        self.session = None
+
+        # Load the model
         self._load_model()
+        logger.info(f"Initialized {self.__class__.__name__} for model: {model_name}")
 
     @abstractmethod
     def _load_model(self) -> None:
         """
-        Load the model from the specified path.
-        Must be implemented by subclasses.
+        Load the model from disk.
+        This method should be implemented by subclasses.
         """
         pass
 
     @abstractmethod
-    async def generate(
+    async def _generate_internal(
             self,
             prompt: str,
             max_tokens: int = 1024,
@@ -50,44 +55,45 @@ class BaseLLM(LLMInterface, ABC):
             **kwargs
     ) -> Dict[str, Any]:
         """
-        Generate text using the model.
-
-        Parameters
-        ----------
-        prompt : str
-            The prompt to generate from
-        max_tokens : int
-            Maximum number of tokens to generate
-        temperature : float
-            Sampling temperature (higher = more random)
-        top_p : float
-            Nucleus sampling probability
-        stop_sequences : Optional[List[str]]
-            Sequences that will stop generation when encountered
-        **kwargs
-            Additional model-specific parameters
-
-        Returns
-        -------
-        Dict[str, Any]
-            Generated text and metadata
+        Internal generation method with model-specific parameters.
+        This should be implemented by subclasses.
         """
         pass
 
+    async def generate(
+            self,
+            prompt: str,
+            max_tokens: int = 1024,
+            temperature: float = 0.7,
+            top_p: float = 0.9,
+            stop_sequences: Optional[List[str]] = None,
+            system_prompt: Optional[str] = None,
+            user_prompt: Optional[str] = None,
+            **kwargs
+    ) -> Dict[str, Any]:
+        return await self._generate_internal(
+            prompt=prompt,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            top_p=top_p,
+            stop_sequences=stop_sequences,
+            **kwargs
+        )
+
     def estimate_tokens(self, text: str) -> int:
         """
-        Estimate the number of tokens in the provided text.
+        Estimate the number of tokens in a text string.
+        Subclasses may override this with more accurate implementations.
 
         Parameters
         ----------
         text : str
-            The text to estimate tokens for
+            Text to estimate token count for
 
         Returns
         -------
         int
             Estimated number of tokens
         """
-        # Default implementation: rough estimate based on whitespace-separated words
-        # Subclasses should override this with model-specific token counting
-        return len(text.split())
+        # Simple fallback estimation: ~3-4 characters per token
+        return len(text) // 4
