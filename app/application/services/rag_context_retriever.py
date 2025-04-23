@@ -29,22 +29,19 @@ class RAGContextRetriever:
         semantic_results = []
         if theme_id:
             # Get initial results from vector store
-            initial_results = await self.vector_index_service.search(
+            initial_results = await self.vector_index_service.search(query=query, theme_id=theme_id, limit=10)
+            documents_contents = [doc.content for doc in initial_results]
+            documents_metadata = [doc.metadata for doc in initial_results]
+
+            reranked_results = self.reranker.rerank(
                 query=query,
-                theme_id=theme_id,
-                limit=10  # Get more than we need for reranking
+                documents=documents_contents,
+                metadata=documents_metadata
             )
 
-            # Apply reranking to the results
-            if initial_results and len(initial_results) > 0:
-                reranked_results = self.reranker.rerank(
-                    query=query,
-                    documents=[doc.content for doc in initial_results],
-                    metadata=[doc.metadata for doc in initial_results]
-                )
-
-                # Keep only top N results after reranking
-                semantic_results = reranked_results[:5]  # Adjust number as needed
+            semantic_results = [{"content": documents_contents[i], "metadata": documents_metadata[i],
+                                 "score": reranked_results[i]["score"]}
+                                for i in range(len(reranked_results))][:5]
 
         # 3. Get conversation contexts
         context_items = await self.context_service.get_conversation_context(conversation_id)

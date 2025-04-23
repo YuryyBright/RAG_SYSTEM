@@ -10,7 +10,7 @@ from domain.interfaces.document_store import DocumentStoreInterface
 from domain.interfaces.embedding import EmbeddingInterface
 from infrastructure.repositories.document_repository import DocumentRepository
 from utils.logger_util import get_logger
-
+logger = get_logger(__name__)
 
 class DocumentStore(DocumentStoreInterface):
     """
@@ -26,13 +26,69 @@ class DocumentStore(DocumentStoreInterface):
         self.document_repository = document_repository
         self.embedding_service = embedding_service
         self.storage_path = Path(storage_path)  # Ensure it's a Path object
-        self.logger = get_logger(__name__)
+
 
         # Create storage directory if it doesn't exist
         try:
             os.makedirs(self.storage_path, exist_ok=True)
         except Exception as e:
-            self.logger.error(f"Failed to create storage directory: {str(e)}", exc_info=True)
+            logger.error(f"Failed to create storage directory: {str(e)}", exc_info=True)
+
+    async def semantic_search_local(
+            self,
+            query_embedding: List[float],
+            limit: int = 5,
+            owner_id: Optional[str] = None,
+            theme_id: Optional[str] = None,
+            threshold: float = 0.7
+    ) -> List[Document]:
+        base_path = self.storage_path
+        if owner_id:
+            base_path = base_path / owner_id
+        if theme_id:
+            base_path = base_path / theme_id
+
+        if not base_path.exists():
+
+            return []
+
+        query_vec = np.array(query_embedding)
+        results = []
+
+        for embedding_file in base_path.rglob("*.embedding.npy"):
+
+            try:
+                doc_embedding = np.load(embedding_file)
+                sim = self._calculate_similarity(query_vec, doc_embedding)
+                if sim >= threshold:
+                    parent_dir = embedding_file.parent
+                    json_candidates = list(parent_dir.glob("*.json"))
+                    json_candidates = [f for f in json_candidates if not f.name.endswith(".embedding.json")]
+
+                    if not json_candidates:
+                        continue  # Skip if no suitable JSON file found
+                    json_file = json_candidates[0]
+                    with open(json_file, 'r') as f:
+                        doc_data = json.load(f)
+
+                    document = Document(
+                        id=doc_data["id"],
+                        content=doc_data["content"],
+                        embedding=doc_embedding.tolist(),
+                        owner_id=doc_data["owner_id"],
+                        metadata=doc_data.get("metadata", {}),
+                        theme_id=theme_id,
+                        created_at=doc_data.get("created_at"),
+                        updated_at=doc_data.get("updated_at"),
+                    )
+                    document.score = sim
+                    results.append(document)
+            except Exception as e:
+                logger.warning(f"Failed to process {embedding_file.name}: {e}")
+                continue
+
+        results.sort(key=lambda d: d.score, reverse=True)
+        return results[:limit]
 
     async def semantic_search(
             self,
@@ -105,7 +161,7 @@ class DocumentStore(DocumentStoreInterface):
             # Limit results
             return documents[:limit]
         except Exception as e:
-            self.logger.error(f"Error in semantic search: {str(e)}", exc_info=True)
+            logger.error(f"Error in semantic search: {str(e)}", exc_info=True)
             return []
 
     def _save_document_to_disk(self, document_id: str, document: Document) -> None:
@@ -137,7 +193,7 @@ class DocumentStore(DocumentStoreInterface):
                 embedding_path = self.storage_path / document.owner_id / document.theme_id / f"{document_id}.embedding.npy"
                 np.save(embedding_path, np.array(document.embedding))
         except Exception as e:
-            self.logger.error(f"Error saving document to disk: {str(e)}", exc_info=True)
+            logger.error(f"Error saving document to disk: {str(e)}", exc_info=True)
 
     def _load_document_from_disk(self, document_id: str, owner_id: str, theme_id: str) -> Optional[Document]:
         """Load document from disk."""
@@ -189,7 +245,7 @@ class DocumentStore(DocumentStoreInterface):
 
             return document
         except Exception as e:
-            self.logger.error(f"Error loading document from disk: {str(e)}", exc_info=True)
+            logger.error(f"Error loading document from disk: {str(e)}", exc_info=True)
             return None
 
     async def store_document(self, document: Document) -> str:
@@ -521,7 +577,7 @@ class DocumentStore(DocumentStoreInterface):
     def _delete_document_from_disk(self, document_id: str, owner_id: str, theme_id: str) -> None:
         """Delete document from disk cache."""
         file_path = Path(self.storage_path) / owner_id / theme_id / f"{document_id}.json"
-        embedding_path = Path(self.storage_path) / owner_id / theme_id / f"{document_id}.embedding"
+        embedding_path = Path(self.storage_path) / owner_id / theme_id / f"{document_id}.embedding.npy"
 
         if file_path.exists():
             os.remove(file_path)

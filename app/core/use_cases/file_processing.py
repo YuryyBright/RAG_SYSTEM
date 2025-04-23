@@ -329,7 +329,7 @@ class FileProcessingUseCase:
         for idx, doc in enumerate(documents):
             text = doc.content
             # Use chunking service to split text
-            chunks = self.chunking_service.chunk_text(
+            chunks = self.chunking_service.chunk_by_semantic_units(
                 text=text,
                 chunk_size=chunk_size,
                 chunk_overlap=chunk_overlap

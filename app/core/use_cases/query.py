@@ -1,5 +1,7 @@
+# Add this import to the top of your query.py file
 from typing import List, Dict, Any, Optional
 
+from application.services.rag_explorer_services import RAGExplorer
 from modules.storage.document_store import DocumentStore
 from domain.entities.document import Document, Query
 from domain.interfaces.reranking import RerankingService
@@ -10,6 +12,8 @@ from domain.interfaces.llm import LLMInterface
 from utils.logger_util import get_logger
 
 logger = get_logger(__name__)
+
+
 class RAGQueryProcessor:
     """
     Asynchronous processor for queries using Retrieval-Augmented Generation (RAG).
@@ -23,7 +27,7 @@ class RAGQueryProcessor:
         _generate_system_prompt: Builds the LLM system prompt using contexts.
         _extract_snippet: Extracts a relevant snippet from document content.
         _rerank_documents: Reranks documents using a specified reranking service.
-        extra_functionality: Placeholder for extending post-processing logic.
+        explore_structure: Returns information about the RAG document structure.
     """
 
     def __init__(
@@ -31,6 +35,7 @@ class RAGQueryProcessor:
             document_store: DocumentStore,
             embedding_service: EmbeddingInterface,
             llm_provider: LLMInterface,
+            rag_explorer: RAGExplorer,
             reranking_service: Optional[RerankingService] = None,
             rag_context_retriever: Optional[RAGContextRetriever] = None,
             top_k: int = 5,
@@ -42,12 +47,40 @@ class RAGQueryProcessor:
         self.reranking_service = reranking_service or RerankerFactory.get_reranker(reranker_type)
         self.rag_context_retriever = rag_context_retriever
         self.top_k = top_k
+        self.explorer = rag_explorer  # Initialize the explorer
+
+    async def explore_structure(self, owner_id: Optional[str] = None, theme_id: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Explore the RAG document structure and return formatted information.
+
+        Args:
+            owner_id: Optional filter by owner ID
+            theme_id: Optional filter by theme ID
+
+        Returns:
+            Dictionary with structure information and formatted response string
+        """
+        # Get structure information
+        structure = await self.explorer.list_structure(owner_id, theme_id)
+
+        # Get sample metadata
+        metadata_summary = await self.explorer.get_document_metadata_summary(owner_id, theme_id)
+
+        # Format response
+        formatted_response = self.explorer.format_structure_response(structure)
+
+        return {
+            "structure": structure,
+            "metadata_summary": metadata_summary,
+            "formatted_response": formatted_response
+        }
 
     async def process_query(
             self,
             query: Query,
             conversation_id: Optional[str] = None,
             theme_id: Optional[str] = None,
+            owner_id: Optional[str] = None,
             reranker_type: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
@@ -68,15 +101,35 @@ class RAGQueryProcessor:
                 - metadata: flags about context usage and counts
         """
         try:
+            # Special case for structure exploration queries
+            if any(phrase in query.text.lower() for phrase in [
+                "what files are in my rag",
+                "show me my rag structure",
+                "list rag documents",
+                "what's in my knowledge base",
+                "show document structure",
+                "list all documents"
+            ]):
+                structure_info = await self.explore_structure(theme_id=theme_id)
+                return {
+                    "query": query.text,
+                    "response": structure_info["formatted_response"],
+                    "documents": [],
+                    "metadata": {
+                        "document_count": structure_info["structure"]["document_count"],
+                        "used_conversation_context": False,
+                        "reranking_used": False,
+                        "is_structure_query": True
+                    },
+                }
+
+            # Regular query processing continues here...
             # 1. Embed Query
             query_embedding = await self.embedding_service.get_embedding(query.text)
 
+            # Rest of your existing code...
             # 2. Retrieve documents via semantic search
-            initial_docs = await self.document_store.semantic_search(
-                query_embedding=query_embedding,
-                limit=self.top_k * 3,
-                theme_id=theme_id  # Larger pool of documents
-            )
+            initial_docs = await self.document_store.semantic_search_local(query_embedding, limit=15, theme_id=theme_id, owner_id=owner_id)
 
             if not initial_docs:
                 return {
@@ -89,7 +142,6 @@ class RAGQueryProcessor:
                         "reranking_used": False,
                     },
                 }
-
             # 3. Reranking
             reranking_used = False
             reranker = self.reranking_service
@@ -97,10 +149,11 @@ class RAGQueryProcessor:
             if reranker_type and reranker_type != getattr(reranker, "reranker_type", None):
                 reranker = RerankerFactory.get_reranker(reranker_type)
 
-            min_score_threshold = 0.3  # Define threshold as a constant
+            min_score_threshold = 0.3 if len(initial_docs) >= 10 else 0.15
+            # Define threshold as a constant
 
             if reranker:
-                reranked_docs, scores = await self._rerank_documents(query.text, initial_docs, reranker)
+                reranked_docs, scores = await self._rerank_documents(query.text, initial_docs, self.reranking_service)
                 # Filter weak documents
                 reranked_docs = [doc for doc in reranked_docs if doc.score >= min_score_threshold]
                 relevant_docs = reranked_docs[:self.top_k] if reranked_docs else initial_docs[:self.top_k]
@@ -116,18 +169,16 @@ class RAGQueryProcessor:
             # 5. Optionally retrieve conversation context
             conversation_context = ""
             if conversation_id and self.rag_context_retriever:
-                context_data = await self.rag_context_retriever.get_context_for_query(
-                    conversation_id=conversation_id, query=query.text
-                )
+                context_data = await self.rag_context_retriever.get_context_for_query(conversation_id, query.text)
+
                 conversation_context = self.rag_context_retriever.format_context_for_llm(context_data)
 
             # 6. Generate final prompt
             system_prompt = self._generate_system_prompt(conversation_context, document_context)
 
+
             # 7. Call LLM
-            llm_response = await self.llm_provider.generate_text(
-                system_prompt=system_prompt, prompt=query.text
-            )
+            llm_response = await self.llm_provider.generate_text(system_prompt=system_prompt, prompt=query.text)
             logger.debug(f"Final prompt to LLM:\n{system_prompt}\nUser Query: {query.text}")
             # 8. Return all assembled information
             return {
@@ -167,23 +218,15 @@ class RAGQueryProcessor:
                 },
             }
 
+    # Rest of your existing methods remain the same
     async def _rerank_documents(
             self,
             query: str,
             documents: List[Document],
             reranking_service: RerankingService
     ) -> tuple[List[Document], List[float]]:
-        """
-        Rerank documents using the specified reranking service.
-
-        Args:
-            query: The query text
-            documents: List of Document objects to rerank
-            reranking_service: Service to use for reranking
-
-        Returns:
-            Tuple of (reranked document list, scores)
-        """
+        """Rerank documents using the specified reranking service."""
+        # Implementation remains the same...
         if not documents:
             return [], []
 
@@ -215,11 +258,8 @@ class RAGQueryProcessor:
         return reranked_docs, reranked_scores
 
     def _format_documents(self, documents: List[Document]) -> str:
-        """
-        Format a list of Document entities into a single string for the LLM.
-
-        Returns a header plus each document's title and content.
-        """
+        """Format a list of Document entities into a single string for the LLM."""
+        # Implementation remains the same...
         if not documents:
             return "No relevant documents found."
 
@@ -234,6 +274,7 @@ class RAGQueryProcessor:
 
         return "\n".join(parts)
 
+    # Keep the rest of your existing methods...
     def _generate_system_prompt(
             self, conversation_context: str, document_context: str
     ) -> str:
@@ -305,43 +346,3 @@ class RAGQueryProcessor:
                 snippet = snippet.rstrip() + "..."
 
         return snippet
-
-    def format_context_for_llm(self, context_data: dict) -> str:
-        """
-        Format context data (recent messages, semantic results, and context items)
-        into a single prompt-ready string for LLM use.
-
-        Args:
-            context_data: Dictionary with keys 'recent_messages', 'semantic_results', and 'context_items'
-
-        Returns:
-            str: A well-formatted string containing the merged context info.
-        """
-        parts = []
-
-        # Format recent messages
-        if context_data.get("recent_messages"):
-            parts.append("RECENT MESSAGES:")
-            for msg in context_data["recent_messages"]:
-                role = getattr(msg, "role", "user")
-                content = getattr(msg, "content", "")
-                parts.append(f"{role.capitalize()}: {content}")
-            parts.append("")
-
-        # Format semantic results
-        if context_data.get("semantic_results"):
-            parts.append("SEMANTIC RESULTS:")
-            for idx, doc in enumerate(context_data["semantic_results"], start=1):
-                content = doc.get("content", "") if isinstance(doc, dict) else str(doc)
-                parts.append(f"[Result {idx}]: {content}")
-            parts.append("")
-
-        # Format context items (summaries, key points, etc.)
-        if context_data.get("context_items"):
-            parts.append("CONVERSATION CONTEXTS:")
-            for item in context_data["context_items"]:
-                context_type = getattr(item, "context_type", "unknown")
-                parts.append(f"[{context_type.capitalize()}]: {item.content}")
-            parts.append("")
-
-        return "\n".join(parts)

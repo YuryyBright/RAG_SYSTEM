@@ -5,7 +5,7 @@ from typing import List, Dict, Any, Optional, Tuple
 class ChunkingService:
     """Service for chunking text documents into smaller segments for embedding."""
 
-    def __init__(self, default_chunk_size=1400, default_chunk_overlap=250, default_separator="\n"):
+    def __init__(self, default_chunk_size=2000, default_chunk_overlap=250, default_separator="\n"):
         self.default_chunk_size = default_chunk_size
         self.default_chunk_overlap = default_chunk_overlap
         self.default_separator = default_separator

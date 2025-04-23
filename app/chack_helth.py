@@ -1,4 +1,5 @@
 import asyncio
+import os
 from pprint import pprint
 
 from api.dependencies.ai_dependencies import get_llm_service
@@ -6,6 +7,8 @@ from application.services.conversation_service import ConversationService
 from application.services.context_management_service import ContextManagementService
 
 from application.services.rag_context_retriever import RAGContextRetriever
+from application.services.rag_explorer_services import RAGExplorer
+from core.templates.templates import BASE_DIR
 from core.use_cases.query import RAGQueryProcessor
 from modules.llm import LLMFactory
 from modules.storage.document_store import DocumentStore
@@ -54,13 +57,16 @@ async def main():
         message_repo = MessageRepository(db)
         context_repo = ConversationContextRepository(db)
         document_repo = DocumentRepository(db)
+
         print('Сервіси')
         # --- Сервіси ---
         embedding_service = await get_embedding_service()
 
+        BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 
-        document_store = DocumentStore(document_repo, embedding_service, storage_path=settings.DOCUMENT_STORAGE_PATH)
-
+        ABS_PATH = BASE_DIR + '/data' + '/processed'
+        document_store = DocumentStore(document_repo, embedding_service, storage_path=ABS_PATH)
+        rag_explorer = RAGExplorer(document_store)
         conversation_service = ConversationService(conversation_repo, message_repo)
         context_service = ContextManagementService(context_repo, message_repo, embedding_service, llm_service)
         rag_context_retriever = RAGContextRetriever(
@@ -69,16 +75,17 @@ async def main():
             conversation_service=conversation_service
         )
         print('Тестова розмова')
+        message = "МЕТА І ЗАВДАННЯ КВАЛІФІКАЦІЙНОЇ РОБОТИ"
         # --- Тестова розмова ---
-        conversation = await conversation_service.create_conversation(user_id='b7507654-117d-4337-8f76-a8d93359d5d3')
-        conversation_id = conversation.id
-        message = "Що ти знаєш про мої документи?"
-        print('Add message:', message)
-        await conversation_service.add_message(
-            conversation_id=conversation_id,
-            role="user",
-            content=message
-        )
+        # conversation = await conversation_service.create_conversation(user_id='b7507654-117d-4337-8f76-a8d93359d5d3')
+        # conversation_id = conversation.id
+        #
+        # print('Add message:', message)
+        # await conversation_service.add_message(
+        #     conversation_id=conversation_id,
+        #     role="user",
+        #     content=message
+        # )
 
         # --- RAG Query ---
         print('start RAG processing')
@@ -86,22 +93,23 @@ async def main():
             document_store=document_store,
             embedding_service=embedding_service,
             llm_provider=llm_service,
-            rag_context_retriever=rag_context_retriever
+            rag_context_retriever=rag_context_retriever,
+            rag_explorer=rag_explorer
         )
         print('start RAG process_query')
         result = await query_processor.process_query(
             Query(text=message),
-            conversation_id=conversation_id,
-            theme_id='bae54c67-fe50-4e75-81f2-85086cfa8c12'
+            owner_id='b7507654-117d-4337-8f76-a8d93359d5d3',
+            theme_id='7cc621b9-e6d8-44e1-a0ae-8ff46a7ade1c'
         )
 
         assistant_response = result["response"]
         print('start conversation_service.add_messag')
-        await conversation_service.add_message(
-            conversation_id=conversation_id,
-            role="assistant",
-            content=assistant_response if isinstance(assistant_response, str) else assistant_response.get("text", "")
-        )
+        # await conversation_service.add_message(
+        #
+        #     role="assistant",
+        #     content=assistant_response if isinstance(assistant_response, str) else assistant_response.get("text", "")
+        # )
 
         print("🧠 ASSISTANT REPLY:")
         pprint(result)
